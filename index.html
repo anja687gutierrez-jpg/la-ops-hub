@@ -17,7 +17,10 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     
     <script src="https://unpkg.com/lucide@latest"></script>
-    
+
+    <!-- Environment Configuration (loads .env if available) -->
+    <script src="config.js"></script>
+
     <!-- Tesseract.js for OCR (Text Recognition) -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
     
@@ -511,15 +514,16 @@
         const isPostingDay = (date) => date.getDay() === 1;
 
         // --- REAL AI AGENT (DIRECT CALL FOR INTERNAL USE ONLY) ---
-        // !!! SECURITY WARNING: NEVER DEPLOY THIS FILE TO A PUBLIC WEBSITE !!!
         // =============================================
         // GROQ API CONFIGURATION (Llama 3.3 70B)
         // =============================================
-        const GROQ_API_KEY = "YOUR_GROQ_API_KEY";
-        
+        // API key priority: 1) localStorage (user-set), 2) window.ENV (.env file), 3) empty
+        const getGroqApiKey = () => localStorage.getItem('stap_groq_api_key') || window.ENV?.GROQ_API_KEY || '';
+
         const callGroq = async (prompt, maxTokens = 1024) => {
-            if (!GROQ_API_KEY || GROQ_API_KEY === "YOUR_GROQ_API_KEY") {
-                return "⚠️ Configuration Error: Please add your Groq API Key.";
+            const GROQ_API_KEY = getGroqApiKey();
+            if (!GROQ_API_KEY) {
+                return "⚠️ Configuration Error: Please add your Groq API Key in Settings (triple-click logo).";
             }
 
             try {
@@ -2355,7 +2359,28 @@
                                     <li>• If sync fails, it will fall back to your last uploaded CSV data</li>
                                 </ul>
                             </div>
-                            
+
+                            {/* Groq API Key */}
+                            <div className="bg-gradient-to-r from-orange-500/10 to-red-500/10 rounded-xl p-4 border border-orange-500/30">
+                                <h3 className="font-bold text-orange-400 mb-3 flex items-center gap-2">
+                                    <span>🤖</span> AI Features (Groq API)
+                                </h3>
+                                <p className="text-xs text-slate-400 mb-3">
+                                    Power AI analysis features with Groq's Llama 3.3 70B model. Get a free API key at <a href="https://console.groq.com/keys" target="_blank" rel="noopener" className="text-orange-400 hover:underline">console.groq.com/keys</a>
+                                </p>
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-400 mb-1">API Key</label>
+                                    <input
+                                        type="password"
+                                        defaultValue={localStorage.getItem('stap_groq_api_key') || ''}
+                                        onChange={(e) => localStorage.setItem('stap_groq_api_key', e.target.value)}
+                                        placeholder="gsk_..."
+                                        className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-500 focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none font-mono"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1">🔒 Stored locally in your browser only</p>
+                                </div>
+                            </div>
+
                             {/* Production Proof Webhook Sync */}
                             <div className="bg-gradient-to-r from-teal-500/10 to-emerald-500/10 rounded-xl p-4 border border-teal-500/30">
                                 <h3 className="font-bold text-teal-400 mb-3 flex items-center gap-2">
@@ -2450,6 +2475,8 @@
                                                     mobileSheetUrl: localStorage.getItem('stap_mobile_sheet_url') || '',
                                                     // Production Proof Sync
                                                     proofWebhook: localStorage.getItem('stap_proof_webhook') || '',
+                                                    // AI Features
+                                                    groqApiKey: localStorage.getItem('stap_groq_api_key') || '',
                                                 }
                                             };
                                             
@@ -2502,6 +2529,7 @@
                                                         if (s.popSheetUrl) localStorage.setItem('stap_pop_sheet_url', s.popSheetUrl);
                                                         if (s.mobileSheetUrl) localStorage.setItem('stap_mobile_sheet_url', s.mobileSheetUrl);
                                                         if (s.proofWebhook) localStorage.setItem('stap_proof_webhook', s.proofWebhook);
+                                                        if (s.groqApiKey) localStorage.setItem('stap_groq_api_key', s.groqApiKey);
 
                                                         // Update current modal's sheet URL
                                                         if (s.googleSheetUrl) setSheetUrl(s.googleSheetUrl);
@@ -2518,7 +2546,7 @@
                                     </label>
                                 </div>
                                 <p className="text-xs text-slate-500 mt-2">
-                                    📁 Settings saved: Main Sheet, Material Receiver Sheet & Webhook, POP Gallery Sheet, Proof Sync Webhook
+                                    📁 Settings saved: Sheets, Webhooks, Groq API Key
                                 </p>
                             </div>
                         </div>
