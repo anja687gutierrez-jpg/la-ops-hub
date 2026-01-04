@@ -218,7 +218,7 @@
         };
         
         // Settings Modal
-        const SettingsModal = ({ isOpen, onClose, sheetUrl, setSheetUrl, onSync, isSyncing, lastSync, campaignCount }) => {
+        const SettingsModal = ({ isOpen, onClose, sheetUrl, setSheetUrl, onSync, isSyncing, lastSync, campaignCount, onLogout }) => {
             const [tempUrl, setTempUrl] = useState(sheetUrl);
             
             if (!isOpen) return null;
@@ -320,12 +320,21 @@
                             
                             {/* Desktop Link */}
                             <a
-                                href="./app.html"
+                                href="./index.html"
                                 className="block w-full mt-3 py-3 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium text-center active:bg-gray-200"
                             >
                                 <Icon name="building" size={14} className="mr-2" />
                                 Switch to Desktop
                             </a>
+
+                            {/* Logout */}
+                            <button
+                                onClick={onLogout}
+                                className="w-full mt-3 py-3 bg-gray-800 text-white rounded-xl text-sm font-medium active:bg-gray-900"
+                            >
+                                <Icon name="x" size={14} className="mr-2" />
+                                Logout
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -499,6 +508,37 @@
         
         // Main App
         const App = () => {
+            // Auth check - redirect to login if not authenticated
+            const [isAuthenticated, setIsAuthenticated] = useState(() => {
+                const user = localStorage.getItem('opshub_user');
+                return !!user;
+            });
+
+            // Redirect to login if not authenticated
+            useEffect(() => {
+                if (!isAuthenticated) {
+                    window.location.replace('./index.html');
+                }
+            }, [isAuthenticated]);
+
+            // Show nothing while redirecting
+            if (!isAuthenticated) {
+                return (
+                    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+                        <div className="text-center">
+                            <Icon name="sync" size={24} className="animate-spin text-orange-500 mx-auto mb-2" />
+                            <p className="text-sm text-gray-500">Redirecting to login...</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            // Logout handler
+            const handleLogout = () => {
+                localStorage.removeItem('opshub_user');
+                window.location.replace('./index.html');
+            };
+
             const [activeModule, setActiveModule] = useState('materials');
             const [materials, setMaterials] = useState(() => {
                 try { return JSON.parse(localStorage.getItem('stap_materials_data') || '[]'); } catch { return []; }
@@ -712,8 +752,8 @@
                                          onSelect={c => { setSelectedCampaign(c); setShowCampaignSearch(false); }}
                                          campaigns={campaigns} />
                     
-                    <SettingsModal 
-                        isOpen={showSettings} 
+                    <SettingsModal
+                        isOpen={showSettings}
                         onClose={() => setShowSettings(false)}
                         sheetUrl={sheetUrl}
                         setSheetUrl={setSheetUrl}
@@ -721,6 +761,7 @@
                         isSyncing={isSyncing}
                         lastSync={lastSync}
                         campaignCount={campaigns.length}
+                        onLogout={handleLogout}
                     />
                 </div>
             );

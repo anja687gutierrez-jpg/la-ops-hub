@@ -299,7 +299,18 @@
             
             // Auto-detect mobile
             const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
-            
+
+            // Auto-redirect authenticated mobile users to mobile app
+            useEffect(() => {
+                if (isMobile) {
+                    const savedUser = localStorage.getItem('opshub_user');
+                    if (savedUser) {
+                        // Already logged in on mobile - redirect to mobile app
+                        window.location.replace('./mobile.html');
+                    }
+                }
+            }, [isMobile]);
+
             // Check if Three.js is available
             useEffect(() => {
                 if (typeof THREE !== 'undefined') {
@@ -314,10 +325,10 @@
                     e.stopPropagation();
                 }
                 setLaunchingMobile(true);
+                // Save user session before redirecting to mobile
+                localStorage.setItem('opshub_user', JSON.stringify({ email, role: 'user' }));
                 setTimeout(() => {
-                    const baseUrl = window.location.origin;
-                    const mobileUrl = baseUrl + '/mobile.html';
-                    window.location.replace(mobileUrl);
+                    window.location.replace('./mobile.html');
                 }, 1500);
             };
 
