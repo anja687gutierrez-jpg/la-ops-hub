@@ -2356,6 +2356,73 @@
                                 </ul>
                             </div>
                             
+                            {/* Production Proof Webhook Sync */}
+                            <div className="bg-gradient-to-r from-teal-500/10 to-emerald-500/10 rounded-xl p-4 border border-teal-500/30">
+                                <h3 className="font-bold text-teal-400 mb-3 flex items-center gap-2">
+                                    <span>🔄</span> Production Proof Sync (Optional)
+                                </h3>
+                                <p className="text-xs text-slate-400 mb-3">
+                                    Sync production proof changes (In-House/Client/Mixed) back to your Google Sheet in real-time using Apps Script.
+                                </p>
+                                <div className="mb-3">
+                                    <label className="block text-xs font-medium text-slate-400 mb-1">Webhook URL</label>
+                                    <input
+                                        type="text"
+                                        defaultValue={localStorage.getItem('stap_proof_webhook') || ''}
+                                        onChange={(e) => localStorage.setItem('stap_proof_webhook', e.target.value)}
+                                        placeholder="https://script.google.com/macros/s/..."
+                                        className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-500 focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none"
+                                    />
+                                </div>
+                                <details className="text-xs">
+                                    <summary className="cursor-pointer text-teal-400 hover:text-teal-300 font-medium">
+                                        📋 Apps Script Setup Instructions
+                                    </summary>
+                                    <div className="mt-3 p-3 bg-slate-900/70 rounded-lg border border-slate-700 space-y-2 text-slate-300">
+                                        <p><strong className="text-white">1.</strong> Open your Google Sheet → Extensions → Apps Script</p>
+                                        <p><strong className="text-white">2.</strong> Paste this code:</p>
+                                        <pre className="bg-black/50 p-2 rounded text-[10px] overflow-x-auto font-mono text-green-400">{`function doPost(e) {
+  const data = JSON.parse(e.postData.contents);
+  if (data.action === 'updateProof') {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet()
+      .getSheetByName('Master Export'); // Change to your sheet name
+    const dataRange = sheet.getDataRange().getValues();
+    const headers = dataRange[0];
+
+    // Find column indices
+    const idCol = headers.findIndex(h =>
+      h.toLowerCase().includes('campaign id'));
+    const proofCol = headers.findIndex(h =>
+      h.toLowerCase().includes('production'));
+
+    if (idCol === -1 || proofCol === -1) {
+      return ContentService.createTextOutput(
+        JSON.stringify({success: false, error: 'Columns not found'})
+      );
+    }
+
+    // Find row and update
+    const [campaignId, date] = data.campaignKey.split('_');
+    for (let i = 1; i < dataRange.length; i++) {
+      if (dataRange[i][idCol] == campaignId) {
+        sheet.getRange(i + 1, proofCol + 1)
+          .setValue(data.productionProof);
+        break;
+      }
+    }
+
+    return ContentService.createTextOutput(
+      JSON.stringify({success: true})
+    ).setMimeType(ContentService.MimeType.JSON);
+  }
+}`}</pre>
+                                        <p><strong className="text-white">3.</strong> Deploy → New deployment → Web app</p>
+                                        <p><strong className="text-white">4.</strong> Set "Execute as" = <span className="text-amber-400">Me</span>, "Who has access" = <span className="text-amber-400">Anyone</span></p>
+                                        <p><strong className="text-white">5.</strong> Copy the deployment URL and paste above</p>
+                                    </div>
+                                </details>
+                            </div>
+
                             {/* Backup & Restore Settings */}
                             <div className="bg-gradient-to-r from-purple-500/10 to-indigo-500/10 rounded-xl p-4 border border-purple-500/30">
                                 <h3 className="font-bold text-purple-400 mb-3 flex items-center gap-2">
@@ -2381,6 +2448,8 @@
                                                     popSheetUrl: localStorage.getItem('stap_pop_sheet_url') || '',
                                                     // Mobile
                                                     mobileSheetUrl: localStorage.getItem('stap_mobile_sheet_url') || '',
+                                                    // Production Proof Sync
+                                                    proofWebhook: localStorage.getItem('stap_proof_webhook') || '',
                                                 }
                                             };
                                             
@@ -2432,7 +2501,8 @@
                                                         if (s.materialWebhook) localStorage.setItem('stap_material_webhook', s.materialWebhook);
                                                         if (s.popSheetUrl) localStorage.setItem('stap_pop_sheet_url', s.popSheetUrl);
                                                         if (s.mobileSheetUrl) localStorage.setItem('stap_mobile_sheet_url', s.mobileSheetUrl);
-                                                        
+                                                        if (s.proofWebhook) localStorage.setItem('stap_proof_webhook', s.proofWebhook);
+
                                                         // Update current modal's sheet URL
                                                         if (s.googleSheetUrl) setSheetUrl(s.googleSheetUrl);
                                                         
@@ -2448,7 +2518,7 @@
                                     </label>
                                 </div>
                                 <p className="text-xs text-slate-500 mt-2">
-                                    📁 Settings saved: Main Sheet, Material Receiver Sheet & Webhook, POP Gallery Sheet
+                                    📁 Settings saved: Main Sheet, Material Receiver Sheet & Webhook, POP Gallery Sheet, Proof Sync Webhook
                                 </p>
                             </div>
                         </div>
@@ -4180,13 +4250,9 @@
                                         <p className="text-xs text-gray-500">Who produced the creative materials?</p>
                                     </div>
                                     <div className="flex gap-2">
-                                        <button 
+                                        <button
                                             onClick={() => {
                                                 const uniqueKey = `${item.id}_${item.date}`;
-                                                const savedData = JSON.parse(localStorage.getItem('stap_production_proof') || '{}');
-                                                savedData[uniqueKey] = 'in-house';
-                                                localStorage.setItem('stap_production_proof', JSON.stringify(savedData));
-                                                item.productionProof = 'in-house';
                                                 onSave(uniqueKey, item.stage, { productionProof: 'in-house' });
                                             }}
                                             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1 ${
@@ -4197,13 +4263,9 @@
                                         >
                                             <Icon name="Home" size={12} /> In-House
                                         </button>
-                                        <button 
+                                        <button
                                             onClick={() => {
                                                 const uniqueKey = `${item.id}_${item.date}`;
-                                                const savedData = JSON.parse(localStorage.getItem('stap_production_proof') || '{}');
-                                                savedData[uniqueKey] = 'client';
-                                                localStorage.setItem('stap_production_proof', JSON.stringify(savedData));
-                                                item.productionProof = 'client';
                                                 onSave(uniqueKey, item.stage, { productionProof: 'client' });
                                             }}
                                             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1 ${
@@ -4214,13 +4276,9 @@
                                         >
                                             <Icon name="Upload" size={12} /> Client
                                         </button>
-                                        <button 
+                                        <button
                                             onClick={() => {
                                                 const uniqueKey = `${item.id}_${item.date}`;
-                                                const savedData = JSON.parse(localStorage.getItem('stap_production_proof') || '{}');
-                                                savedData[uniqueKey] = 'mixed';
-                                                localStorage.setItem('stap_production_proof', JSON.stringify(savedData));
-                                                item.productionProof = 'mixed';
                                                 onSave(uniqueKey, item.stage, { productionProof: 'mixed' });
                                             }}
                                             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1 ${
@@ -17279,7 +17337,31 @@ function doGet(e) {
                     return {};
                 }
             });
-            
+
+            // One-time migration: Move legacy stap_production_proof data into stap_manual_overrides
+            useEffect(() => {
+                try {
+                    const legacyProofs = localStorage.getItem('stap_production_proof');
+                    if (legacyProofs) {
+                        const proofData = JSON.parse(legacyProofs);
+                        const migratedCount = Object.keys(proofData).length;
+                        if (migratedCount > 0) {
+                            setManualOverrides(prev => {
+                                const merged = { ...prev };
+                                Object.entries(proofData).forEach(([key, value]) => {
+                                    merged[key] = { ...(merged[key] || {}), productionProof: value };
+                                });
+                                return merged;
+                            });
+                            localStorage.removeItem('stap_production_proof'); // Clean up legacy key
+                            console.log(`🔄 Migrated ${migratedCount} production proof(s) to unified storage`);
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Could not migrate production proofs:', e);
+                }
+            }, []);
+
             // Track data source for UI feedback
             const [dataSource, setDataSource] = useState(() => {
                 try {
@@ -17625,15 +17707,56 @@ function doGet(e) {
                 console.log('🔄 Dashboard reset to defaults');
             };
 
-            // Extended update handler - supports stage, installed count, pending, notes
-            const handleUpdateStage = (id, newStage, additionalUpdates = {}) => {
+            // Production Proof Webhook for Google Sheet Sync
+            const [proofWebhookUrl, setProofWebhookUrl] = useState(
+                localStorage.getItem('stap_proof_webhook') || ''
+            );
+
+            const saveProofWebhookUrl = (url) => {
+                setProofWebhookUrl(url);
+                localStorage.setItem('stap_proof_webhook', url);
+            };
+
+            /**
+             * Syncs production proof changes to Google Sheet via Apps Script webhook
+             * @param {string} campaignKey - Composite key for the campaign
+             * @param {string} productionProof - 'in-house', 'client', or 'mixed'
+             */
+            const syncProofToSheet = async (campaignKey, productionProof) => {
+                if (!proofWebhookUrl) return; // No webhook configured
+
+                try {
+                    await fetch(proofWebhookUrl, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            action: 'updateProof',
+                            campaignKey,
+                            productionProof,
+                            timestamp: new Date().toISOString()
+                        })
+                    });
+                    console.log(`📤 Proof synced to Sheet: ${campaignKey} → ${productionProof}`);
+                } catch (e) {
+                    console.warn('Proof sync failed:', e);
+                }
+            };
+
+            /**
+             * Updates campaign override data (stage, install counts, production proof, etc.)
+             * @param {string} campaignKey - Composite key: `${campaignId}_${date}` for unique identification
+             * @param {string} newStage - New stage value (can be same as current if only updating other fields)
+             * @param {Object} additionalUpdates - Optional fields: { productionProof, installed, pending, notes, photosLink, receiverLink, materialBreakdown }
+             */
+            const handleUpdateStage = (campaignKey, newStage, additionalUpdates = {}) => {
                 const updates = { stage: newStage, ...additionalUpdates };
-                updateManualOverride(id, updates);
-                
+                updateManualOverride(campaignKey, updates);
+
                 // If material data is provided, also store it for Material Receiver sync
                 if (additionalUpdates.materialBreakdown || additionalUpdates.photosLink || additionalUpdates.receiverLink) {
                     const materialData = JSON.parse(localStorage.getItem('stap_material_data') || '{}');
-                    materialData[id] = {
+                    materialData[campaignKey] = {
                         materialBreakdown: additionalUpdates.materialBreakdown || [],
                         photosLink: additionalUpdates.photosLink || null,
                         receiverLink: additionalUpdates.receiverLink || null,
@@ -17642,9 +17765,14 @@ function doGet(e) {
                         updatedAt: new Date().toISOString()
                     };
                     localStorage.setItem('stap_material_data', JSON.stringify(materialData));
-                    console.log('📦 Material data synced for:', id);
+                    console.log('📦 Material data synced for:', campaignKey);
                 }
-                
+
+                // Sync production proof to Google Sheet if webhook is configured
+                if (additionalUpdates.productionProof) {
+                    syncProofToSheet(campaignKey, additionalUpdates.productionProof);
+                }
+
                 // Also update the selected item so the modal reflects changes instantly
                 setSelectedItem(prev => {
                     if (!prev) return null;
@@ -17658,6 +17786,7 @@ function doGet(e) {
                     if (additionalUpdates.photosLink) updated.photosLink = additionalUpdates.photosLink;
                     if (additionalUpdates.receiverLink) updated.receiverLink = additionalUpdates.receiverLink;
                     if (additionalUpdates.materialBreakdown) updated.materialBreakdown = additionalUpdates.materialBreakdown;
+                    if (additionalUpdates.productionProof) updated.productionProof = additionalUpdates.productionProof;
                     return updated;
                 });
             };
@@ -18300,6 +18429,10 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                                 newItem.pending = Math.max(0, totalQty - override.installed);
                                 newItem.isOverridden = true;
                             }
+                            if (override.productionProof) {
+                                newItem.productionProof = override.productionProof;
+                                newItem.isOverridden = true;
+                            }
                         }
                         categories.specialMedia.push(newItem);
                     });
@@ -18337,6 +18470,10 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                             if (override.installed !== undefined) {
                                 newItem.totalInstalled = override.installed;
                                 newItem.installed = override.installed;
+                                newItem.isOverridden = true;
+                            }
+                            if (override.productionProof) {
+                                newItem.productionProof = override.productionProof;
                                 newItem.isOverridden = true;
                             }
                         }
@@ -18424,6 +18561,11 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                             // Apply notes
                             if (override.notes) {
                                 item.overrideNotes = override.notes;
+                            }
+                            // Apply production proof override
+                            if (override.productionProof) {
+                                item.productionProof = override.productionProof;
+                                item.isOverridden = true;
                             }
                         }
 
