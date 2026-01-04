@@ -18,9 +18,6 @@
     
     <script src="https://unpkg.com/lucide@latest"></script>
 
-    <!-- Environment Configuration (loads .env if available) -->
-    <script src="config.js"></script>
-
     <!-- Tesseract.js for OCR (Text Recognition) -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
     
@@ -517,8 +514,8 @@
         // =============================================
         // GROQ API CONFIGURATION (Llama 3.3 70B)
         // =============================================
-        // API key priority: 1) localStorage (user-set), 2) window.ENV (.env file), 3) empty
-        const getGroqApiKey = () => localStorage.getItem('stap_groq_api_key') || window.ENV?.GROQ_API_KEY || '';
+        // API key stored in localStorage - configure via Settings modal (triple-click logo)
+        const getGroqApiKey = () => localStorage.getItem('stap_groq_api_key') || '';
 
         const callGroq = async (prompt, maxTokens = 1024) => {
             const GROQ_API_KEY = getGroqApiKey();
