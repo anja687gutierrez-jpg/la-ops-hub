@@ -10,7 +10,7 @@
     // ═══════════════════════════════════════════════════════════════════════════
     // CANVAS GEAR SIDEBAR - Animated navigation with three interlocking gears
     // ═══════════════════════════════════════════════════════════════════════════
-    const CanvasGearSidebar = ({ view, setView, onLogout, onOpenDigest, onOpenImpressions, onReset, onResetEmailLogs, onOpenSheetSettings, isCollapsed, setIsCollapsed }) => {
+    const CanvasGearSidebar = ({ view, setView, onLogout, onOpenDigest, onReset, onResetEmailLogs, onOpenSheetSettings, isCollapsed, setIsCollapsed }) => {
         const canvasRef = useRef(null);
         const animationRef = useRef(null);
         const stateRef = useRef({
@@ -981,13 +981,8 @@
                         setView(stateRef.current.hoveredPipelineNode.id);
                     }
                     if (stateRef.current.hoveredHistoryNode && stateRef.current.systemReady) {
-                        const nodeId = stateRef.current.hoveredHistoryNode.id;
-                        if (nodeId === 'impressions') {
-                            // Trigger impressions modal
-                            if (onOpenImpressions) onOpenImpressions();
-                        } else {
-                            setView(nodeId);
-                        }
+                        // All history nodes navigate to their view (including impressions)
+                        setView(stateRef.current.hoveredHistoryNode.id);
                     }
                     // Button click handlers
                     if (stateRef.current.hoveredButton === 'digest' && onOpenDigest) {

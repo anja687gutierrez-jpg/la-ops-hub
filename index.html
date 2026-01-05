@@ -1756,196 +1756,6 @@
         // --- COMPONENTS ---
         
         // --- IMPRESSIONS LOOKUP MODAL ---
-        const ImpressionsLookupModal = ({ isOpen, onClose }) => {
-            const [selectedZip, setSelectedZip] = useState('');
-            const [searchArea, setSearchArea] = useState('');
-            const [result, setResult] = useState(null);
-            const [searchResults, setSearchResults] = useState([]);
-
-            const availableZips = React.useMemo(() => getAvailableZips(), []);
-
-            const handleZipLookup = (zip) => {
-                if (zip && zip.length === 5) {
-                    const data = estimateImpressions(zip);
-                    setResult(data);
-                    setSelectedZip(zip);
-                }
-            };
-
-            const handleAreaSearch = (area) => {
-                setSearchArea(area);
-                if (area.length >= 2) {
-                    const results = findZipsByArea(area);
-                    setSearchResults(results.slice(0, 10));
-                } else {
-                    setSearchResults([]);
-                }
-            };
-
-            if (!isOpen) return null;
-
-            return (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm" onClick={onClose}>
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden" onClick={e => e.stopPropagation()}>
-                        {/* Header */}
-                        <div className="px-6 py-4 border-b bg-gradient-to-r from-emerald-600 to-teal-600 text-white">
-                            <div className="flex justify-between items-center">
-                                <h2 className="text-xl font-bold flex items-center gap-2">
-                                    <Icon name="MapPin" size={24} />
-                                    Geopath Impressions Lookup
-                                </h2>
-                                <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-full">
-                                    <Icon name="X" size={20} />
-                                </button>
-                            </div>
-                            <p className="text-sm text-white/80 mt-1">Estimate weekly impressions by ZIP code</p>
-                        </div>
-
-                        {/* Content */}
-                        <div className="p-6 overflow-y-auto max-h-[calc(85vh-180px)]">
-                            {/* Search Section */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                                {/* ZIP Lookup */}
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Lookup by ZIP Code</label>
-                                    <div className="flex gap-2">
-                                        <input
-                                            type="text"
-                                            value={selectedZip}
-                                            onChange={(e) => setSelectedZip(e.target.value.replace(/\D/g, '').slice(0, 5))}
-                                            placeholder="e.g. 90028"
-                                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                                            maxLength={5}
-                                        />
-                                        <button
-                                            onClick={() => handleZipLookup(selectedZip)}
-                                            disabled={selectedZip.length !== 5}
-                                            className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-                                        >
-                                            <Icon name="Search" size={18} />
-                                        </button>
-                                    </div>
-                                </div>
-
-                                {/* Area Search */}
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Search by Area Name</label>
-                                    <input
-                                        type="text"
-                                        value={searchArea}
-                                        onChange={(e) => handleAreaSearch(e.target.value)}
-                                        placeholder="e.g. Hollywood, Venice..."
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Area Search Results */}
-                            {searchResults.length > 0 && (
-                                <div className="mb-6 p-3 bg-gray-50 rounded-lg">
-                                    <p className="text-xs text-gray-500 mb-2">Click a ZIP to view details:</p>
-                                    <div className="flex flex-wrap gap-2">
-                                        {searchResults.map(r => (
-                                            <button
-                                                key={r.zip}
-                                                onClick={() => { handleZipLookup(r.zip); setSearchArea(''); setSearchResults([]); }}
-                                                className="px-3 py-1 bg-white border border-gray-200 rounded-full text-sm hover:border-emerald-500 hover:text-emerald-600 transition-colors"
-                                            >
-                                                {r.zip} - {r.area}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Results */}
-                            {result && (
-                                <div className="space-y-4">
-                                    {/* Location Info */}
-                                    <div className={`p-4 rounded-xl ${result.found ? 'bg-emerald-50 border border-emerald-200' : 'bg-yellow-50 border border-yellow-200'}`}>
-                                        <div className="flex items-start justify-between">
-                                            <div>
-                                                <h3 className="text-lg font-bold text-gray-900">ZIP {result.zip}</h3>
-                                                <p className={`text-sm ${result.found ? 'text-emerald-700' : 'text-yellow-700'}`}>
-                                                    {result.found ? result.area : 'ZIP not in database - using LA average'}
-                                                </p>
-                                            </div>
-                                            <div className={`px-3 py-1 rounded-full text-xs font-medium ${result.found ? 'bg-emerald-100 text-emerald-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                                                {result.found ? 'Data Found' : 'Estimated'}
-                                            </div>
-                                        </div>
-                                        
-                                        {result.found && (
-                                            <div className="mt-3 grid grid-cols-3 gap-4 text-center">
-                                                <div className="bg-white rounded-lg p-2">
-                                                    <p className="text-xs text-gray-500">Population</p>
-                                                    <p className="font-bold text-gray-900">{result.population?.toLocaleString()}</p>
-                                                </div>
-                                                <div className="bg-white rounded-lg p-2">
-                                                    <p className="text-xs text-gray-500">Sq. Miles</p>
-                                                    <p className="font-bold text-gray-900">{result.sqMiles}</p>
-                                                </div>
-                                                <div className="bg-white rounded-lg p-2">
-                                                    <p className="text-xs text-gray-500">Density</p>
-                                                    <p className="font-bold text-gray-900">{result.density?.toLocaleString()}/mi²</p>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Impressions by Product */}
-                                    <div className="bg-gray-50 rounded-xl p-4">
-                                        <h4 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                                            <Icon name="BarChart" size={18} className="text-emerald-600" />
-                                            Weekly Impressions by Product
-                                        </h4>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            {Object.entries(result.weeklyImpressions).map(([product, imps]) => (
-                                                <div key={product} className="bg-white rounded-lg p-3 border border-gray-200">
-                                                    <p className="text-xs text-gray-500 truncate" title={product}>{product}</p>
-                                                    <p className="text-xl font-bold text-gray-900">{imps.toLocaleString()}</p>
-                                                    <p className="text-xs text-gray-400">imps/week/face</p>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    {/* Methodology Note */}
-                                    <div className="text-xs text-gray-500 bg-gray-100 rounded-lg p-3">
-                                        <p className="font-medium mb-1">📊 Methodology:</p>
-                                        <p>Estimates based on US Census 2022 population data and industry-standard Geopath visibility factors. 
-                                        Actual impressions may vary based on specific placement, traffic patterns, and time of day.</p>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Quick Reference */}
-                            {!result && (
-                                <div className="text-center py-8 text-gray-500">
-                                    <Icon name="MapPin" size={48} className="mx-auto mb-3 text-gray-300" />
-                                    <p className="font-medium">Enter a ZIP code or search by area</p>
-                                    <p className="text-sm">Coverage: {availableZips.length} LA ZIP codes</p>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Footer */}
-                        <div className="px-6 py-4 border-t bg-gray-50 flex justify-between items-center">
-                            <p className="text-xs text-gray-500">
-                                Data: US Census 2022 • {Object.keys(LA_ZIP_DATA).length} ZIPs
-                            </p>
-                            <button
-                                onClick={onClose}
-                                className="px-6 py-2 bg-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-300 transition-colors"
-                            >
-                                Close
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            );
-        };
-
         // ═══════════════════════════════════════════════════════════════════════════
         // GOOGLE SHEET SETTINGS MODAL (Hidden Feature - Triple-click on logo)
         // ═══════════════════════════════════════════════════════════════════════════
@@ -3492,80 +3302,6 @@
          * @param {string} product - Product type (optional)
          * @returns {object} - Impression estimates by product type
          */
-        function estimateImpressions(zip, product = null) {
-            const data = LA_ZIP_DATA[zip];
-            
-            if (!data) {
-                // Return estimate based on LA average if ZIP not found
-                const avgDensity = 8000; // LA average pop density
-                const baseImps = Math.round(avgDensity * 0.75);
-                return {
-                    zip,
-                    found: false,
-                    area: 'Unknown',
-                    population: null,
-                    density: avgDensity,
-                    weeklyImpressions: {
-                        'Panel-Targeted': Math.round(baseImps * 1.15),
-                        'Panel-Network': Math.round(baseImps * 0.95),
-                        'Digital': Math.round(baseImps * 2.8),
-                        'Transit Shelter': Math.round(baseImps * 0.65),
-                    }
-                };
-            }
-
-            const density = Math.round(data.pop / data.sqMi);
-            
-            // Base formula: Population density × visibility factor
-            // Industry benchmark: ~0.75 impressions per person in density per week
-            const baseImpressions = Math.round(density * 0.75);
-            
-            const impressions = {};
-            for (const [type, mult] of Object.entries(PRODUCT_MULTIPLIERS)) {
-                if (type !== 'default') {
-                    impressions[type] = Math.round(baseImpressions * mult);
-                }
-            }
-
-            return {
-                zip,
-                found: true,
-                area: data.area,
-                population: data.pop,
-                sqMiles: data.sqMi,
-                density,
-                weeklyImpressions: impressions,
-                // Convenience: get single product
-                getForProduct: (prod) => {
-                    const mult = PRODUCT_MULTIPLIERS[prod] || PRODUCT_MULTIPLIERS['default'];
-                    return Math.round(baseImpressions * mult);
-                }
-            };
-        }
-
-        /**
-         * Get all ZIPs with data
-         */
-        function getAvailableZips() {
-            return Object.keys(LA_ZIP_DATA).sort();
-        }
-
-        /**
-         * Lookup ZIP by area name
-         */
-        function findZipsByArea(areaName) {
-            const results = [];
-            for (const [zip, data] of Object.entries(LA_ZIP_DATA)) {
-                if (data.area.toLowerCase().includes(areaName.toLowerCase())) {
-                    results.push({ zip, ...data });
-                }
-            }
-            return results;
-        }
-
-        // ===========================================
-        // END GEOPATH IMPRESSION ESTIMATOR
-        // ===========================================
 
         const STAT_CARD_CONFIG = {
             delayedFlights: {
@@ -4060,242 +3796,6 @@
             );
         };
 
-        // --- NEW COMPONENT: GEOPATH IMPRESSIONS LOOKUP ---
-        const ImpressionsModal = ({ isOpen, onClose }) => {
-            const [searchZip, setSearchZip] = useState('');
-            const [selectedProduct, setSelectedProduct] = useState('Panel-Targeted');
-            const [viewMode, setViewMode] = useState('search'); // 'search' or 'rankings'
-            
-            if (!isOpen) return null;
-            
-            const productTypes = Object.keys(PRODUCT_MULTIPLIERS).filter(p => p !== 'default' && !p.includes('...'));
-            
-            // Calculate impressions for a ZIP
-            const getZipImpressions = (zip) => {
-                const data = LA_ZIP_DATA[zip];
-                if (!data) return null;
-                
-                const density = Math.round(data.pop / data.sqMi);
-                const baseImpressions = Math.round(density * 0.75);
-                
-                const products = {};
-                productTypes.forEach(type => {
-                    const mult = PRODUCT_MULTIPLIERS[type] || 1.0;
-                    products[type] = {
-                        weekly: Math.round(baseImpressions * mult),
-                        fourWeek: Math.round(baseImpressions * mult * 4),
-                        daily: Math.round(baseImpressions * mult / 7)
-                    };
-                });
-                
-                return {
-                    zipCode: zip,
-                    area: data.area,
-                    population: data.pop,
-                    sqMiles: data.sqMi,
-                    popDensity: density,
-                    products
-                };
-            };
-            
-            // Search results
-            const searchResult = searchZip.length === 5 ? getZipImpressions(searchZip) : null;
-            
-            // Top ZIPs by selected product
-            const topZips = Object.keys(LA_ZIP_DATA)
-                .map(zip => getZipImpressions(zip))
-                .filter(Boolean)
-                .sort((a, b) => (b.products?.[selectedProduct]?.weekly || 0) - (a.products?.[selectedProduct]?.weekly || 0))
-                .slice(0, 15);
-            
-            return (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm" onClick={onClose}>
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
-                        {/* Header */}
-                        <div className="px-6 py-4 border-b bg-gradient-to-r from-emerald-600 to-teal-600 text-white flex justify-between items-center">
-                            <div>
-                                <h2 className="text-xl font-bold flex items-center gap-2">
-                                    <Icon name="MapPin" size={24} />
-                                    Geopath Impression Estimator
-                                </h2>
-                                <p className="text-emerald-100 text-sm mt-1">
-                                    ZIP-based weekly impression estimates • {Object.keys(LA_ZIP_DATA).length} LA ZIPs
-                                </p>
-                            </div>
-                            <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-full transition-colors">
-                                <Icon name="X" size={20} />
-                            </button>
-                        </div>
-                        
-                        {/* Tab Navigation */}
-                        <div className="px-6 py-3 bg-gray-50 border-b flex items-center gap-4">
-                            <button 
-                                onClick={() => setViewMode('search')}
-                                className={`px-4 py-2 rounded-lg font-medium transition-colors ${viewMode === 'search' ? 'bg-emerald-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}
-                            >
-                                <Icon name="Search" size={16} className="inline mr-2" />
-                                ZIP Lookup
-                            </button>
-                            <button 
-                                onClick={() => setViewMode('rankings')}
-                                className={`px-4 py-2 rounded-lg font-medium transition-colors ${viewMode === 'rankings' ? 'bg-emerald-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}
-                            >
-                                <Icon name="TrendingUp" size={16} className="inline mr-2" />
-                                Top ZIPs
-                            </button>
-                            
-                            <div className="ml-auto flex items-center gap-2">
-                                <label className="text-sm text-gray-600">Product:</label>
-                                <select 
-                                    value={selectedProduct}
-                                    onChange={e => setSelectedProduct(e.target.value)}
-                                    className="px-3 py-1.5 border rounded-lg text-sm"
-                                >
-                                    {productTypes.map(p => (
-                                        <option key={p} value={p}>{p}</option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
-                        
-                        {/* Content */}
-                        <div className="flex-1 overflow-y-auto p-6">
-                            {viewMode === 'search' ? (
-                                <div className="space-y-6">
-                                    {/* Search Input */}
-                                    <div className="flex gap-4">
-                                        <div className="flex-1">
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">Enter ZIP Code</label>
-                                            <input
-                                                type="text"
-                                                value={searchZip}
-                                                onChange={e => setSearchZip(e.target.value.replace(/\D/g, '').slice(0, 5))}
-                                                placeholder="e.g., 90028"
-                                                className="w-full px-4 py-3 text-xl border-2 border-gray-300 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all"
-                                                maxLength={5}
-                                            />
-                                        </div>
-                                    </div>
-                                    
-                                    {/* Search Result */}
-                                    {searchZip.length === 5 && !searchResult && (
-                                        <div className="text-center py-8 bg-orange-50 rounded-xl border border-orange-200">
-                                            <Icon name="AlertCircle" size={32} className="text-orange-500 mx-auto mb-2" />
-                                            <p className="text-orange-700">ZIP code {searchZip} not found in LA database</p>
-                                            <p className="text-sm text-orange-600 mt-1">Try a different Los Angeles area ZIP</p>
-                                        </div>
-                                    )}
-                                    
-                                    {searchResult && (
-                                        <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl border border-emerald-200 overflow-hidden">
-                                            <div className="px-6 py-4 bg-emerald-600 text-white">
-                                                <div className="flex justify-between items-center">
-                                                    <div>
-                                                        <h3 className="text-2xl font-bold">{searchResult.zipCode}</h3>
-                                                        <p className="text-emerald-100">{searchResult.area}</p>
-                                                    </div>
-                                                    <div className="text-right">
-                                                        <p className="text-sm text-emerald-100">Population Density</p>
-                                                        <p className="text-2xl font-bold">{searchResult.popDensity.toLocaleString()}/mi²</p>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            
-                                            <div className="p-6">
-                                                <div className="grid grid-cols-2 gap-4 mb-6">
-                                                    <div className="bg-white rounded-lg p-4 shadow-sm">
-                                                        <p className="text-sm text-gray-500">Population</p>
-                                                        <p className="text-2xl font-bold text-gray-800">{searchResult.population.toLocaleString()}</p>
-                                                    </div>
-                                                    <div className="bg-white rounded-lg p-4 shadow-sm">
-                                                        <p className="text-sm text-gray-500">Area</p>
-                                                        <p className="text-2xl font-bold text-gray-800">{searchResult.sqMiles.toFixed(2)} mi²</p>
-                                                    </div>
-                                                </div>
-                                                
-                                                <h4 className="font-semibold text-gray-800 mb-3">Weekly Impressions by Product</h4>
-                                                <div className="space-y-2">
-                                                    {Object.entries(searchResult.products).map(([product, data]) => (
-                                                        <div key={product} className={`flex justify-between items-center p-3 rounded-lg ${product === selectedProduct ? 'bg-emerald-100 border-2 border-emerald-400' : 'bg-white'}`}>
-                                                            <span className="font-medium text-gray-700">{product}</span>
-                                                            <div className="text-right">
-                                                                <span className="text-lg font-bold text-gray-800">{data.weekly.toLocaleString()}</span>
-                                                                <span className="text-sm text-gray-500 ml-2">/ week</span>
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-                                    
-                                    {/* Formula Info */}
-                                    <div className="bg-gray-50 rounded-xl p-4 border">
-                                        <h4 className="font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                                            <Icon name="Info" size={16} />
-                                            How it's calculated
-                                        </h4>
-                                        <p className="text-sm text-gray-600">
-                                            <code className="bg-gray-200 px-2 py-0.5 rounded">Weekly Imps = (Population ÷ Sq Miles) × 0.75 × Product Multiplier</code>
-                                        </p>
-                                        <div className="mt-2 text-xs text-gray-500">
-                                            Product Multipliers: {Object.entries(PRODUCT_MULTIPLIERS)
-                                                .filter(([k]) => k !== 'default' && !k.includes('...'))
-                                                .map(([k, v]) => `${k}: ${v}×`)
-                                                .join(' • ')}
-                                        </div>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="space-y-4">
-                                    <h3 className="font-semibold text-gray-800">
-                                        Top 15 ZIPs by {selectedProduct} Impressions
-                                    </h3>
-                                    <div className="bg-white rounded-xl border overflow-hidden">
-                                        <table className="w-full text-sm">
-                                            <thead className="bg-gray-50">
-                                                <tr>
-                                                    <th className="px-4 py-3 text-left font-semibold text-gray-700">#</th>
-                                                    <th className="px-4 py-3 text-left font-semibold text-gray-700">ZIP</th>
-                                                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Area</th>
-                                                    <th className="px-4 py-3 text-right font-semibold text-gray-700">Pop Density</th>
-                                                    <th className="px-4 py-3 text-right font-semibold text-gray-700">Weekly Imps</th>
-                                                    <th className="px-4 py-3 text-right font-semibold text-gray-700">4-Week Imps</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-gray-100">
-                                                {topZips.map((zip, i) => (
-                                                    <tr key={zip.zipCode} className="hover:bg-emerald-50 cursor-pointer" onClick={() => { setSearchZip(zip.zipCode); setViewMode('search'); }}>
-                                                        <td className="px-4 py-3 font-medium text-gray-500">{i + 1}</td>
-                                                        <td className="px-4 py-3 font-bold text-emerald-600">{zip.zipCode}</td>
-                                                        <td className="px-4 py-3 text-gray-700">{zip.area}</td>
-                                                        <td className="px-4 py-3 text-right text-gray-600">{zip.popDensity.toLocaleString()}/mi²</td>
-                                                        <td className="px-4 py-3 text-right font-semibold text-gray-800">{zip.products?.[selectedProduct]?.weekly?.toLocaleString()}</td>
-                                                        <td className="px-4 py-3 text-right text-gray-600">{zip.products?.[selectedProduct]?.fourWeek?.toLocaleString()}</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                        
-                        {/* Footer */}
-                        <div className="px-6 py-4 bg-gray-50 border-t flex justify-between items-center text-sm text-gray-500">
-                            <div>
-                                <Icon name="Database" size={14} className="inline mr-1" />
-                                {Object.keys(LA_ZIP_DATA).length} ZIPs • Based on Census data & Geopath methodology
-                            </div>
-                            <button onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">
-                                Close
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            );
-        };
-
         // --- NEW COMPONENT: INSTALLATION RISK COMMAND CENTER ---
 
         // --- INSTALLATION RISK COMMAND CENTER (External - loaded from riskCommandCenter.js) ---
@@ -4332,7 +3832,7 @@
         // ═══════════════════════════════════════════════════════════════════════════
         // COLLAPSED MINI-BAR with Waterfall Cascade
         // ═══════════════════════════════════════════════════════════════════════════
-        const CollapsedMiniBar = ({ view, setView, onLogout, onOpenImpressions }) => {
+        const CollapsedMiniBar = ({ view, setView, onLogout }) => {
             const [pipelineExpanded, setPipelineExpanded] = useState(false);
             const [historyExpanded, setHistoryExpanded] = useState(false);
             
@@ -4367,7 +3867,6 @@
                 { id: 'recentInstalls', icon: 'CheckSquare' },
                 { id: 'history', icon: 'History' },
                 { id: 'lostOpportunities', icon: 'XCircle' },
-                { id: 'impressions', icon: 'MapPin' },
             ];
             
             const IconButton = ({ item, colorClass, bgClass, borderClass, hoverBorderClass, index = 0, isVisible = true }) => (
@@ -4409,11 +3908,15 @@
                         />
                     ))}
 
-                    {/* Impressions Dashboard - Always visible */}
+                    {/* ZIP Impressions - Always visible, navigates to full dashboard */}
                     <button
-                        onClick={onOpenImpressions}
-                        className="w-10 h-10 mb-1 rounded-xl flex items-center justify-center transition-all duration-300 border border-emerald-500/50 hover:border-emerald-400 hover:bg-emerald-500/20 bg-emerald-500/10"
-                        title="Impressions Dashboard"
+                        onClick={() => setView('impressions')}
+                        className={`w-10 h-10 mb-1 rounded-xl flex items-center justify-center transition-all duration-300 ${
+                            view === 'impressions'
+                                ? 'bg-emerald-500/20 border border-emerald-400 shadow-lg'
+                                : 'border border-emerald-500/50 hover:border-emerald-400 hover:bg-emerald-500/20 bg-emerald-500/10'
+                        }`}
+                        title="ZIP Impressions Dashboard"
                     >
                         <Icon name="Globe" size={16} className="text-emerald-400" />
                     </button>
@@ -4510,7 +4013,7 @@
         };
         
         // Wrapper that handles collapse state
-        const Sidebar = ({ view, setView, onReset, onOpenDigest, onOpenImpressions, onResetEmailLogs, onOpenSheetSettings, onLogout, ghostCount = 0, isCollapsed: externalCollapsed, setIsCollapsed: externalSetCollapsed }) => {
+        const Sidebar = ({ view, setView, onReset, onOpenDigest, onResetEmailLogs, onOpenSheetSettings, onLogout, ghostCount = 0, isCollapsed: externalCollapsed, setIsCollapsed: externalSetCollapsed }) => {
             const [internalCollapsed, setInternalCollapsed] = useState(false);
             const isCollapsed = externalCollapsed !== undefined ? externalCollapsed : internalCollapsed;
             const setIsCollapsed = externalSetCollapsed || setInternalCollapsed;
@@ -4522,12 +4025,11 @@
                         style={{ width: isCollapsed ? 64 : 320 }}
                     >
                         {!isCollapsed && (
-                            <CanvasGearSidebar 
-                                view={view} 
-                                setView={setView} 
+                            <CanvasGearSidebar
+                                view={view}
+                                setView={setView}
                                 onLogout={onLogout}
                                 onOpenDigest={onOpenDigest}
-                                onOpenImpressions={onOpenImpressions}
                                 onReset={onReset}
                                 onResetEmailLogs={onResetEmailLogs}
                                 onOpenSheetSettings={onOpenSheetSettings}
@@ -4538,7 +4040,7 @@
                         
                         {/* Collapsed mini-bar with waterfall cascade */}
                         {isCollapsed && (
-                            <CollapsedMiniBar view={view} setView={setView} onLogout={onLogout} onOpenImpressions={onOpenImpressions} />
+                            <CollapsedMiniBar view={view} setView={setView} onLogout={onLogout} />
                         )}
                     </div>
                     
@@ -5444,9 +4946,6 @@
             
             // NEW: Digest Modal State
             const [isDigestModalOpen, setIsDigestModalOpen] = useState(false);
-            
-            // NEW: Geopath Impressions Modal State
-            const [isImpressionsModalOpen, setIsImpressionsModalOpen] = useState(false);
 
             // AI Pipeline Insight State
             const [pipelineInsight, setPipelineInsight] = useState('');
@@ -7111,12 +6610,11 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
 
             return (
                 <div className="min-h-screen flex font-sans bg-gray-50 text-gray-900">
-                    <Sidebar 
-                        view={view} 
-                        setView={setView} 
-                        onReset={handleResetData} 
+                    <Sidebar
+                        view={view}
+                        setView={setView}
+                        onReset={handleResetData}
                         onOpenDigest={() => setIsDigestModalOpen(true)}
-                        onOpenImpressions={() => setIsImpressionsModalOpen(true)}
                         onResetEmailLogs={handleResetEmailLogs}
                         onOpenSheetSettings={() => setShowSheetSettings(true)}
                         onLogout={onLogout}
@@ -7158,10 +6656,6 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                         processedData={processedData}
                         filterOptions={filterOptions}
                         currentMarket={marketFilters.length > 0 ? marketFilters[0] : 'Los Angeles, CA'}
-                    />
-                    <ImpressionsModal
-                        isOpen={isImpressionsModalOpen}
-                        onClose={() => setIsImpressionsModalOpen(false)}
                     />
                     <CustomWidgetModal
                         isOpen={isCustomWidgetModalOpen}
