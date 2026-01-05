@@ -7750,33 +7750,40 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
 
         // --- MASTER APPLICATION WRAPPER ---
         const App = () => {
-            // Initialize user from localStorage (persist login across refreshes)
+            // SESSION HYDRATION: Restore user from localStorage on mount
             const [user, setUser] = useState(() => {
                 try {
-                    const saved = localStorage.getItem('opshub_user');
-                    return saved ? JSON.parse(saved) : null;
+                    const saved = localStorage.getItem('STAP_SESSION');
+                    if (saved) {
+                        const parsed = JSON.parse(saved);
+                        console.log('✅ Session restored for:', parsed.email);
+                        return parsed;
+                    }
+                    return null;
                 } catch {
                     return null;
                 }
             });
-            
-            // Handle login - save to localStorage
+
+            // Handle login - persist session to localStorage
             const handleLogin = (userData) => {
                 setUser(userData);
                 try {
-                    localStorage.setItem('opshub_user', JSON.stringify(userData));
+                    localStorage.setItem('STAP_SESSION', JSON.stringify(userData));
+                    console.log('✅ Session saved for:', userData.email);
                 } catch (e) {
-                    console.warn('Could not save login to localStorage');
+                    console.warn('Could not save session to localStorage');
                 }
             };
 
-            // Handle logout - clear localStorage
+            // Handle logout - clear session from localStorage
             const handleLogout = () => {
                 setUser(null);
                 try {
-                    localStorage.removeItem('opshub_user');
+                    localStorage.removeItem('STAP_SESSION');
+                    console.log('✅ Session cleared');
                 } catch (e) {
-                    console.warn('Could not clear localStorage');
+                    console.warn('Could not clear session from localStorage');
                 }
             };
 
