@@ -19933,20 +19933,20 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
         const App = () => {
             // Demo mode is always true in this standalone version
             const isDemoMode = true;
-            
+
             // Simulated user for demo
             const user = { email: 'demo@vectormedia.com', isDemo: true };
-            
-            // Handle logout - just reload the demo
+
+            // Handle logout - eject to production login screen
             const handleLogout = () => {
-                window.location.reload();
+                window.location.href = "index.html";
             };
 
             return (
                 <div className="min-h-screen bg-gray-50">
-                    <AuthorizedDashboard 
-                        onLogout={handleLogout} 
-                        isDemoMode={isDemoMode} 
+                    <AuthorizedDashboard
+                        onLogout={handleLogout}
+                        isDemoMode={isDemoMode}
                     />
                 </div>
             );

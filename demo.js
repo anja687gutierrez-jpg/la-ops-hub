@@ -1190,7 +1190,7 @@
     };
 
     // ═══════════════════════════════════════════════════════════════════════════════
-    // MOCK DATA GENERATOR - Creates realistic demo campaign data
+    // MOCK DATA GENERATOR - Creates comprehensive demo campaign data
     // ═══════════════════════════════════════════════════════════════════════════════
     const generateMockData = () => {
         const today = new Date();
@@ -1200,21 +1200,100 @@
             d.setDate(today.getDate() + days);
             return formatDate(d);
         };
+        const getEndDate = (startDays, duration = 28) => getRelDate(startDays + duration);
 
+        // Markets
+        const markets = ['Los Angeles, CA', 'Dallas, TX', 'Miami, FL', 'Chicago, IL', 'New York, NY', 'Seattle, WA', 'San Francisco, CA', 'Boston, MA', 'Orlando, FL', 'Las Vegas, NV'];
+        const products = ['Transit Shelter', 'Bus Bench', 'Urban Panel', 'Digital Billboard', 'Kiosk', 'Bus King', 'Bus Queen', 'Interior Card', 'Wallscape'];
+        const owners = ['Sarah Chen', 'Mike Rodriguez', 'Jennifer Park', 'David Kim', 'Amanda Torres', 'Chris Johnson'];
+
+        // Comprehensive holds array with all stages represented
         const holds = [
-            { id: 'DEMO-001', start: getRelDate(-10), media: 'Transit Shelters', quantity: '50', advertiser: 'Coca Cola', owner: 'John Doe', stage: 'Material Ready For Install' },
-            { id: 'DEMO-002', start: getRelDate(-5), media: 'Bus Bench', quantity: '20', advertiser: 'Nike', owner: 'Jane Smith', stage: 'Proofs Approved' },
-            { id: 'DEMO-003', start: getRelDate(8), media: 'Digital Screen', quantity: '10', advertiser: 'Apple', owner: 'John Doe', stage: 'Contracted' },
-            { id: 'DEMO-004', start: getRelDate(0), media: 'Billboard', quantity: '5', advertiser: 'Samsung', owner: 'Jane Smith', stage: 'Installed' },
-            { id: 'DEMO-005', start: getRelDate(30), media: 'Shelter', quantity: '15', advertiser: 'Call Jacob', owner: 'Demo User', stage: 'Contracted' },
-            { id: 'DEMO-006', start: getRelDate(-65), media: 'Urban Panel', quantity: '100', advertiser: 'Netflix', owner: 'Demo User', stage: 'Working On It' },
-            { id: 'DEMO-007', start: getRelDate(2), media: 'Kiosk', quantity: '12', advertiser: 'Local Gym', owner: 'John Doe', stage: 'Art Work Received' }
+            // RFP Stage
+            { id: '260102001-0', date: getRelDate(14), end: getEndDate(14), media: 'Transit Shelter', quantity: '75', advertiser: 'Target', client: 'Target Corporation', owner: owners[0], stage: 'RFP', market: markets[0], product: products[0], notes: 'Q1 2026 campaign proposal' },
+            { id: '260105002-0', date: getRelDate(21), end: getEndDate(21), media: 'Digital Billboard', quantity: '12', advertiser: 'Spotify', client: 'Spotify USA', owner: owners[1], stage: 'RFP', market: markets[4], product: products[3], notes: 'Premium placement request' },
+
+            // Initial Proposal
+            { id: '260101003-0', date: getRelDate(10), end: getEndDate(10), media: 'Bus King', quantity: '40', advertiser: 'Uber', client: 'Uber Technologies', owner: owners[2], stage: 'Initial Proposal', market: markets[0], product: products[5], notes: 'Rideshare promotion' },
+            { id: '260103004-0', date: getRelDate(18), end: getEndDate(18), media: 'Urban Panel', quantity: '60', advertiser: 'HBO Max', client: 'Warner Bros Discovery', owner: owners[3], stage: 'Initial Proposal', market: markets[2], product: products[2], notes: 'New series launch' },
+
+            // Client Feedback
+            { id: '251228005-0', date: getRelDate(5), end: getEndDate(5), media: 'Transit Shelter', quantity: '50', advertiser: 'Starbucks', client: 'Starbucks Corporation', owner: owners[4], stage: 'Client Feedback', market: markets[5], product: products[0], notes: 'Holiday campaign revisions' },
+
+            // Pending Hold
+            { id: '251225006-0', date: getRelDate(3), end: getEndDate(3), media: 'Bus Bench', quantity: '30', advertiser: 'Nike', client: 'Nike Inc', owner: owners[0], stage: 'Pending Hold', market: markets[0], product: products[1], notes: 'Air Max launch pending' },
+            { id: '251230007-0', date: getRelDate(7), end: getEndDate(7), media: 'Kiosk', quantity: '25', advertiser: 'Paramount+', client: 'Paramount Global', owner: owners[1], stage: 'Pending Hold', market: markets[3], product: products[4], notes: 'Streaming service promo' },
+
+            // On Hold
+            { id: '251220008-0', date: getRelDate(-3), end: getEndDate(-3), media: 'Transit Shelter', quantity: '45', advertiser: 'Toyota', client: 'Toyota USA', owner: owners[2], stage: 'On Hold', market: markets[1], product: products[0], notes: 'Awaiting creative approval', holdReason: 'Creative revision needed' },
+            { id: '251215009-0', date: getRelDate(-7), end: getEndDate(-7), media: 'Urban Panel', quantity: '80', advertiser: 'Pepsi', client: 'PepsiCo', owner: owners[3], stage: 'On Hold', market: markets[0], product: products[2], notes: 'Budget reallocation', holdReason: 'Budget review' },
+            { id: '251218010-0', date: getRelDate(-5), end: getEndDate(-5), media: 'Wallscape', quantity: '3', advertiser: 'Louis Vuitton', client: 'LVMH', owner: owners[4], stage: 'On Hold', market: markets[4], product: products[8], notes: 'Design change request', holdReason: 'Creative changes' },
+
+            // Pending Client/Finance Approval
+            { id: '251222011-0', date: getRelDate(0), end: getEndDate(0), media: 'Digital Billboard', quantity: '8', advertiser: 'Amazon Prime', client: 'Amazon', owner: owners[5], stage: 'Pending Client Approval', market: markets[0], product: products[3], notes: 'Thursday Night Football' },
+            { id: '251224012-0', date: getRelDate(2), end: getEndDate(2), media: 'Bus Queen', quantity: '35', advertiser: 'Lyft', client: 'Lyft Inc', owner: owners[0], stage: 'Pending Finance Approval', market: markets[6], product: products[6], notes: 'SF market expansion' },
+
+            // Contracted
+            { id: '251210013-0', date: getRelDate(-5), end: getEndDate(-5, 42), media: 'Transit Shelter', quantity: '100', advertiser: 'Netflix', client: 'Netflix Inc', owner: owners[1], stage: 'Contracted', market: markets[0], product: products[0], notes: 'Stranger Things S5 campaign', posterImage: 'https://picsum.photos/seed/netflix-contract/400/600' },
+            { id: '251212014-0', date: getRelDate(-3), end: getEndDate(-3, 35), media: 'Urban Panel', quantity: '55', advertiser: 'Apple', client: 'Apple Inc', owner: owners[2], stage: 'Contracted', market: markets[4], product: products[2], notes: 'iPhone 17 teaser', posterImage: 'https://picsum.photos/seed/apple-contract/400/600' },
+            { id: '251215015-0', date: getRelDate(1), end: getEndDate(1, 28), media: 'Bus King', quantity: '45', advertiser: 'Disney+', client: 'The Walt Disney Company', owner: owners[3], stage: 'Contracted', market: markets[8], product: products[5], notes: 'Marvel series premiere' },
+
+            // Proofs Approved
+            { id: '251205016-0', date: getRelDate(-8), end: getEndDate(-8, 35), media: 'Transit Shelter', quantity: '65', advertiser: 'Samsung', client: 'Samsung Electronics', owner: owners[4], stage: 'Proofs Approved', market: markets[0], product: products[0], notes: 'Galaxy S26 launch', posterImage: 'https://picsum.photos/seed/samsung-proof/400/600' },
+            { id: '251208017-0', date: getRelDate(-6), end: getEndDate(-6, 28), media: 'Digital Billboard', quantity: '10', advertiser: 'Meta', client: 'Meta Platforms', owner: owners[5], stage: 'Proofs Approved', market: markets[6], product: products[3], notes: 'Quest 4 VR headset' },
+
+            // Working On It
+            { id: '251201018-0', date: getRelDate(-12), end: getEndDate(-12, 42), media: 'Urban Panel', quantity: '90', advertiser: 'Coca-Cola', client: 'The Coca-Cola Company', owner: owners[0], stage: 'Working On It', market: markets[0], product: products[2], notes: 'Summer refresh campaign', posterImage: 'https://picsum.photos/seed/coke-working/400/600' },
+            { id: '251203019-0', date: getRelDate(-10), end: getEndDate(-10, 35), media: 'Kiosk', quantity: '40', advertiser: 'Adidas', client: 'Adidas AG', owner: owners[1], stage: 'Working On It', market: markets[3], product: products[4], notes: 'Ultraboost 2026' },
+
+            // Proofs Out For Approval
+            { id: '251128020-0', date: getRelDate(-15), end: getEndDate(-15, 28), media: 'Transit Shelter', quantity: '55', advertiser: 'Honda', client: 'Honda Motor Co', owner: owners[2], stage: 'Proofs Out For Approval', market: markets[1], product: products[0], notes: 'CR-V Hybrid campaign', posterImage: 'https://picsum.photos/seed/honda-proofs/400/600' },
+
+            // Artwork Received
+            { id: '251125021-0', date: getRelDate(-18), end: getEndDate(-18, 35), media: 'Bus Bench', quantity: '28', advertiser: 'Chipotle', client: 'Chipotle Mexican Grill', owner: owners[3], stage: 'Artwork Received', market: markets[0], product: products[1], notes: 'New menu items launch', posterImage: 'https://picsum.photos/seed/chipotle-art/400/600' },
+            { id: '251126022-0', date: getRelDate(-17), end: getEndDate(-17, 28), media: 'Urban Panel', quantity: '70', advertiser: 'Hulu', client: 'The Walt Disney Company', owner: owners[4], stage: 'Artwork Received', market: markets[0], product: products[2], notes: 'Award season campaign' },
+
+            // Material Ready For Install
+            { id: '251120023-0', date: getRelDate(-20), end: getEndDate(-20, 42), media: 'Transit Shelter', quantity: '85', advertiser: 'McDonald\'s', client: 'McDonald\'s Corporation', owner: owners[5], stage: 'Material Ready For Install', market: markets[0], product: products[0], notes: 'McRib limited time', posterImage: 'https://picsum.photos/seed/mcdonalds-ready/400/600' },
+            { id: '251118024-0', date: getRelDate(-22), end: getEndDate(-22, 35), media: 'Digital Billboard', quantity: '15', advertiser: 'T-Mobile', client: 'T-Mobile US', owner: owners[0], stage: 'Material Ready For Install', market: markets[5], product: products[3], notes: '5G network expansion', posterImage: 'https://picsum.photos/seed/tmobile-ready/400/600' },
+            { id: '251119025-0', date: getRelDate(-21), end: getEndDate(-21, 28), media: 'Bus King', quantity: '50', advertiser: 'Peacock', client: 'NBCUniversal', owner: owners[1], stage: 'Material Ready For Install', market: markets[3], product: products[5], notes: 'Olympics coverage promo' }
         ];
 
+        // Comprehensive installs array with installed/completed campaigns
         const installs = [
-            { campaign: 'DEMO-006', start: getRelDate(-65), product: 'Urban Panel', quantity: '100', install: '45', advertiser: 'Netflix', owner: 'Demo User', stage: 'Working On It' },
-            { campaign: 'DEMO-004', start: getRelDate(0), product: 'Billboard', quantity: '5', install: '5', advertiser: 'Samsung', owner: 'Jane Smith', stage: 'Installed' },
-            { campaign: 'DEMO-008', start: getRelDate(-90), product: 'Shelter', quantity: '10', install: '10', advertiser: 'Old Campaign', owner: 'Jane Smith', stage: 'POP Completed', end: getRelDate(-40) }
+            // Recently Installed (last 7 days)
+            { campaign: '251115026-0', date: getRelDate(-2), end: getEndDate(-2, 35), product: 'Transit Shelter', quantity: '60', install: '60', advertiser: 'Google', client: 'Alphabet Inc', owner: owners[2], stage: 'Installed', market: markets[0], posterImage: 'https://picsum.photos/seed/google-install/400/600', popPhotos: ['https://picsum.photos/seed/google-pop1/800/600', 'https://picsum.photos/seed/google-pop2/800/600', 'https://picsum.photos/seed/google-pop3/800/600'] },
+            { campaign: '251114027-0', date: getRelDate(-3), end: getEndDate(-3, 28), product: 'Urban Panel', quantity: '45', install: '45', advertiser: 'Microsoft', client: 'Microsoft Corporation', owner: owners[3], stage: 'Installed', market: markets[5], posterImage: 'https://picsum.photos/seed/microsoft-install/400/600', popPhotos: ['https://picsum.photos/seed/ms-pop1/800/600', 'https://picsum.photos/seed/ms-pop2/800/600'] },
+            { campaign: '251112028-0', date: getRelDate(-5), end: getEndDate(-5, 42), product: 'Bus Bench', quantity: '35', install: '35', advertiser: 'Verizon', client: 'Verizon Communications', owner: owners[4], stage: 'Installed', market: markets[1], posterImage: 'https://picsum.photos/seed/verizon-install/400/600', popPhotos: ['https://picsum.photos/seed/vz-pop1/800/600'] },
+            { campaign: '251110029-0', date: getRelDate(-7), end: getEndDate(-7, 35), product: 'Kiosk', quantity: '20', install: '20', advertiser: 'Airbnb', client: 'Airbnb Inc', owner: owners[5], stage: 'Installed', market: markets[2], posterImage: 'https://picsum.photos/seed/airbnb-install/400/600', popPhotos: ['https://picsum.photos/seed/airbnb-pop1/800/600', 'https://picsum.photos/seed/airbnb-pop2/800/600'] },
+
+            // Photos Taken (installed + photographed)
+            { campaign: '251105030-0', date: getRelDate(-12), end: getEndDate(-12, 28), product: 'Transit Shelter', quantity: '70', install: '70', advertiser: 'Amazon', client: 'Amazon.com Inc', owner: owners[0], stage: 'Photos Taken', market: markets[0], posterImage: 'https://picsum.photos/seed/amazon-photo/400/600', popPhotos: ['https://picsum.photos/seed/amazon-pop1/800/600', 'https://picsum.photos/seed/amazon-pop2/800/600', 'https://picsum.photos/seed/amazon-pop3/800/600', 'https://picsum.photos/seed/amazon-pop4/800/600'] },
+            { campaign: '251103031-0', date: getRelDate(-14), end: getEndDate(-14, 35), product: 'Digital Billboard', quantity: '8', install: '8', advertiser: 'Apple Music', client: 'Apple Inc', owner: owners[1], stage: 'Photos Taken', market: markets[4], posterImage: 'https://picsum.photos/seed/applemusic-photo/400/600', popPhotos: ['https://picsum.photos/seed/applemusic-pop1/800/600', 'https://picsum.photos/seed/applemusic-pop2/800/600'] },
+            { campaign: '251101032-0', date: getRelDate(-16), end: getEndDate(-16, 42), product: 'Wallscape', quantity: '2', install: '2', advertiser: 'Gucci', client: 'Kering', owner: owners[2], stage: 'Photos Taken', market: markets[0], posterImage: 'https://picsum.photos/seed/gucci-photo/400/600', popPhotos: ['https://picsum.photos/seed/gucci-pop1/800/600', 'https://picsum.photos/seed/gucci-pop2/800/600', 'https://picsum.photos/seed/gucci-pop3/800/600'] },
+
+            // POP Completed (full cycle)
+            { campaign: '251025033-0', date: getRelDate(-25), end: getEndDate(-25, 28), product: 'Transit Shelter', quantity: '55', install: '55', advertiser: 'Nike', client: 'Nike Inc', owner: owners[3], stage: 'POP Completed', market: markets[0], posterImage: 'https://picsum.photos/seed/nike-pop/400/600', popPhotos: ['https://picsum.photos/seed/nike-pop1/800/600', 'https://picsum.photos/seed/nike-pop2/800/600', 'https://picsum.photos/seed/nike-pop3/800/600', 'https://picsum.photos/seed/nike-pop4/800/600', 'https://picsum.photos/seed/nike-pop5/800/600'] },
+            { campaign: '251020034-0', date: getRelDate(-30), end: getEndDate(-30, 35), product: 'Urban Panel', quantity: '80', install: '80', advertiser: 'Netflix', client: 'Netflix Inc', owner: owners[4], stage: 'POP Completed', market: markets[0], posterImage: 'https://picsum.photos/seed/netflix-pop/400/600', popPhotos: ['https://picsum.photos/seed/netflix-pop1/800/600', 'https://picsum.photos/seed/netflix-pop2/800/600', 'https://picsum.photos/seed/netflix-pop3/800/600'] },
+            { campaign: '251015035-0', date: getRelDate(-35), end: getEndDate(-35, 28), product: 'Bus King', quantity: '40', install: '40', advertiser: 'Coca-Cola', client: 'The Coca-Cola Company', owner: owners[5], stage: 'POP Completed', market: markets[3], posterImage: 'https://picsum.photos/seed/coke-pop/400/600', popPhotos: ['https://picsum.photos/seed/coke-pop1/800/600', 'https://picsum.photos/seed/coke-pop2/800/600'] },
+            { campaign: '251010036-0', date: getRelDate(-40), end: getEndDate(-40, 42), product: 'Digital Billboard', quantity: '12', install: '12', advertiser: 'HBO Max', client: 'Warner Bros Discovery', owner: owners[0], stage: 'POP Completed', market: markets[2], posterImage: 'https://picsum.photos/seed/hbo-pop/400/600', popPhotos: ['https://picsum.photos/seed/hbo-pop1/800/600', 'https://picsum.photos/seed/hbo-pop2/800/600', 'https://picsum.photos/seed/hbo-pop3/800/600', 'https://picsum.photos/seed/hbo-pop4/800/600'] },
+            { campaign: '251005037-0', date: getRelDate(-45), end: getEndDate(-45, 35), product: 'Kiosk', quantity: '30', install: '30', advertiser: 'Spotify', client: 'Spotify USA', owner: owners[1], stage: 'POP Completed', market: markets[4], posterImage: 'https://picsum.photos/seed/spotify-pop/400/600', popPhotos: ['https://picsum.photos/seed/spotify-pop1/800/600'] },
+
+            // Takedown Complete (expired campaigns)
+            { campaign: '250920038-0', date: getRelDate(-60), end: getEndDate(-60, 28), product: 'Transit Shelter', quantity: '50', install: '50', advertiser: 'Target', client: 'Target Corporation', owner: owners[2], stage: 'Takedown Complete', market: markets[0], posterImage: 'https://picsum.photos/seed/target-td/400/600', popPhotos: ['https://picsum.photos/seed/target-pop1/800/600', 'https://picsum.photos/seed/target-pop2/800/600'] },
+            { campaign: '250915039-0', date: getRelDate(-65), end: getEndDate(-65, 35), product: 'Urban Panel', quantity: '65', install: '65', advertiser: 'Samsung', client: 'Samsung Electronics', owner: owners[3], stage: 'Takedown Complete', market: markets[1], posterImage: 'https://picsum.photos/seed/samsung-td/400/600', popPhotos: ['https://picsum.photos/seed/samsung-pop1/800/600'] },
+            { campaign: '250901040-0', date: getRelDate(-75), end: getEndDate(-75, 42), product: 'Bus Bench', quantity: '25', install: '25', advertiser: 'Pepsi', client: 'PepsiCo', owner: owners[4], stage: 'Takedown Complete', market: markets[0], posterImage: 'https://picsum.photos/seed/pepsi-td/400/600', popPhotos: ['https://picsum.photos/seed/pepsi-pop1/800/600', 'https://picsum.photos/seed/pepsi-pop2/800/600', 'https://picsum.photos/seed/pepsi-pop3/800/600'] },
+
+            // Lost Opportunity
+            { campaign: '251201041-0', date: getRelDate(-15), end: getEndDate(-15, 28), product: 'Wallscape', quantity: '4', install: '0', advertiser: 'Prada', client: 'Prada Group', owner: owners[5], stage: 'Lost Opportunity', market: markets[4], notes: 'Client went with competitor' },
+            { campaign: '251128042-0', date: getRelDate(-20), end: getEndDate(-20, 35), product: 'Digital Billboard', quantity: '6', install: '0', advertiser: 'Burberry', client: 'Burberry Group', owner: owners[0], stage: 'Lost Opportunity', market: markets[0], notes: 'Budget constraints' },
+
+            // Canceled
+            { campaign: '251125043-0', date: getRelDate(-22), end: getEndDate(-22, 28), product: 'Transit Shelter', quantity: '40', install: '0', advertiser: 'Old Navy', client: 'Gap Inc', owner: owners[1], stage: 'Canceled', market: markets[0], notes: 'Campaign restructured' },
+
+            // Partially installed (in progress)
+            { campaign: '251108044-0', date: getRelDate(-10), end: getEndDate(-10, 35), product: 'Transit Shelter', quantity: '80', install: '52', advertiser: 'PlayStation', client: 'Sony Interactive', owner: owners[2], stage: 'Installed', market: markets[0], posterImage: 'https://picsum.photos/seed/ps-install/400/600', popPhotos: ['https://picsum.photos/seed/ps-pop1/800/600', 'https://picsum.photos/seed/ps-pop2/800/600'], notes: '65% installed' },
+            { campaign: '251106045-0', date: getRelDate(-12), end: getEndDate(-12, 42), product: 'Urban Panel', quantity: '60', install: '38', advertiser: 'Xbox', client: 'Microsoft Corporation', owner: owners[3], stage: 'Installed', market: markets[5], posterImage: 'https://picsum.photos/seed/xbox-install/400/600', popPhotos: ['https://picsum.photos/seed/xbox-pop1/800/600'], notes: '63% installed' }
         ];
 
         return { holds, installs };
@@ -1380,6 +1459,163 @@
             deployedQty: 28,
             posterImage: 'https://picsum.photos/seed/mcdonalds/400/500',
             keywords: ['mcdonalds', 'mcrib', 'returns']
+        },
+        {
+            id: 'INV174660',
+            receiptNumber: 'INV174660',
+            dateReceived: new Date('2025-12-22T09:30:00'),
+            description: 'GOOGLE PIXEL 9-GOOG',
+            posterCode: 'PIXEL9-GOOG',
+            client: 'GOOGLE',
+            advertiser: 'Google',
+            printer: 'TECH GRAPHICS INC',
+            quantity: 80,
+            boxes: 5,
+            designs: 2,
+            comments: 'RECEIVED 5 BOXES; 2 DESIGNS - PRODUCT, AI FEATURES',
+            status: 'In Warehouse',
+            warehouseLocation: 'Bay 1 - Shelf E2',
+            matchedCampaign: '251115026-0',
+            posterImage: 'https://picsum.photos/seed/google-pixel/400/500',
+            keywords: ['google', 'pixel', '9', 'ai']
+        },
+        {
+            id: 'INV174655',
+            receiptNumber: 'INV174655',
+            dateReceived: new Date('2025-12-21T14:00:00'),
+            description: 'AMAZON PRIME VIDEO-AMZ',
+            posterCode: 'PRIME-AMZ-2025',
+            client: 'AMAZON',
+            advertiser: 'Amazon',
+            printer: 'PRIME PRINT SOLUTIONS',
+            quantity: 120,
+            boxes: 8,
+            designs: 4,
+            comments: 'RECEIVED 8 BOXES; 4 DESIGNS - RINGS OF POWER, JACK RYAN, REACHER, FALLOUT',
+            status: 'Partially Deployed',
+            warehouseLocation: 'Bay 1 - Pallets 4-5',
+            matchedCampaign: '251105030-0',
+            deployedQty: 85,
+            posterImage: 'https://picsum.photos/seed/amazon-prime/400/500',
+            keywords: ['amazon', 'prime', 'video', 'streaming']
+        },
+        {
+            id: 'INV174650',
+            receiptNumber: 'INV174650',
+            dateReceived: new Date('2025-12-20T11:15:00'),
+            description: 'XBOX SERIES X-MS',
+            posterCode: 'XBOX-SX-MS',
+            client: 'MICROSOFT',
+            advertiser: 'Microsoft',
+            printer: 'GAMING GRAPHICS CO',
+            quantity: 65,
+            boxes: 4,
+            designs: 2,
+            comments: 'RECEIVED 4 BOXES; 2 DESIGNS - CONSOLE, GAME PASS',
+            status: 'Fully Deployed',
+            warehouseLocation: 'N/A - All Deployed',
+            matchedCampaign: '251106045-0',
+            deployedQty: 65,
+            posterImage: 'https://picsum.photos/seed/xbox-series/400/500',
+            keywords: ['xbox', 'series', 'x', 'microsoft', 'gaming']
+        },
+        {
+            id: 'INV174645',
+            receiptNumber: 'INV174645',
+            dateReceived: new Date('2025-12-19T16:30:00'),
+            description: 'PLAYSTATION 5 PRO-SONY',
+            posterCode: 'PS5PRO-SONY',
+            client: 'SONY',
+            advertiser: 'PlayStation',
+            printer: 'CONSOLE CREATIVES',
+            quantity: 90,
+            boxes: 6,
+            designs: 3,
+            comments: 'RECEIVED 6 BOXES; 3 DESIGNS - CONSOLE, SPIDERMAN, GOD OF WAR',
+            status: 'Partially Deployed',
+            warehouseLocation: 'Bay 2 - Shelf A1',
+            matchedCampaign: '251108044-0',
+            deployedQty: 55,
+            posterImage: 'https://picsum.photos/seed/playstation5/400/500',
+            keywords: ['playstation', 'ps5', 'pro', 'sony', 'gaming']
+        },
+        {
+            id: 'INV174640',
+            receiptNumber: 'INV174640',
+            dateReceived: new Date('2025-12-18T08:45:00'),
+            description: 'UBER EATS PROMO-UBR',
+            posterCode: 'EATS-UBR-2025',
+            client: 'UBER',
+            advertiser: 'Uber Eats',
+            printer: 'FOOD GRAPHICS LLC',
+            quantity: 45,
+            boxes: 3,
+            designs: 1,
+            comments: 'RECEIVED 3 BOXES; 1 DESIGN - FREE DELIVERY PROMO',
+            status: 'Received',
+            warehouseLocation: 'Bay 4 - Shelf A3',
+            matchedCampaign: '260101003-0',
+            posterImage: 'https://picsum.photos/seed/uber-eats/400/500',
+            keywords: ['uber', 'eats', 'delivery', 'food']
+        },
+        {
+            id: 'INV174635',
+            receiptNumber: 'INV174635',
+            dateReceived: new Date('2025-12-17T10:00:00'),
+            description: 'DISNEY+ MARVEL-DIS',
+            posterCode: 'MARVEL-DIS-2026',
+            client: 'DISNEY',
+            advertiser: 'Disney+',
+            printer: 'MAGIC PRINT STUDIOS',
+            quantity: 70,
+            boxes: 4,
+            designs: 2,
+            comments: 'RECEIVED 4 BOXES; 2 DESIGNS - DAREDEVIL, THUNDERBOLTS',
+            status: 'In Warehouse',
+            warehouseLocation: 'Bay 3 - Shelf C1',
+            matchedCampaign: '251215015-0',
+            posterImage: 'https://picsum.photos/seed/disney-marvel/400/500',
+            keywords: ['disney', 'marvel', 'streaming', 'daredevil']
+        },
+        {
+            id: 'INV174630',
+            receiptNumber: 'INV174630',
+            dateReceived: new Date('2025-12-16T13:20:00'),
+            description: 'STARBUCKS HOLIDAY-SBX',
+            posterCode: 'HOLIDAY-SBX-2025',
+            client: 'STARBUCKS',
+            advertiser: 'Starbucks',
+            printer: 'COFFEE GRAPHICS',
+            quantity: 55,
+            boxes: 3,
+            designs: 2,
+            comments: 'RECEIVED 3 BOXES; 2 DESIGNS - HOLIDAY CUPS, SEASONAL MENU',
+            status: 'Fully Deployed',
+            warehouseLocation: 'N/A - All Deployed',
+            matchedCampaign: '251228005-0',
+            deployedQty: 55,
+            posterImage: 'https://picsum.photos/seed/starbucks-holiday/400/500',
+            keywords: ['starbucks', 'holiday', 'coffee', 'seasonal']
+        },
+        {
+            id: 'INV174625',
+            receiptNumber: 'INV174625',
+            dateReceived: new Date('2025-12-15T15:45:00'),
+            description: 'HBO MAX HOUSE DRAGON-HBO',
+            posterCode: 'HOTD-HBO-S3',
+            client: 'HBO',
+            advertiser: 'HBO Max',
+            printer: 'DRAGON PRINT WORKS',
+            quantity: 95,
+            boxes: 6,
+            designs: 3,
+            comments: 'RECEIVED 6 BOXES; 3 DESIGNS - KEY ART, DRAGONS, CAST',
+            status: 'Partially Deployed',
+            warehouseLocation: 'Bay 1 - Shelf D2',
+            matchedCampaign: '260103004-0',
+            deployedQty: 42,
+            posterImage: 'https://picsum.photos/seed/hbo-dragon/400/500',
+            keywords: ['hbo', 'max', 'house', 'dragon', 'streaming']
         }
     ];
 
