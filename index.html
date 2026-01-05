@@ -155,6 +155,18 @@
 <body>
     <div id="root"></div>
 
+    <!-- External Component Modules -->
+    <script src="demo.js"></script>
+    <!-- NOTE: These files use JSX and need Babel transpilation.
+         Using inline fallback components in the Babel script block instead.
+         To re-enable, convert to React.createElement() syntax or use a build step.
+    <script src="impressionsDashboard.js"></script>
+    <script src="detailModal.js"></script>
+    <script src="digestModal.js"></script>
+    <script src="canvasGearSidebar.js"></script>
+    <script src="riskCommandCenter.js"></script>
+    -->
+
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef } = React;
 
@@ -287,11 +299,10 @@
         };
 
         // --- COMPONENT: LOGIN SCREEN (Ghost UI) ---
-        const LoginScreen = ({ onLogin, onDemoMode }) => {
+        const LoginScreen = ({ onLogin }) => {
             const [email, setEmail] = useState('');
             const [code, setCode] = useState('');
             const [isLaunching, setIsLaunching] = useState(false);
-            const [launchingDemo, setLaunchingDemo] = useState(false);
             const [launchingMobile, setLaunchingMobile] = useState(false);
             const [error, setError] = useState('');
             const [threeJsLoaded, setThreeJsLoaded] = useState(false);
@@ -349,13 +360,8 @@
                 setIsLaunching(true);
                 setTimeout(() => { onLogin({ email }); }, 1500);
             };
-            
-            const handleDemoClick = () => {
-                setLaunchingDemo(true);
-                setTimeout(() => { onDemoMode(); }, 1500);
-            };
-            
-            const isAnimating = isLaunching || launchingDemo || launchingMobile;
+
+            const isAnimating = isLaunching || launchingMobile;
 
             return (
                 <div className="relative w-full h-screen overflow-hidden text-white bg-slate-900 font-sans">
@@ -464,30 +470,6 @@
                                             {error && <div className="text-red-400 text-xs font-bold text-center pt-2">{error}</div>}
                                             <button type="submit" className="w-full btn-modern py-3 rounded-lg font-bold text-xs uppercase tracking-widest mt-4">Authenticate</button>
                                         </form>
-                                        
-                                        {/* Demo Version Divider */}
-                                        <div className="flex items-center gap-3 mt-6 mb-4">
-                                            <div className="flex-1 h-px bg-gradient-to-r from-transparent via-slate-600 to-transparent"></div>
-                                            <span className="text-[10px] text-slate-500 uppercase tracking-widest">or</span>
-                                            <div className="flex-1 h-px bg-gradient-to-r from-transparent via-slate-600 to-transparent"></div>
-                                        </div>
-                                        
-                                        {/* Demo Version Button */}
-                                        <button 
-                                            type="button"
-                                            onClick={handleDemoClick}
-                                            className="w-full py-3 rounded-lg font-bold text-xs uppercase tracking-widest transition-all
-                                                bg-gradient-to-r from-purple-500/20 to-indigo-500/20 
-                                                border border-purple-400/30 text-purple-300
-                                                hover:from-purple-500/30 hover:to-indigo-500/30 
-                                                hover:border-purple-400/50 hover:text-purple-200
-                                                hover:shadow-[0_0_20px_rgba(168,85,247,0.3)]
-                                                flex items-center justify-center gap-2"
-                                        >
-                                            <span>🎓</span>
-                                            <span>Demo Version</span>
-                                            <span className="text-[9px] opacity-70">(with guides)</span>
-                                        </button>
                                     </>
                                 )}
                             </div>
@@ -587,6 +569,8 @@
             'Philadelphia, PA': { lat: 39.95, lon: -75.17 },
             'Washington D.C., DC': { lat: 38.91, lon: -77.04 }
         };
+        // Export for external components
+        window.STAP_MARKET_COORDINATES = MARKET_COORDINATES;
 
         const fetchLiveWeather = async (market) => {
             // Find coordinates for market (fuzzy match)
@@ -656,6 +640,8 @@
                 ];
             }
         };
+        // Export for external components
+        window.STAP_fetchLiveWeather = fetchLiveWeather;
 
         // Legacy wrapper for backward compatibility
         const callGemini = async (prompt) => {
@@ -951,20 +937,37 @@
                 </span>
             );
         };
+        // Export for external components
+        window.STAP_Icon = Icon;
+        window.STAP_ProductionIcon = ProductionIcon;
 
         // ============================================
+        // IMPRESSIONS DASHBOARD (loaded from impressionsDashboard.js)
         // ============================================
-        // DEMO TIPS & GUIDE COMPONENTS
-        // These are loaded from external demo.js file when needed
-        // ═══════════════════════════════════════════════════════════════════════
-        
-        // Placeholder components - will be replaced by demo.js if loaded
-        const DemoTip = window.STAPDemo?.DemoTip || (() => null);
-        const FeatureBadge = window.STAPDemo?.FeatureBadge || (() => null);
-        const DemoWelcomeModal = window.STAPDemo?.DemoWelcomeModal || (() => null);
-        const DemoGuidePanel = window.STAPDemo?.DemoGuidePanel || (() => null);
-        const generateMockData = window.STAPDemo?.generateMockData || (() => ({ holds: [], installs: [] }));
-        const getDemoMaterials = window.STAPDemo?.getDemoMaterials || (() => []);
+        const ImpressionsDashboard = window.STAPImpressions?.ImpressionsDashboard || (() => {
+            return React.createElement('div', { className: 'p-8 text-center text-gray-500' },
+                'Loading Impressions Dashboard...',
+                React.createElement('div', { className: 'text-xs mt-2' }, 'If this persists, check that impressionsDashboard.js is loaded.')
+            );
+        });
+        const getProductImpressions = window.STAPImpressions?.getProductImpressions || ((type) => ({ weekly: 20000, multiplier: 1.0 }));
+        const estimateZipImpressions = window.STAPImpressions?.estimateZipImpressions || (() => ({}));
+        const LA_ZIP_DATA_EXT = window.STAPImpressions?.LA_ZIP_DATA || {};
+        const PRODUCT_FORMATS = window.STAPImpressions?.PRODUCT_FORMATS || {};
+
+        // ============================================
+        // DETAIL MODAL (loaded from detailModal.js)
+        // Will use internal fallback if external not loaded
+        // ============================================
+        // Note: DetailModal from external file uses window.STAPDetailModal
+        // The internal version is kept as fallback below in the code
+
+        // ============================================
+        // DIGEST MODAL (loaded from digestModal.js)
+        // Will use internal fallback if external not loaded
+        // ============================================
+        // Note: DigestModal from external file uses window.STAPDigestModal
+        // The internal version is kept as fallback below in the code
 
         // --- EMAIL DIGEST GENERATION LOGIC ---
         
@@ -1368,6 +1371,8 @@
             </table>
             </body></html>`;
         };
+        // Export for external components
+        window.STAP_generateDigestHtml = generateDigestHtml;
 
         // --- CONFIGURATION & HELPER FUNCTIONS ---
         
@@ -1380,7 +1385,7 @@
             'Pending Client Approval',
             'Pending Finance Approval',
             'Contracted',
-            'Proofs Approved', 
+            'Proofs Approved',
             'Working On It',
             'Proofs Out For Approval',
             'Artwork Received',
@@ -1392,6 +1397,8 @@
             'Lost Opportunity',
             'Canceled'
         ];
+        // Export for external components
+        window.STAP_ALL_STAGES = ALL_STAGES;
 
         const SPECIALTY_KEYWORDS = [
             'embellishment'
@@ -1415,6 +1422,8 @@
             { day: 'Sat', temp: 75, icon: 'Sun', status: 'Sunny', rain: 0 },
             { day: 'Sun', temp: 77, icon: 'Sun', status: 'Sunny', rain: 0 },
         ];
+        // Export for external components
+        window.STAP_WEATHER_FORECAST = WEATHER_FORECAST;
 
         const UPCOMING_HOLIDAYS = [
             { date: 'Dec 14', name: 'Hanukkah', type: 'Jewish' },
@@ -1512,6 +1521,8 @@
             if (stage?.includes('Pending')) return "bg-orange-50 text-orange-600 border-orange-200";
             return "bg-gray-100 text-gray-600 border-gray-200";
         };
+        // Export for external components
+        window.STAP_getStatusColor = getStatusColor;
 
         const findCol = (headers, keywords, exclude = []) => headers.find(h => {
             const low = h.toLowerCase();
@@ -11228,7 +11239,7 @@
         // ============================================
         // PERFORMANCE REPORT COMPONENT - City Compliance
         // ============================================
-        const PerformanceReport = ({ data: rawData, onBack, setView, showDemoTips = false }) => {
+        const PerformanceReport = ({ data: rawData, onBack, setView }) => {
             const data = Array.isArray(rawData) ? rawData : [];
             
             const [dateRange, setDateRange] = useState({ 
@@ -11412,38 +11423,6 @@
                             </button>
                         </div>
                     </div>
-
-                    {/* Demo Tips for Performance Report */}
-                    {showDemoTips && (
-                        <div className="px-6 py-3 bg-gradient-to-r from-emerald-50 to-teal-50 border-b print:hidden">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                <div className="bg-white/80 rounded-lg p-3 border border-emerald-200">
-                                    <div className="font-bold text-emerald-800 text-xs flex items-center gap-1 mb-1">
-                                        <span>🏛️</span> City Compliance
-                                    </div>
-                                    <div className="text-[10px] text-emerald-700">
-                                        This report proves installations to city officials. Shows completion rates, unit counts, and market breakdowns.
-                                    </div>
-                                </div>
-                                <div className="bg-white/80 rounded-lg p-3 border border-teal-200">
-                                    <div className="font-bold text-teal-800 text-xs flex items-center gap-1 mb-1">
-                                        <span>👁️</span> Impression Tracking
-                                    </div>
-                                    <div className="text-[10px] text-teal-700">
-                                        Impressions calculated by media type × quantity × flight days. Digital screens = 45K/day, Billboards = 35K/day.
-                                    </div>
-                                </div>
-                                <div className="bg-white/80 rounded-lg p-3 border border-cyan-200">
-                                    <div className="font-bold text-cyan-800 text-xs flex items-center gap-1 mb-1">
-                                        <span>🖨️</span> Export Options
-                                    </div>
-                                    <div className="text-[10px] text-cyan-700">
-                                        Print creates clean PDF for city. CSV includes impressions data for analysis in Excel.
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
 
                     {/* Filters */}
                     <div className="px-6 py-4 border-b bg-gray-50 print:hidden">
@@ -11752,7 +11731,7 @@
         // ============================================
         // MATERIAL RECEIVERS COMPONENT - Shipment Tracking
         // ============================================
-        const MaterialReceivers = ({ data: rawData, onBack, setView, showDemoTips = false, setIsLiveMode, materials, setMaterials, linkedSheet, setLinkedSheet }) => {
+        const MaterialReceivers = ({ data: rawData, onBack, setView, setIsLiveMode, materials, setMaterials, linkedSheet, setLinkedSheet }) => {
             const data = Array.isArray(rawData) ? rawData : [];
             
             // State
@@ -13160,171 +13139,8 @@ function doGet(e) {
                 );
             };
             
-            // Demo materials data
-            const demoMaterials = useMemo(() => [
-                {
-                    id: 'INV174705',
-                    receiptNumber: 'INV174705',
-                    dateReceived: new Date('2025-12-31T08:14:00'),
-                    description: 'GET TRUE VALUE-AL',
-                    posterCode: 'GET TRUE VALUE-AL',
-                    client: 'ACCIDENT LAWYERS',
-                    advertiser: 'Insider Accident Lawyers',
-                    printer: 'CIRCLE GRAPHICS-P',
-                    quantity: 11,
-                    boxes: 1,
-                    designs: 1,
-                    comments: 'RECEIVED 1 BOX; 1 DESIGN ON 12.30.25',
-                    status: 'Received',
-                    warehouseLocation: 'Bay 3 - Shelf A2',
-                    matchedCampaign: '251230001-0',
-                    posterImage: 'https://picsum.photos/seed/accident-lawyers/400/500',
-                    keywords: ['insider', 'accident', 'lawyers', 'get', 'true', 'value', '844', 'inside', 'accidentwin']
-                },
-                {
-                    id: 'INV174688',
-                    receiptNumber: 'INV174688',
-                    dateReceived: new Date('2025-12-30T14:22:00'),
-                    description: 'STRANGER THINGS S5-NF',
-                    posterCode: 'STRANGER-S5-NF',
-                    client: 'NETFLIX',
-                    advertiser: 'Netflix',
-                    printer: 'VISION GRAPHICS',
-                    quantity: 250,
-                    boxes: 12,
-                    designs: 3,
-                    comments: 'RECEIVED 12 BOXES; 3 DESIGNS - MAIN CAST, LOGO, TEASER',
-                    status: 'In Warehouse',
-                    warehouseLocation: 'Bay 1 - Pallets 1-3',
-                    matchedCampaign: '258905855-0',
-                    posterImage: 'https://picsum.photos/seed/netflix-stranger/400/500',
-                    keywords: ['netflix', 'stranger', 'things', 'season', '5', 'streaming']
-                },
-                {
-                    id: 'INV174690',
-                    receiptNumber: 'INV174690',
-                    dateReceived: new Date('2025-12-29T09:45:00'),
-                    description: 'AIR MAX 2025-NK',
-                    posterCode: 'AIRMAX-2025-NK',
-                    client: 'NIKE',
-                    advertiser: 'Nike',
-                    printer: 'COLORCRAFT INC',
-                    quantity: 75,
-                    boxes: 4,
-                    designs: 2,
-                    comments: 'RECEIVED 4 BOXES; 2 DESIGNS - PRODUCT SHOT, LIFESTYLE',
-                    status: 'Partially Deployed',
-                    warehouseLocation: 'Bay 2 - Shelf B1',
-                    matchedCampaign: '250929011-0',
-                    deployedQty: 45,
-                    posterImage: 'https://picsum.photos/seed/nike-airmax/400/500',
-                    keywords: ['nike', 'air', 'max', '2025', 'just', 'do', 'it']
-                },
-                {
-                    id: 'INV174685',
-                    receiptNumber: 'INV174685',
-                    dateReceived: new Date('2025-12-28T11:30:00'),
-                    description: 'iPHONE 16 PRO-APL',
-                    posterCode: 'IP16PRO-APL',
-                    client: 'APPLE',
-                    advertiser: 'Apple',
-                    printer: 'PREMIUM PRINT CO',
-                    quantity: 50,
-                    boxes: 3,
-                    designs: 1,
-                    comments: 'RECEIVED 3 BOXES; 1 DESIGN - PRODUCT HERO',
-                    status: 'Fully Deployed',
-                    warehouseLocation: 'N/A - All Deployed',
-                    matchedCampaign: '251115003-0',
-                    deployedQty: 50,
-                    posterImage: 'https://picsum.photos/seed/apple-iphone/400/500',
-                    keywords: ['apple', 'iphone', '16', 'pro']
-                },
-                {
-                    id: 'INV174680',
-                    receiptNumber: 'INV174680',
-                    dateReceived: new Date('2025-12-27T16:00:00'),
-                    description: 'DAVID YURMAN JEWELRY-DY',
-                    posterCode: 'JEWELRY-DY-2026',
-                    client: 'DAVID YURMAN',
-                    advertiser: 'David Yurman',
-                    printer: 'LUXE GRAPHICS',
-                    quantity: 25,
-                    boxes: 2,
-                    designs: 1,
-                    comments: 'RECEIVED 2 BOXES; 1 DESIGN - SPRING COLLECTION',
-                    status: 'Fully Deployed',
-                    warehouseLocation: 'N/A - All Deployed',
-                    matchedCampaign: '250922043-0',
-                    deployedQty: 25,
-                    posterImage: 'https://picsum.photos/seed/david-yurman/400/500',
-                    keywords: ['david', 'yurman', 'jewelry', 'collection']
-                },
-                {
-                    id: 'INV174675',
-                    receiptNumber: 'INV174675',
-                    dateReceived: new Date('2025-12-26T10:15:00'),
-                    description: 'GALAXY S25 ULTRA-SAM',
-                    posterCode: 'GS25U-SAM',
-                    client: 'SAMSUNG',
-                    advertiser: 'Samsung',
-                    printer: 'DIGITAL PRINT WORKS',
-                    quantity: 100,
-                    boxes: 6,
-                    designs: 2,
-                    comments: 'RECEIVED 6 BOXES; 2 DESIGNS - PRODUCT, LIFESTYLE',
-                    status: 'Partially Deployed',
-                    warehouseLocation: 'Bay 2 - Shelf C3',
-                    matchedCampaign: '250830022-0',
-                    deployedQty: 68,
-                    posterImage: 'https://picsum.photos/seed/samsung-galaxy/400/500',
-                    keywords: ['samsung', 'galaxy', 's25', 'ultra']
-                },
-                {
-                    id: 'INV174670',
-                    receiptNumber: 'INV174670',
-                    dateReceived: new Date('2025-12-24T08:00:00'),
-                    description: 'COCA-COLA SUMMER-CC',
-                    posterCode: 'SUMMER-CC-2025',
-                    client: 'COCA-COLA',
-                    advertiser: 'Coca-Cola',
-                    printer: 'CLASSIC PRINT',
-                    quantity: 40,
-                    boxes: 2,
-                    designs: 1,
-                    comments: 'RECEIVED 2 BOXES; 1 DESIGN - SUMMER REFRESH',
-                    status: 'In Warehouse',
-                    warehouseLocation: 'Bay 4 - Shelf D1',
-                    matchedCampaign: '251201044-0',
-                    posterImage: 'https://picsum.photos/seed/coca-cola/400/500',
-                    keywords: ['coca', 'cola', 'summer', 'refresh']
-                },
-                {
-                    id: 'INV174665',
-                    receiptNumber: 'INV174665',
-                    dateReceived: new Date('2025-12-23T13:45:00'),
-                    description: 'MCRIB RETURNS-MCD',
-                    posterCode: 'MCRIB-2025-MCD',
-                    client: 'MCDONALDS',
-                    advertiser: 'McDonalds',
-                    printer: 'GOLDEN ARCH PRINT',
-                    quantity: 35,
-                    boxes: 2,
-                    designs: 1,
-                    comments: 'RECEIVED 2 BOXES; 1 DESIGN - MCRIB PROMO',
-                    status: 'Partially Deployed',
-                    warehouseLocation: 'Bay 3 - Shelf B2',
-                    matchedCampaign: '251010033-0',
-                    deployedQty: 28,
-                    posterImage: 'https://picsum.photos/seed/mcdonalds/400/500',
-                    keywords: ['mcdonalds', 'mcrib', 'returns', '2025']
-                }
-            ], []);
-
-            // Determine if we should show demo/sample data (no real data uploaded)
             // Safety: materials might be undefined if prop not passed correctly
             const materialsArray = materials || [];
-            const hasNoData = materialsArray.length === 0;
             
             // Load saved material data from DetailModal (localStorage)
             const savedMaterialEntries = useMemo(() => {
@@ -13370,9 +13186,8 @@ function doGet(e) {
                 return [...materialsArray, ...savedMaterialEntries];
             }, [materialsArray, savedMaterialEntries]);
             
-            // Use demo data ONLY if no real data uploaded - but empty array if in production mode
-            // When showDemoTips is false (production), show empty state instead of demo data
-            const allMaterials = combinedMaterials.length === 0 ? (showDemoTips ? demoMaterials : []) : combinedMaterials;
+            // Use combined materials or empty array in production mode
+            const allMaterials = combinedMaterials;
 
             // Get unique clients
             const clients = useMemo(() => {
@@ -13697,7 +13512,7 @@ function doGet(e) {
             return (
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200">
                     {/* Header - Compact */}
-                    <div className={`px-4 py-2 border-b flex justify-between items-center ${(hasNoData && showDemoTips) ? 'bg-gradient-to-r from-amber-50 to-orange-50' : 'bg-gradient-to-r from-green-50 to-emerald-50'}`}>
+                    <div className="px-4 py-2 border-b flex justify-between items-center bg-gradient-to-r from-green-50 to-emerald-50">
                         <div className="flex items-center gap-2">
                             <button onClick={onBack} className="p-1 hover:bg-orange-200 rounded-full transition-colors" title="Back">
                                 <Icon name="ArrowLeft" size={16} className="text-orange-600" />
@@ -13706,11 +13521,7 @@ function doGet(e) {
                                 <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2">
                                     <Icon name="Package" size={16} className="text-orange-600" />
                                     Material Receivers
-                                    {(hasNoData && showDemoTips) ? (
-                                        <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-medium rounded-full flex items-center gap-1 border border-amber-300">
-                                            ⚠️ DEMO
-                                        </span>
-                                    ) : linkedSheet && (
+                                    {linkedSheet && (
                                         <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-[10px] font-medium rounded-full flex items-center gap-1">
                                             <Icon name="CheckCircle" size={10} /> Live
                                         </span>
@@ -13718,8 +13529,7 @@ function doGet(e) {
                                 </h3>
                                 <p className="text-xs text-gray-500">
                                     {allMaterials.length} receipts
-                                    {(hasNoData && showDemoTips) && <span className="ml-1 text-amber-600">• Sample data - upload CSV to see real data</span>}
-                                    {!hasNoData && linkedSheet && <span className="ml-1 text-green-600">• {linkedSheet.name}</span>}
+                                    {linkedSheet && <span className="ml-1 text-green-600">• {linkedSheet.name}</span>}
                                 </p>
                             </div>
                         </div>
@@ -14021,14 +13831,6 @@ function doGet(e) {
                                                     </a>
                                                 )}
                                             </div>
-                                            {/* Demo overlay - only show in demo mode when showing sample data */}
-                                            {(hasNoData && showDemoTips) && (
-                                                <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                                                    <span className="bg-amber-500 text-white px-2 py-1 rounded text-[10px] font-bold transform -rotate-12">
-                                                        SAMPLE IMAGE
-                                                    </span>
-                                                </div>
-                                            )}
                                             {/* Quantity badge */}
                                             <div className="absolute top-2 right-2 bg-orange-500 text-white px-2 py-1 rounded-lg text-sm font-bold">
                                                 📦 {material.quantity}
@@ -14625,7 +14427,7 @@ function doGet(e) {
             );
         };
 
-        const POPGallery = ({ data: rawData, onBack, setView, showDemoTips = false }) => {
+        const POPGallery = ({ data: rawData, onBack, setView }) => {
             // Safety: ensure data is always an array
             const data = Array.isArray(rawData) ? rawData : [];
             
@@ -14645,8 +14447,8 @@ function doGet(e) {
             const [localPhotos, setLocalPhotos] = useState([]); // Photos from local folder
             const [scanningFolder, setScanningFolder] = useState(false);
             const [folderError, setFolderError] = useState(null);
-            // Only show demo data if in demo mode (showDemoTips), otherwise start with empty/production mode
-            const [showDemoData, setShowDemoData] = useState(showDemoTips);
+            // Demo data toggle (disabled in production mode)
+            const [showDemoData, setShowDemoData] = useState(false);
             
             // Google Sheet POP Log State
             const [popSheetUrl, setPopSheetUrl] = useState(localStorage.getItem('stap_pop_sheet_url') || '');
@@ -15267,276 +15069,11 @@ function doGet(e) {
                 return lookup;
             }, [data]);
 
-            // Generate mock POP data from campaign data
-            // Structure: Market → Campaign ID → Date → Photos
+            // POP data - empty in production until real photos are linked
+            // Real photos come from localPhotos (linked folder) or popCampaigns (Google Sheet)
             const popData = useMemo(() => {
-                const entries = [];
-                
-                // Only generate demo placeholder photos when in demo mode (showDemoTips is true)
-                // In production mode, show empty state until real photos are linked
-                if (!showDemoTips) {
-                    return entries; // Return empty - no placeholder photos in production
-                }
-                
-                // ============================================
-                // COMPREHENSIVE DEMO DATA FOR PRESENTATION
-                // Showcases all features: progress, analysis, statuses
-                // ============================================
-                
-                const demoCampaigns = [
-                    // NETFLIX - Big campaign with issues (graffiti, missing photos)
-                    { 
-                        campaignNumber: '258905855-0', 
-                        market: 'Los Angeles - STAP', 
-                        advertiser: 'Netflix', 
-                        campaign: 'Stranger Things Season 5 Launch', 
-                        product: 'Transit Shelters-Domination', 
-                        quantity: 250, // Expected
-                        photoCount: 150, // Actual photos
-                        stage: 'Photos Taken', 
-                        owner: 'Emma Davis', 
-                        installDate: new Date('2025-01-25'),
-                        hasIssues: true // Will generate some graffiti flags
-                    },
-                    // APPLE - Complete and verified
-                    { 
-                        campaignNumber: '251115003-0', 
-                        market: 'Los Angeles - STAP', 
-                        advertiser: 'Apple', 
-                        campaign: 'iPhone 16 Pro Launch - LA', 
-                        product: 'Transit Shelter-Digital Panel-Spot', 
-                        quantity: 50,
-                        photoCount: 50, // Complete!
-                        stage: 'POP Completed', 
-                        owner: 'Sarah Kim', 
-                        installDate: new Date('2025-01-20'),
-                        verified: true
-                    },
-                    // NIKE - In progress, some low matches
-                    { 
-                        campaignNumber: '250929011-0', 
-                        market: 'Los Angeles - STAP', 
-                        advertiser: 'Nike', 
-                        campaign: 'Air Max 2025 Campaign', 
-                        product: 'Transit Shelters-Panel-Targeted', 
-                        quantity: 75,
-                        photoCount: 45,
-                        stage: 'Installed', 
-                        owner: 'Mike Johnson', 
-                        installDate: new Date('2025-01-08'),
-                        lowMatch: true
-                    },
-                    // DAVID YURMAN - Perfect small campaign
-                    { 
-                        campaignNumber: '250922043-0', 
-                        market: 'Los Angeles - STAP', 
-                        advertiser: 'David Yurman', 
-                        campaign: 'FY2026 Jewelry Collection', 
-                        product: 'Transit Shelters-Panel-Icon', 
-                        quantity: 25,
-                        photoCount: 25,
-                        stage: 'POP Completed', 
-                        owner: 'Tiffany Le', 
-                        installDate: new Date('2025-01-15'),
-                        verified: true
-                    },
-                    // LONGCHAMP - Medium campaign complete
-                    { 
-                        campaignNumber: '251021006-0', 
-                        market: 'Los Angeles - STAP', 
-                        advertiser: 'Longchamp', 
-                        campaign: 'Spring Collection 2025', 
-                        product: 'Transit Shelter-Digital Network', 
-                        quantity: 30,
-                        photoCount: 30,
-                        stage: 'POP Completed', 
-                        owner: 'Angela Chen', 
-                        installDate: new Date('2025-01-10'),
-                        verified: true
-                    },
-                    // SAMSUNG - In progress
-                    { 
-                        campaignNumber: '250830022-0', 
-                        market: 'Los Angeles - STAP', 
-                        advertiser: 'Samsung', 
-                        campaign: 'Galaxy S25 Ultra Launch', 
-                        product: 'Transit Shelters-Panel-Network', 
-                        quantity: 100,
-                        photoCount: 68,
-                        stage: 'Photos Taken', 
-                        owner: 'David Park', 
-                        installDate: new Date('2025-01-05')
-                    },
-                    // COCA-COLA - Miami market
-                    { 
-                        campaignNumber: '251201044-0', 
-                        market: 'Miami', 
-                        advertiser: 'Coca-Cola', 
-                        campaign: 'Summer Refresh 2025', 
-                        product: 'Transit Buses-Full Side', 
-                        quantity: 40,
-                        photoCount: 32,
-                        stage: 'Installed', 
-                        owner: 'Maria Garcia', 
-                        installDate: new Date('2025-01-18')
-                    },
-                    // TOYOTA - Miami
-                    { 
-                        campaignNumber: '251105018-0', 
-                        market: 'Miami', 
-                        advertiser: 'Toyota', 
-                        campaign: 'Camry Hybrid 2025', 
-                        product: 'Transit Buses-King', 
-                        quantity: 25,
-                        photoCount: 25,
-                        stage: 'POP Completed', 
-                        owner: 'Carlos Rodriguez', 
-                        installDate: new Date('2025-01-12'),
-                        verified: true
-                    },
-                    // AT&T - Dallas
-                    { 
-                        campaignNumber: '250918007-0', 
-                        market: 'Dallas, TX', 
-                        advertiser: 'AT&T', 
-                        campaign: 'Fiber Network Expansion', 
-                        product: 'Transit Buses-Kong', 
-                        quantity: 20,
-                        photoCount: 18,
-                        stage: 'Photos Taken', 
-                        owner: 'Jennifer Smith', 
-                        installDate: new Date('2025-01-22')
-                    },
-                    // McDONALDS - Chicago
-                    { 
-                        campaignNumber: '251010033-0', 
-                        market: 'Chicago, IL', 
-                        advertiser: 'McDonalds', 
-                        campaign: 'McRib Returns 2025', 
-                        product: 'Transit Buses-Full Back', 
-                        quantity: 35,
-                        photoCount: 28,
-                        stage: 'Installed', 
-                        owner: 'Tom Wilson', 
-                        installDate: new Date('2025-01-14'),
-                        hasIssues: true
-                    },
-                    // GUCCI - Luxury
-                    { 
-                        campaignNumber: '251225001-0', 
-                        market: 'Los Angeles - STAP', 
-                        advertiser: 'Gucci', 
-                        campaign: 'Cruise Collection 2025', 
-                        product: 'Transit Shelters-Panel-Icon', 
-                        quantity: 15,
-                        photoCount: 15,
-                        stage: 'POP Completed', 
-                        owner: 'Victoria Chen', 
-                        installDate: new Date('2025-01-28'),
-                        verified: true
-                    },
-                    // AMAZON - Prime Day
-                    { 
-                        campaignNumber: '251230055-0', 
-                        market: 'Los Angeles - STAP', 
-                        advertiser: 'Amazon', 
-                        campaign: 'Prime Day 2025 Preview', 
-                        product: 'Transit Shelter-Digital Panel-Spot', 
-                        quantity: 60,
-                        photoCount: 42,
-                        stage: 'Installed', 
-                        owner: 'James Lee', 
-                        installDate: new Date('2025-01-30')
-                    }
-                ];
-
-                // Generate photos for each demo campaign
-                demoCampaigns.forEach((demo) => {
-                    for (let i = 0; i < demo.photoCount; i++) {
-                        const installDate = new Date(demo.installDate);
-                        installDate.setDate(installDate.getDate() + Math.floor(i / 10)); // Spread over days
-                        
-                        entries.push({
-                            id: `${demo.campaignNumber}-${i}`,
-                            campaignNumber: demo.campaignNumber,
-                            market: demo.market,
-                            advertiser: demo.advertiser,
-                            campaign: demo.campaign,
-                            product: demo.product,
-                            quantity: demo.quantity,
-                            installDate: installDate,
-                            stage: demo.stage,
-                            owner: demo.owner,
-                            // Use different image seeds for variety
-                            photoUrl: `https://picsum.photos/seed/${demo.advertiser.toLowerCase()}-${i}/800/600`,
-                            thumbnailUrl: `https://picsum.photos/seed/${demo.advertiser.toLowerCase()}-${i}/400/300`,
-                            photoIndex: i + 1,
-                            totalPhotos: demo.photoCount,
-                            isDemo: true,
-                            // Flags for pre-populated analysis
-                            _hasIssues: demo.hasIssues && (i % 15 === 0), // Every 15th photo has issues
-                            _lowMatch: demo.lowMatch && (i % 8 === 0), // Every 8th photo
-                            _verified: demo.verified
-                        });
-                    }
-                });
-
-                // Also add any real installed campaigns from uploaded data
-                const installed = data.filter(d => 
-                    d.stage === 'Installed' || 
-                    d.stage === 'POP Completed' || 
-                    d.stage === 'Photos Taken' ||
-                    d.progress?.includes('/')
-                );
-                
-                // Load saved material data (includes photos links from DetailModal)
-                const savedMaterialData = JSON.parse(localStorage.getItem('stap_material_data') || '{}');
-
-                installed.forEach(campaign => {
-                    const startDate = campaign.dateObj || new Date(campaign.date);
-                    if (!startDate || isNaN(startDate.getTime())) return;
-                    
-                    // Check if we already have demo data for this campaign
-                    if (entries.some(e => e.campaignNumber === campaign.campaignNumber)) return;
-                    
-                    // Check for saved photos link
-                    const campaignKey = `${campaign.id}_${campaign.date}`;
-                    const savedData = savedMaterialData[campaignKey];
-                    const savedPhotosLink = savedData?.photosLink;
-
-                    const photoCount = Math.floor(Math.random() * 4) + 1;
-                    
-                    for (let i = 0; i < photoCount; i++) {
-                        const installDate = new Date(startDate);
-                        installDate.setDate(installDate.getDate() + Math.floor(Math.random() * 7));
-                        
-                        // Use saved photo link if available, otherwise generate placeholder
-                        const photoUrl = savedPhotosLink || `https://picsum.photos/seed/${campaign.campaignNumber}-${i}/800/600`;
-                        
-                        entries.push({
-                            id: `${campaign.campaignNumber}-${i}`,
-                            campaignNumber: campaign.campaignNumber,
-                            market: campaign.market,
-                            advertiser: campaign.advertiser,
-                            campaign: campaign.campaign,
-                            product: campaign.product,
-                            quantity: campaign.quantity || campaign.totalQty,
-                            installDate: installDate,
-                            stage: campaign.stage,
-                            owner: campaign.owner,
-                            photoUrl: photoUrl,
-                            thumbnailUrl: savedPhotosLink || `https://picsum.photos/seed/${campaign.campaignNumber}-${i}/400/300`,
-                            photoIndex: i + 1,
-                            totalPhotos: photoCount,
-                            isDemo: false,
-                            hasLinkedPhotos: !!savedPhotosLink,
-                            savedPhotosLink: savedPhotosLink || null
-                        });
-                    }
-                });
-
-                return entries;
-            }, [data, showDemoTips]);
+                return [];
+            }, [data]);
 
             // Count photos per campaign (for comparison with expected qty)
             const photoCountByCampaign = useMemo(() => {
@@ -16496,46 +16033,6 @@ function doGet(e) {
                         </div>
                     )}
 
-                    {/* Demo Tips for POP Gallery */}
-                    {showDemoTips && (
-                        <div className="px-6 py-3 bg-gradient-to-r from-indigo-50 to-purple-50 border-b">
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                                <div className="bg-white/80 rounded-lg p-3 border border-indigo-200">
-                                    <div className="font-bold text-indigo-800 text-xs flex items-center gap-1 mb-1">
-                                        <span>📚</span> Campaign Cards
-                                    </div>
-                                    <div className="text-[10px] text-indigo-700">
-                                        Groups photos by campaign. Shows progress bars (150/250 installed). Click to see all photos.
-                                    </div>
-                                </div>
-                                <div className="bg-white/80 rounded-lg p-3 border border-purple-200">
-                                    <div className="font-bold text-purple-800 text-xs flex items-center gap-1 mb-1">
-                                        <span>🔍</span> OCR Analysis
-                                    </div>
-                                    <div className="text-[10px] text-purple-700">
-                                        Scans photos for text. Verifies correct poster installed. Detects graffiti vandalism.
-                                    </div>
-                                </div>
-                                <div className="bg-white/80 rounded-lg p-3 border border-amber-200">
-                                    <div className="font-bold text-amber-800 text-xs flex items-center gap-1 mb-1">
-                                        <span>📁</span> Link Real Photos
-                                    </div>
-                                    <div className="text-[10px] text-amber-700">
-                                        Click "Link Real Photos" to connect your Google Drive folder. Real install photos load automatically.
-                                    </div>
-                                </div>
-                                <div className="bg-white/80 rounded-lg p-3 border border-green-200">
-                                    <div className="font-bold text-green-800 text-xs flex items-center gap-1 mb-1">
-                                        <span>📄</span> Performance Report
-                                    </div>
-                                    <div className="text-[10px] text-green-700">
-                                        Generate city compliance reports. Shows completion %, by market, by advertiser. Export or print.
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
                     {/* Filters */}
                     <div className="px-6 py-4 border-b bg-gray-50">
                         <div className="flex flex-wrap items-center gap-3">
@@ -17235,21 +16732,6 @@ function doGet(e) {
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        {/* Toggle Demo/Local */}
-                                        <div className="flex items-center gap-1 bg-white rounded-lg p-0.5 border border-gray-200">
-                                            <button 
-                                                onClick={() => setShowDemoData(false)}
-                                                className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${!showDemoData ? 'bg-green-500 text-white' : 'text-gray-500 hover:bg-gray-100'}`}
-                                            >
-                                                📁 Local ({localPhotos.length})
-                                            </button>
-                                            <button 
-                                                onClick={() => setShowDemoData(true)}
-                                                className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${showDemoData ? 'bg-indigo-500 text-white' : 'text-gray-500 hover:bg-gray-100'}`}
-                                            >
-                                                🎭 Demo
-                                            </button>
-                                        </div>
                                         <button 
                                             onClick={handleRefreshFolder}
                                             disabled={scanningFolder}
@@ -17258,8 +16740,8 @@ function doGet(e) {
                                             <Icon name="RefreshCw" size={14} className={scanningFolder ? 'animate-spin' : ''} />
                                             {scanningFolder ? 'Scanning...' : 'Refresh'}
                                         </button>
-                                        <button 
-                                            onClick={() => { setLinkedFolder(null); setLocalPhotos([]); setShowDemoData(true); }}
+                                        <button
+                                            onClick={() => { setLinkedFolder(null); setLocalPhotos([]); }}
                                             className="px-3 py-2 bg-white hover:bg-red-50 border border-gray-300 text-red-600 rounded-lg text-sm font-medium transition-colors"
                                         >
                                             Unlink
@@ -17363,7 +16845,7 @@ function doGet(e) {
             );
         };
 
-        const AuthorizedDashboard = ({ onLogout, isDemoMode = false }) => {
+        const AuthorizedDashboard = ({ onLogout }) => {
             const [view, setView] = useState('upload');
             const [files, setFiles] = useState({ holds: null, install: null });
             const [processing, setProcessing] = useState(false);
@@ -17643,14 +17125,10 @@ function doGet(e) {
             
             // SIDEBAR COLLAPSE STATE - for magical appear/vanish
             const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-            
-            // DEMO MODE - Show helpful tips and explanations
-            // When isLiveMode is true, all demo tips/guides are hidden (unless in demo mode)
-            // isDemoMode prop from App determines if we're in demo presentation mode
-            const [showDemoTips, setShowDemoTips] = useState(isDemoMode);
-            const [isLiveMode, setIsLiveMode] = useState(false); // Set to true when real data is uploaded
-            const [showWelcomeModal, setShowWelcomeModal] = useState(isDemoMode); // Show welcome on first demo entry
-            
+
+            // LIVE MODE - Set to true when real data is uploaded
+            const [isLiveMode, setIsLiveMode] = useState(false);
+
             // Material Receivers data (lifted to parent to persist across navigation)
             // Initialize from localStorage if available
             const [materialReceiverData, setMaterialReceiverData] = useState(() => {
@@ -18899,6 +18377,39 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                 categories.materialReadyFuture.sort((a,b) => a.dateObj - b.dateObj); // Sort by Start Date ascending
                 categories.onHoldCampaigns.sort((a,b) => a.dateObj - b.dateObj); // Sort by Start Date ascending
 
+                // 🐛 DEBUG: Log stage values and installed filter results
+                if (categories.all && categories.all.length > 0) {
+                    const stageValues = {};
+                    const installedItems = [];
+                    const startOfWeekDebug = new Date(today);
+                    startOfWeekDebug.setDate(today.getDate() - today.getDay());
+                    startOfWeekDebug.setHours(0,0,0,0);
+
+                    categories.all.forEach(item => {
+                        const stage = (item.stage || 'EMPTY').trim();
+                        stageValues[stage] = (stageValues[stage] || 0) + 1;
+
+                        if (stage.toLowerCase() === 'installed') {
+                            installedItems.push({
+                                name: item.name?.substring(0, 30),
+                                stage: item.stage,
+                                date: item.date,
+                                dateObj: item.dateObj,
+                                inThisWeek: item.dateObj >= startOfWeekDebug && item.dateObj <= today
+                            });
+                        }
+                    });
+
+                    console.log('🐛 DEBUG: Stage Values in Data:', stageValues);
+                    console.log('🐛 DEBUG: Items with "Installed" stage:', installedItems.length);
+                    console.log('🐛 DEBUG: Week range:', startOfWeekDebug.toDateString(), 'to', today.toDateString());
+                    if (installedItems.length > 0) {
+                        console.log('🐛 DEBUG: First 5 Installed items:', installedItems.slice(0, 5));
+                        console.log('🐛 DEBUG: Items in this week:', installedItems.filter(i => i.inThisWeek).length);
+                    }
+                    console.log('🐛 DEBUG: fullyInstalledThisWeek count:', categories.fullyInstalledThisWeek.length);
+                }
+
                 // 2. Master Tracking: Everything EXCEPT Lost Opportunities and Ghosts (unless included)
                 if (baseData.installs) {
                     categories.masterTracking = [...baseData.installs].filter(i => {
@@ -19463,56 +18974,12 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                         allData={processedData?.all || []}
                     />
                     
-                    <div 
+                    <div
                         className={`flex-1 flex flex-col transition-all duration-500 ease-in-out ${sidebarCollapsed ? 'main-content-collapsed' : 'main-content-expanded'}`}
                     >
-                        {/* Demo Mode Banner - Only visible in Demo Mode */}
-                        {isDemoMode && (
-                            <div className="bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 text-white px-4 py-2.5 flex items-center justify-between text-sm shadow-lg">
-                                <div className="flex items-center gap-4">
-                                    <div className="flex items-center gap-2 bg-white/20 px-3 py-1 rounded-full">
-                                        <span className="text-lg">🎓</span>
-                                        <span className="font-bold">Demo Mode</span>
-                                    </div>
-                                    <span className="text-purple-100 text-xs hidden sm:inline">
-                                        Explore features with sample data • Purple highlights show key areas
-                                    </span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <button 
-                                        onClick={() => setShowWelcomeModal(true)}
-                                        className="text-xs bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center gap-1.5"
-                                        title="Show welcome guide"
-                                    >
-                                        <Icon name="HelpCircle" size={14} />
-                                        <span className="hidden sm:inline">Help</span>
-                                    </button>
-                                    <button 
-                                        onClick={() => setShowDemoTips(!showDemoTips)}
-                                        className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center gap-1.5 ${
-                                            showDemoTips 
-                                                ? 'bg-amber-400 text-amber-900 hover:bg-amber-300' 
-                                                : 'bg-white/10 hover:bg-white/20'
-                                        }`}
-                                        title={showDemoTips ? 'Hide guide panel' : 'Show guide panel'}
-                                    >
-                                        <Icon name={showDemoTips ? 'Eye' : 'EyeOff'} size={14} />
-                                        <span className="hidden sm:inline">Guide {showDemoTips ? 'ON' : 'OFF'}</span>
-                                    </button>
-                                    <button 
-                                        onClick={onLogout}
-                                        className="text-xs bg-white/20 hover:bg-red-500 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center gap-1.5"
-                                    >
-                                        <Icon name="LogOut" size={14} />
-                                        Exit
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                        
                         <header className="bg-white border-b border-gray-200 px-8 py-4 flex flex-col sticky top-0 z-20 gap-3">
-                            {/* Simplified header for Availability and Risk Analysis views */}
-                            {(view === 'availability' || view === 'riskAnalysis') ? (
+                            {/* Simplified header for Availability, Risk Analysis, and Impressions views */}
+                            {(view === 'availability' || view === 'riskAnalysis' || view === 'impressions') ? (
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-3">
                                         <h1 className="text-lg font-bold text-gray-800 flex items-center gap-2">
@@ -19522,6 +18989,13 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                                                         <Icon name="BarChart3" size={18} className="text-teal-600" />
                                                     </span>
                                                     Availability Charting
+                                                </>
+                                            ) : view === 'impressions' ? (
+                                                <>
+                                                    <span className="p-1.5 rounded-lg border-2 border-purple-500 bg-purple-50">
+                                                        <Icon name="Eye" size={18} className="text-purple-600" />
+                                                    </span>
+                                                    Impressions Dashboard
                                                 </>
                                             ) : (
                                                 <>
@@ -19806,41 +19280,18 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                                 <InstallationRiskCommandCenter allData={processedData?.all || []} />
                             ) : view === 'availability' ? (
                                 <AvailabilityComponent allData={processedData.all} />
+                            ) : view === 'impressions' ? (
+                                <ImpressionsDashboard
+                                    campaignData={processedData?.all || []}
+                                    proposalName="OOH Impressions Analysis"
+                                    clientName=""
+                                    showExport={true}
+                                />
                             ) : (
                                 <>
                                     {/* --- DASHBOARD VIEW --- */}
                                     {view === 'dashboard' && filteredStats && (
                                         <div>
-                                            {/* Demo Tips for Dashboard - Only show in Demo Mode when NOT in live mode */}
-                                            {isDemoMode && showDemoTips && !isLiveMode && (
-                                                <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-3">
-                                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                                                        <div className="font-bold text-blue-800 text-sm flex items-center gap-2 mb-1">
-                                                            <span>📊</span> Dashboard Cards
-                                                        </div>
-                                                        <div className="text-xs text-blue-700">
-                                                            Click any stat card to filter the table. Colors indicate urgency: red = past due, amber = soon, green = on track.
-                                                        </div>
-                                                    </div>
-                                                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
-                                                        <div className="font-bold text-purple-800 text-sm flex items-center gap-2 mb-1">
-                                                            <span>✨</span> AI Insights
-                                                        </div>
-                                                        <div className="text-xs text-purple-700">
-                                                            Click "AI Pipeline Insights" for smart analysis of your data. Identifies risks and suggests actions.
-                                                        </div>
-                                                    </div>
-                                                    <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                                                        <div className="font-bold text-green-800 text-sm flex items-center gap-2 mb-1">
-                                                            <span>📧</span> Email Digest
-                                                        </div>
-                                                        <div className="text-xs text-green-700">
-                                                            Use sidebar "Email Digest" to send daily summaries to stakeholders. Fully customizable.
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            )}
-                                            
                                             <div className="flex justify-between items-center mb-4">
                                                 <h2 className="text-lg font-bold text-gray-800">Overview</h2>
                                                 <div className="flex items-center gap-3">
@@ -20049,11 +19500,10 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                                     ) : view === 'ghostBookings' ? (
                                         <GhostBookingsTable data={filteredData} onRowClick={setSelectedItem} onBack={() => setView('dashboard')} />
                                     ) : view === 'materialReceivers' ? (
-                                        <MaterialReceivers 
-                                            data={processedData.all} 
-                                            onBack={() => setView('dashboard')} 
-                                            setView={setView} 
-                                            showDemoTips={isDemoMode && showDemoTips && !isLiveMode} 
+                                        <MaterialReceivers
+                                            data={processedData.all}
+                                            onBack={() => setView('dashboard')}
+                                            setView={setView}
                                             setIsLiveMode={setIsLiveMode}
                                             materials={materialReceiverData}
                                             setMaterials={setMaterialReceiverData}
@@ -20061,9 +19511,9 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                                             setLinkedSheet={setMaterialReceiverLinkedSheet}
                                         />
                                     ) : view === 'popGallery' ? (
-                                        <POPGallery data={processedData.all} onBack={() => setView('dashboard')} setView={setView} showDemoTips={isDemoMode && showDemoTips && !isLiveMode} />
+                                        <POPGallery data={processedData.all} onBack={() => setView('dashboard')} setView={setView} />
                                     ) : view === 'performanceReport' ? (
-                                        <PerformanceReport data={processedData.all} onBack={() => setView('dashboard')} setView={setView} showDemoTips={isDemoMode && showDemoTips && !isLiveMode} />
+                                        <PerformanceReport data={processedData.all} onBack={() => setView('dashboard')} setView={setView} />
                                     ) : (
                                         <CampaignTable 
                                             data={filteredData} 
@@ -20100,56 +19550,6 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                             )}
                         </main>
                     </div>
-                    
-                    {/* Floating Demo/Live Mode Toggle - Bottom Right - Only visible in Demo Mode */}
-                    {isDemoMode && (
-                        <div className="fixed bottom-4 right-4 z-40 flex flex-col items-end gap-2">
-                            {!isLiveMode ? (
-                                <button 
-                                    onClick={() => setShowDemoTips(!showDemoTips)}
-                                    className={`px-3 py-2 rounded-full text-xs font-bold flex items-center gap-2 transition-all shadow-lg ${
-                                        showDemoTips 
-                                            ? 'bg-gradient-to-r from-purple-500 to-indigo-500 text-white' 
-                                            : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
-                                    }`}
-                                    title={showDemoTips ? 'Hide Demo Tips' : 'Show Demo Tips'}
-                                >
-                                    <span>🎓</span>
-                                    {showDemoTips ? 'Demo ON' : 'Demo OFF'}
-                                </button>
-                            ) : (
-                                <div className="flex items-center gap-2">
-                                    <span className="px-3 py-2 bg-green-500 text-white rounded-full text-xs font-bold flex items-center gap-2 shadow-lg">
-                                        <span>✓</span> Live
-                                    </span>
-                                </div>
-                            )}
-                        </div>
-                    )}
-                    
-                    {/* Welcome Modal - Shows on first demo entry */}
-                    {isDemoMode && (
-                        <DemoWelcomeModal 
-                            isOpen={showWelcomeModal}
-                            onClose={() => setShowWelcomeModal(false)}
-                            onStartTour={() => {
-                                // Optionally load demo data automatically
-                                if (view === 'upload') {
-                                    loadDemo();
-                                }
-                            }}
-                        />
-                    )}
-                    
-                    {/* Floating Demo Guide Panel - Only show in Demo Mode when NOT in live mode */}
-                    {isDemoMode && !isLiveMode && !showWelcomeModal && (
-                        <DemoGuidePanel 
-                            isOpen={showDemoTips} 
-                            onClose={() => setShowDemoTips(false)}
-                            currentView={view}
-                            onNavigate={(newView) => setView(newView)}
-                        />
-                    )}
                 </div>
             );
         };
@@ -20166,30 +19566,19 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                 }
             });
             
-            // Demo mode state - separate from regular auth
-            const [isDemoMode, setIsDemoMode] = useState(false);
-
             // Handle login - save to localStorage
             const handleLogin = (userData) => {
                 setUser(userData);
-                setIsDemoMode(false); // Regular login = no demo mode
                 try {
                     localStorage.setItem('opshub_user', JSON.stringify(userData));
                 } catch (e) {
                     console.warn('Could not save login to localStorage');
                 }
             };
-            
-            // Handle demo mode - no auth required
-            const handleDemoMode = () => {
-                setUser({ email: 'demo@vectormedia.com', isDemo: true });
-                setIsDemoMode(true);
-            };
 
             // Handle logout - clear localStorage
             const handleLogout = () => {
                 setUser(null);
-                setIsDemoMode(false);
                 try {
                     localStorage.removeItem('opshub_user');
                 } catch (e) {
@@ -20199,11 +19588,11 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
 
             // If not authenticated, show the Ghost Login
             if (!user) {
-                return <LoginScreen onLogin={handleLogin} onDemoMode={handleDemoMode} />;
+                return <LoginScreen onLogin={handleLogin} />;
             }
 
-            // If authenticated, show your original Dashboard
-            return <AuthorizedDashboard onLogout={handleLogout} isDemoMode={isDemoMode} />;
+            // If authenticated, show the Dashboard
+            return <AuthorizedDashboard onLogout={handleLogout} />;
         };
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
