@@ -17663,14 +17663,6 @@ function doGet(e) {
                 }
             };
 
-            const loadDemo = async () => {
-                setProcessing(true);
-                await new Promise(r => setTimeout(r, 1000)); // Fake loading for effect
-                const mockData = generateMockData();
-                runProcessingLogic(mockData.holds, mockData.installs);
-                setProcessing(false);
-            };
-
             const generatePipelineInsight = async (allCampaigns) => {
                 setIsInsightLoading(true);
 
@@ -18893,7 +18885,7 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                             
                             {/* Footer with demo link and dedication */}
                             <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
-                                <button onClick={loadDemo} className="text-xs font-medium text-gray-400 hover:text-gray-600 underline">Load Demo</button>
+                                <a href="/demo.html" className="text-xs font-medium text-gray-400 hover:text-gray-600 underline">Load Demo</a>
                                 <p className="text-xs text-gray-400">Made with 💙 for Charting</p>
                             </div>
                         </div>
