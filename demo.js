@@ -1,20 +1,197 @@
 // ═══════════════════════════════════════════════════════════════════════
 // STAP OPERATIONS PORTAL - DEMO MODE COMPONENTS
-// This file contains all demo/guide components and mock data generators
-// Load this file only when demo mode is needed
+// Interactive onboarding with action detection, progress tracking, and celebrations
 // ═══════════════════════════════════════════════════════════════════════
 
 (function(window) {
     'use strict';
-    
-    const { useState, useEffect, useMemo, useRef } = React;
-    
+
+    const { useState, useEffect, useMemo, useRef, useCallback } = React;
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // DEMO ACTIONS - Event system for detecting user actions
+    // ═══════════════════════════════════════════════════════════════════════
+    const DemoActions = {
+        listeners: {},
+        emit(action, data = {}) {
+            const specificCount = this.listeners[action]?.length || 0;
+            const wildcardCount = this.listeners['*']?.length || 0;
+            console.log(`🎯 Demo Action EMIT: "${action}"`, data, `| Listeners: ${specificCount} specific, ${wildcardCount} wildcard`);
+
+            if (this.listeners[action]) {
+                this.listeners[action].forEach(cb => cb(data));
+            }
+            if (this.listeners['*']) {
+                this.listeners['*'].forEach(cb => cb(action, data));
+            }
+        },
+        on(action, callback) {
+            if (!this.listeners[action]) this.listeners[action] = [];
+            this.listeners[action].push(callback);
+            console.log(`👂 DemoActions: Registered listener for "${action}" (total: ${this.listeners[action].length})`);
+            return () => {
+                this.listeners[action] = this.listeners[action].filter(cb => cb !== callback);
+                console.log(`🔌 DemoActions: Unregistered listener for "${action}" (remaining: ${this.listeners[action].length})`);
+            };
+        },
+        // Debug helper
+        debug() {
+            console.log('📊 DemoActions Listeners:', Object.keys(this.listeners).map(k => `${k}: ${this.listeners[k].length}`));
+        },
+        // Predefined actions
+        CLICK_LIVE_SYNC: 'click_live_sync',
+        UPLOAD_CSV: 'upload_csv',
+        CLICK_STATUS_CARD: 'click_status_card',
+        CLICK_FILTER: 'click_filter',
+        CLICK_ROW: 'click_row',
+        VIEW_CHANGE: 'view_change',
+        CLICK_CAMPAIGN_CARD: 'click_campaign_card',
+        RUN_OCR: 'run_ocr',
+        EXPORT_PDF: 'export_pdf',
+        CLICK_MATERIAL: 'click_material'
+    };
+
+    // Make it globally available
+    window.DemoActions = DemoActions;
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // CONFETTI CELEBRATION COMPONENT
+    // ═══════════════════════════════════════════════════════════════════════
+    const Confetti = ({ active, onComplete }) => {
+        const canvasRef = useRef(null);
+        const animationRef = useRef(null);
+        const isMountedRef = useRef(true);
+
+        useEffect(() => {
+            isMountedRef.current = true;
+            return () => {
+                isMountedRef.current = false;
+            };
+        }, []);
+
+        useEffect(() => {
+            if (!active) return;
+
+            let animationId = null;
+
+            try {
+                const canvas = canvasRef.current;
+                if (!canvas) {
+                    console.warn('Confetti: Canvas ref not available');
+                    if (onComplete) onComplete();
+                    return;
+                }
+
+                const ctx = canvas.getContext('2d');
+                if (!ctx) {
+                    console.warn('Confetti: Could not get 2D context');
+                    if (onComplete) onComplete();
+                    return;
+                }
+
+                // Set canvas size safely
+                const width = window.innerWidth || 800;
+                const height = window.innerHeight || 600;
+                canvas.width = width;
+                canvas.height = height;
+
+                const particles = [];
+                const colors = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6'];
+
+                // Create particles
+                for (let i = 0; i < 150; i++) {
+                    particles.push({
+                        x: Math.random() * width,
+                        y: Math.random() * height - height,
+                        size: Math.random() * 8 + 4,
+                        color: colors[Math.floor(Math.random() * colors.length)],
+                        speedY: Math.random() * 3 + 2,
+                        speedX: Math.random() * 2 - 1,
+                        rotation: Math.random() * 360,
+                        rotationSpeed: Math.random() * 10 - 5,
+                        shape: Math.random() > 0.5 ? 'rect' : 'circle'
+                    });
+                }
+
+                let frame = 0;
+                const maxFrames = 180; // 3 seconds at 60fps
+
+                const animate = () => {
+                    // Safety check - stop if unmounted or canvas gone
+                    if (!isMountedRef.current || !canvasRef.current) {
+                        if (animationId) cancelAnimationFrame(animationId);
+                        return;
+                    }
+
+                    try {
+                        ctx.clearRect(0, 0, width, height);
+
+                        particles.forEach(p => {
+                            ctx.save();
+                            ctx.translate(p.x, p.y);
+                            ctx.rotate(p.rotation * Math.PI / 180);
+                            ctx.fillStyle = p.color;
+
+                            if (p.shape === 'rect') {
+                                ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+                            } else {
+                                ctx.beginPath();
+                                ctx.arc(0, 0, p.size / 2, 0, Math.PI * 2);
+                                ctx.fill();
+                            }
+
+                            ctx.restore();
+
+                            p.y += p.speedY;
+                            p.x += p.speedX;
+                            p.rotation += p.rotationSpeed;
+                            p.speedY += 0.1; // gravity
+                        });
+
+                        frame++;
+                        if (frame < maxFrames) {
+                            animationId = requestAnimationFrame(animate);
+                            animationRef.current = animationId;
+                        } else {
+                            if (isMountedRef.current && onComplete) {
+                                onComplete();
+                            }
+                        }
+                    } catch (animError) {
+                        console.warn('Confetti animation error:', animError);
+                        if (animationId) cancelAnimationFrame(animationId);
+                        if (isMountedRef.current && onComplete) onComplete();
+                    }
+                };
+
+                animate();
+
+            } catch (error) {
+                console.warn('Confetti initialization error:', error);
+                if (onComplete) onComplete();
+            }
+
+            return () => {
+                if (animationId) cancelAnimationFrame(animationId);
+                if (animationRef.current) cancelAnimationFrame(animationRef.current);
+            };
+        }, [active, onComplete]);
+
+        if (!active) return null;
+
+        return React.createElement('canvas', {
+            ref: canvasRef,
+            className: 'fixed inset-0 pointer-events-none z-[200]',
+            style: { mixBlendMode: 'multiply' }
+        });
+    };
+
     // ═══════════════════════════════════════════════════════════════════════
     // DEMO TIP COMPONENT - Reusable info boxes
     // ═══════════════════════════════════════════════════════════════════════
     const DemoTip = ({ title, children, type = 'info', showIf = true }) => {
         if (!showIf) return null;
-        
+
         const styles = {
             info: 'bg-blue-50 border-blue-300 text-blue-800',
             success: 'bg-green-50 border-green-300 text-green-800',
@@ -22,7 +199,7 @@
             feature: 'bg-purple-50 border-purple-300 text-purple-800',
             workflow: 'bg-indigo-50 border-indigo-300 text-indigo-800'
         };
-        
+
         const icons = {
             info: '💡',
             success: '✅',
@@ -30,28 +207,28 @@
             feature: '✨',
             workflow: '🔄'
         };
-        
-        return React.createElement('div', { 
-            className: `${styles[type]} border rounded-lg p-3 mb-3 text-sm animate-fade-in` 
+
+        return React.createElement('div', {
+            className: `${styles[type]} border rounded-lg p-3 mb-3 text-sm animate-fade-in`
         }, [
-            React.createElement('div', { 
+            React.createElement('div', {
                 key: 'header',
-                className: 'font-bold flex items-center gap-2 mb-1' 
+                className: 'font-bold flex items-center gap-2 mb-1'
             }, [
                 React.createElement('span', { key: 'icon' }, icons[type]),
                 React.createElement('span', { key: 'title' }, title),
-                React.createElement('span', { 
+                React.createElement('span', {
                     key: 'badge',
-                    className: 'ml-auto text-[10px] opacity-60 uppercase' 
+                    className: 'ml-auto text-[10px] opacity-60 uppercase'
                 }, 'Demo Tip')
             ]),
-            React.createElement('div', { 
+            React.createElement('div', {
                 key: 'content',
-                className: 'text-xs opacity-90' 
+                className: 'text-xs opacity-90'
             }, children)
         ]);
     };
-    
+
     // ═══════════════════════════════════════════════════════════════════════
     // FEATURE BADGE - Highlight new/important features
     // ═══════════════════════════════════════════════════════════════════════
@@ -214,206 +391,526 @@
     };
     
     // ═══════════════════════════════════════════════════════════════════════
-    // DEMO GUIDE PANEL - Floating contextual help
+    // DEMO GUIDE PANEL - Interactive onboarding with action detection
     // ═══════════════════════════════════════════════════════════════════════
     const DemoGuidePanel = ({ isOpen, onClose, currentView, onNavigate, Icon }) => {
+        // Debug: Log when component mounts/updates
+        useEffect(() => {
+            console.log('🎓 DemoGuidePanel mounted/updated:', { isOpen, currentView, Icon: !!Icon });
+        }, [isOpen, currentView]);
+
         const [isMinimized, setIsMinimized] = useState(false);
-        
-        if (!isOpen) return null;
-        
+        const [currentStep, setCurrentStep] = useState(0);
+        const [showConfetti, setShowConfetti] = useState(false);
+        const [celebrationMessage, setCelebrationMessage] = useState('');
+        const [completedSteps, setCompletedSteps] = useState(() => {
+            try {
+                return JSON.parse(localStorage.getItem('demo_completed_steps') || '{}');
+            } catch { return {}; }
+        });
+        const [recentlyCompleted, setRecentlyCompleted] = useState(null);
+
+        // Guide definitions with action triggers
         const guides = {
             upload: {
                 icon: '📤',
                 title: 'Data Upload Center',
                 color: 'from-blue-500 to-cyan-500',
                 steps: [
-                    { text: 'Click "Live Sync" for Google Sheets connection', highlight: true },
-                    { text: 'Or upload Master Export CSV manually' },
-                    { text: 'Smart column matching handles format variations' },
-                    { text: 'Dashboard auto-populates with campaign data' }
+                    { text: 'Click "Sync Live Data" button', action: 'click_live_sync', hint: 'Green button at the top' },
+                    { text: 'Or upload a CSV file', action: 'upload_csv', hint: 'Drag & drop or click upload area' },
+                    { text: 'Review the column mapping', action: 'auto', hint: 'System auto-maps columns' },
+                    { text: 'Go to Dashboard to see data', action: 'view_change', actionData: 'dashboard', hint: 'Click Dashboard in sidebar' }
                 ],
-                tips: [
-                    'Export from Salesforce as CSV for best results',
-                    'System detects ghost bookings automatically',
-                    'Data persists until you click "Reset Data"'
-                ]
+                nextView: 'dashboard',
+                celebration: '📤 Upload mastered!'
             },
             dashboard: {
                 icon: '📊',
                 title: 'Operations Dashboard',
                 color: 'from-indigo-500 to-purple-500',
                 steps: [
-                    { text: 'Status cards show campaign counts at a glance', highlight: true },
-                    { text: 'Click any card to filter the table below' },
-                    { text: 'Use header filters for date, market, product' },
-                    { text: 'Click a row to see details & send emails' }
+                    { text: 'Click a status card to filter', action: 'click_status_card', hint: 'Try "Delayed" or "In-Progress"' },
+                    { text: 'Use the date/market filters', action: 'click_filter', hint: 'Dropdowns above the table' },
+                    { text: 'Click a campaign row', action: 'click_row', hint: 'Opens detail modal' },
+                    { text: 'Explore the detail modal', action: 'auto', hint: 'View stages, send emails' }
                 ],
-                tips: [
-                    'Delayed = past start date, not yet installed',
-                    'In-Progress = has installs within 2 months',
-                    'Weather widget helps plan outdoor work'
-                ]
+                nextView: 'popGallery',
+                celebration: '📊 Dashboard pro!'
             },
             popGallery: {
                 icon: '📷',
                 title: 'POP Gallery',
                 color: 'from-pink-500 to-rose-500',
                 steps: [
-                    { text: 'Campaign cards show photo progress', highlight: true },
-                    { text: 'Click a card to expand all photos' },
-                    { text: 'Use Timeline view (calendar icon) to see photos by date', highlight: true },
-                    { text: 'AI Analysis verifies correct advertiser' },
-                    { text: 'Flag issues like graffiti or wrong poster' }
+                    { text: 'Click a campaign card', action: 'click_campaign_card', hint: 'Expands photo grid' },
+                    { text: 'Try the Timeline view', action: 'auto', hint: 'Calendar icon in header' },
+                    { text: 'Run AI/OCR on a photo', action: 'run_ocr', hint: 'Analyzes poster text' },
+                    { text: 'Flag an issue', action: 'auto', hint: 'Report graffiti or errors' }
                 ],
-                tips: [
-                    'Timeline view shows installation dates per campaign',
-                    'Link local folder for real install photos',
-                    'OCR extracts text from poster images',
-                    'Export to Performance Report for compliance'
-                ]
+                nextView: 'availability',
+                celebration: '📷 Photo expert!'
             },
-            availabilityCharting: {
+            availability: {
                 icon: '📈',
                 title: 'Availability Charting',
                 color: 'from-teal-500 to-cyan-500',
                 steps: [
-                    { text: 'View inventory utilization across date ranges', highlight: true },
-                    { text: 'Filter by Market, Media Type, and Date Range' },
-                    { text: 'Toggle Timeline, Map, or Geopath views' },
-                    { text: 'Export PDF with customizable sections', highlight: true }
+                    { text: 'Adjust the date range', action: 'click_filter', hint: 'Use date pickers' },
+                    { text: 'Switch between views', action: 'auto', hint: 'Timeline, Map, Geopath tabs' },
+                    { text: 'Export to PDF', action: 'export_pdf', hint: 'Customizable sections' },
+                    { text: 'Review utilization stats', action: 'auto', hint: 'Check the metrics cards' }
                 ],
-                tips: [
-                    'PDF Export lets you choose which sections to include',
-                    'Map view shows utilization by geography',
-                    'Geopath tab shows impression estimates',
-                    'Use date quick-picks for common ranges'
-                ]
+                nextView: 'materialReceivers',
+                celebration: '📈 Analytics wizard!'
             },
             materialReceivers: {
                 icon: '📦',
                 title: 'Material Receivers',
                 color: 'from-orange-500 to-amber-500',
                 steps: [
-                    { text: 'Track materials from receipt to deployment', highlight: true },
-                    { text: 'Status: Received → Warehouse → Deployed' },
-                    { text: 'Click receipt for poster preview & details' },
-                    { text: 'Auto-match receipts to campaigns' }
+                    { text: 'View the materials table', action: 'auto', hint: 'See all received materials' },
+                    { text: 'Click a material row', action: 'click_material', hint: 'View poster preview' },
+                    { text: 'Check deployment status', action: 'auto', hint: 'Track installation progress' },
+                    { text: 'Link to Google Sheet', action: 'click_live_sync', hint: 'Settings → Sheet URL' }
                 ],
-                tips: [
-                    'Link Google Sheet for real-time data',
-                    'Keywords help verify POP photos',
-                    'Deployment % tracks installation progress'
-                ]
+                nextView: 'performanceReport',
+                celebration: '📦 Materials tracked!'
             },
             performanceReport: {
                 icon: '📄',
                 title: 'Performance Report',
                 color: 'from-emerald-500 to-teal-500',
                 steps: [
-                    { text: 'Generate city compliance documentation', highlight: true },
-                    { text: 'Filter by date range and market' },
-                    { text: 'By-market breakdown shows completion rates' },
-                    { text: 'Export to CSV or Print for submission' }
+                    { text: 'Set the date range', action: 'click_filter', hint: 'Filter report period' },
+                    { text: 'Review completion rates', action: 'auto', hint: 'Color-coded by market' },
+                    { text: 'Export the report', action: 'export_pdf', hint: 'CSV or Print options' },
+                    { text: 'Check compliance status', action: 'auto', hint: 'Green = 90%+, Red = <50%' }
                 ],
-                tips: [
-                    'Green ≥90%, Yellow 50-89%, Red <50%',
-                    'Print layout optimized for official forms',
-                    'Include photos as installation evidence'
-                ]
+                nextView: 'upload',
+                celebration: '📄 Report master!'
             }
         };
-        
+
         const guide = guides[currentView] || guides.dashboard;
-        
+        const totalSteps = guide.steps.length;
+        const step = guide.steps[currentStep];
+
+        // Calculate total progress across all views
+        const totalAllSteps = Object.values(guides).reduce((sum, g) => sum + g.steps.length, 0);
+        const completedAllSteps = Object.keys(completedSteps).filter(k => completedSteps[k]).length;
+        const overallProgress = Math.round((completedAllSteps / totalAllSteps) * 100);
+
+        // Reset step when view changes
+        useEffect(() => {
+            setCurrentStep(0);
+        }, [currentView]);
+
+        // Listen for demo actions
+        useEffect(() => {
+            if (!isOpen) {
+                console.log('🔇 DemoGuidePanel: Not listening (panel closed)');
+                return;
+            }
+
+            const currentStepData = guide.steps[currentStep];
+            console.log('👂 DemoGuidePanel: Listening for actions', {
+                currentView,
+                currentStep,
+                expectedAction: currentStepData?.action,
+                expectedData: currentStepData?.actionData
+            });
+
+            const unsubscribe = DemoActions.on('*', (action, data) => {
+                const stepData = guide.steps[currentStep];
+                if (!stepData) {
+                    console.log('⚠️ No step data for current step:', currentStep);
+                    return;
+                }
+
+                console.log('📥 Received action:', action, data, '| Expected:', stepData.action, stepData.actionData);
+
+                // Check if action matches current step
+                let matches = false;
+                if (stepData.action === action) {
+                    if (stepData.actionData) {
+                        matches = data?.view === stepData.actionData || data?.type === stepData.actionData;
+                    } else {
+                        matches = true;
+                    }
+                }
+
+                console.log('🎯 Action match:', matches);
+
+                if (matches) {
+                    console.log('✅ Step completed! Marking and advancing...');
+                    markStepComplete(currentView, currentStep);
+                    // Auto-advance after a short delay
+                    setTimeout(() => {
+                        if (currentStep < totalSteps - 1) {
+                            setCurrentStep(prev => prev + 1);
+                        }
+                    }, 500);
+                }
+            });
+
+            return () => {
+                console.log('🔌 DemoGuidePanel: Unsubscribing listener');
+                unsubscribe();
+            };
+        }, [isOpen, currentView, currentStep, totalSteps]);
+
+        // Save completed steps to localStorage
+        const markStepComplete = (view, stepIndex) => {
+            const key = `${view}_${stepIndex}`;
+            if (completedSteps[key]) return; // Already completed
+
+            const updated = { ...completedSteps, [key]: true };
+            setCompletedSteps(updated);
+            setRecentlyCompleted(key);
+
+            // Clear recently completed animation after delay
+            setTimeout(() => setRecentlyCompleted(null), 1500);
+
+            try {
+                localStorage.setItem('demo_completed_steps', JSON.stringify(updated));
+            } catch {}
+
+            // Check if section complete
+            const sectionComplete = guide.steps.every((_, i) => updated[`${view}_${i}`]);
+            if (sectionComplete) {
+                setCelebrationMessage(guide.celebration);
+                setShowConfetti(true);
+            }
+
+            // Check if all sections complete
+            const allComplete = Object.entries(guides).every(([v, g]) =>
+                g.steps.every((_, i) => updated[`${v}_${i}`])
+            );
+            if (allComplete) {
+                setCelebrationMessage('🎉 Tour Complete! You\'re a STAP expert!');
+                setShowConfetti(true);
+            }
+        };
+
+        const isStepCompleted = (view, stepIndex) => {
+            return completedSteps[`${view}_${stepIndex}`] === true;
+        };
+
+        const viewProgress = guide.steps.filter((_, i) => isStepCompleted(currentView, i)).length;
+
+        const goNext = () => {
+            if (step.action === 'auto') {
+                markStepComplete(currentView, currentStep);
+            }
+            if (currentStep < totalSteps - 1) {
+                setCurrentStep(currentStep + 1);
+            } else if (guide.nextView && onNavigate) {
+                onNavigate(guide.nextView);
+            }
+        };
+
+        const goPrev = () => {
+            if (currentStep > 0) {
+                setCurrentStep(currentStep - 1);
+            }
+        };
+
+        const skipStep = () => {
+            markStepComplete(currentView, currentStep);
+            goNext();
+        };
+
+        if (!isOpen) return null;
+
+        // Minimized state
         if (isMinimized) {
-            return React.createElement('button', {
-                onClick: () => setIsMinimized(false),
-                className: 'fixed bottom-24 right-4 w-14 h-14 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-full shadow-xl flex items-center justify-center z-50 hover:scale-110 transition-transform group animate-bounce',
-                title: 'Show Demo Guide'
-            }, [
-                React.createElement('span', { key: 'icon', className: 'text-2xl' }, '🎓'),
-                React.createElement('span', {
-                    key: 'badge',
-                    className: 'absolute -top-1 -right-1 w-5 h-5 bg-amber-400 rounded-full flex items-center justify-center text-[10px] font-bold text-amber-900 animate-pulse'
-                }, '?')
-            ]);
-        }
-        
-        return React.createElement('div', {
-            className: 'fixed bottom-24 right-4 w-80 bg-white rounded-2xl shadow-2xl border border-gray-200 z-50 overflow-hidden animate-scale-in'
-        }, [
-            // Header
-            React.createElement('div', {
-                key: 'header',
-                className: `bg-gradient-to-r ${guide.color} px-4 py-3`
-            },
-                React.createElement('div', { className: 'flex items-center justify-between' }, [
-                    React.createElement('div', { key: 'left', className: 'flex items-center gap-3' }, [
-                        React.createElement('span', { key: 'icon', className: 'text-2xl bg-white/20 rounded-lg p-1.5' }, guide.icon),
-                        React.createElement('div', { key: 'text' }, [
-                            React.createElement('h3', { key: 'title', className: 'text-white font-bold text-sm' }, guide.title),
-                            React.createElement('p', { key: 'sub', className: 'text-white/70 text-[10px]' }, 'Demo Guide')
-                        ])
+            return React.createElement('div', { key: 'minimized' }, [
+                React.createElement(Confetti, {
+                    key: 'confetti',
+                    active: showConfetti,
+                    onComplete: () => setShowConfetti(false)
+                }),
+                React.createElement('button', {
+                    key: 'btn',
+                    onClick: () => setIsMinimized(false),
+                    className: 'fixed bottom-24 right-4 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl shadow-xl flex items-center gap-3 px-4 py-3 z-50 hover:scale-105 transition-transform group'
+                }, [
+                    React.createElement('span', { key: 'icon', className: 'text-2xl' }, '🎓'),
+                    React.createElement('div', { key: 'info', className: 'text-left' }, [
+                        React.createElement('div', { key: 'title', className: 'text-white font-bold text-xs' }, 'Demo Guide'),
+                        React.createElement('div', { key: 'progress', className: 'text-white/70 text-[10px]' }, `${overallProgress}% complete`)
                     ]),
-                    React.createElement('div', { key: 'buttons', className: 'flex items-center gap-1' }, [
-                        React.createElement('button', {
-                            key: 'min',
-                            onClick: () => setIsMinimized(true),
-                            className: 'text-white/60 hover:text-white p-1.5 hover:bg-white/10 rounded transition-colors',
-                            title: 'Minimize'
-                        }, Icon && React.createElement(Icon, { name: 'Minus', size: 14 })),
-                        React.createElement('button', {
-                            key: 'close',
-                            onClick: onClose,
-                            className: 'text-white/60 hover:text-white p-1.5 hover:bg-white/10 rounded transition-colors',
-                            title: 'Close'
-                        }, Icon && React.createElement(Icon, { name: 'X', size: 14 }))
+                    React.createElement('div', {
+                        key: 'ring',
+                        className: 'w-10 h-10 rounded-full border-3 border-white/30 flex items-center justify-center relative'
+                    }, [
+                        React.createElement('svg', {
+                            key: 'svg',
+                            className: 'absolute inset-0 w-10 h-10 -rotate-90'
+                        },
+                            React.createElement('circle', {
+                                cx: 20, cy: 20, r: 16,
+                                fill: 'none',
+                                stroke: 'white',
+                                strokeWidth: 3,
+                                strokeDasharray: `${overallProgress} 100`,
+                                strokeLinecap: 'round'
+                            })
+                        ),
+                        React.createElement('span', {
+                            key: 'pct',
+                            className: 'text-white text-[10px] font-bold'
+                        }, `${overallProgress}%`)
                     ])
                 ])
-            ),
-            // Content
-            React.createElement('div', { key: 'content', className: 'p-4 max-h-72 overflow-auto' }, [
-                React.createElement('div', { key: 'steps', className: 'mb-4' }, [
+            ]);
+        }
+
+        // Full panel
+        return React.createElement('div', { key: 'panel' }, [
+            React.createElement(Confetti, {
+                key: 'confetti',
+                active: showConfetti,
+                onComplete: () => setShowConfetti(false)
+            }),
+            // Celebration toast
+            celebrationMessage && showConfetti && React.createElement('div', {
+                key: 'toast',
+                className: 'fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl shadow-2xl px-8 py-6 z-[201] animate-bounce'
+            }, [
+                React.createElement('div', { key: 'emoji', className: 'text-5xl text-center mb-2' }, '🎉'),
+                React.createElement('div', { key: 'msg', className: 'text-xl font-bold text-center text-gray-800' }, celebrationMessage)
+            ]),
+            React.createElement('div', {
+                key: 'main',
+                className: 'fixed bottom-24 right-4 w-[420px] bg-white rounded-2xl shadow-2xl border border-gray-200 z-50 overflow-hidden animate-scale-in'
+            }, [
+                // Overall progress bar
+                React.createElement('div', {
+                    key: 'progress-bar',
+                    className: 'h-1.5 bg-gray-100'
+                },
                     React.createElement('div', {
-                        key: 'label',
-                        className: 'text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1'
-                    }, [
-                        Icon && React.createElement(Icon, { key: 'icon', name: 'ListOrdered', size: 12 }),
-                        ' How it works'
-                    ]),
-                    React.createElement('div', { key: 'list', className: 'space-y-1.5' },
-                        guide.steps.map((step, i) =>
+                        className: 'h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 transition-all duration-500',
+                        style: { width: `${overallProgress}%` }
+                    })
+                ),
+                // Header
+                React.createElement('div', {
+                    key: 'header',
+                    className: `bg-gradient-to-r ${guide.color} px-4 py-3`
+                }, [
+                    React.createElement('div', { key: 'top', className: 'flex items-center justify-between mb-3' }, [
+                        React.createElement('div', { key: 'left', className: 'flex items-center gap-3' }, [
                             React.createElement('div', {
-                                key: i,
-                                className: `flex items-start gap-2 p-2 rounded-lg transition-colors ${step.highlight ? 'bg-indigo-50 border border-indigo-100' : 'hover:bg-gray-50'}`
+                                key: 'icon-wrap',
+                                className: 'relative'
                             }, [
-                                React.createElement('span', {
-                                    key: 'num',
-                                    className: `flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${step.highlight ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-600'}`
-                                }, i + 1),
-                                React.createElement('span', { key: 'text', className: 'text-xs text-gray-700' }, step.text)
+                                React.createElement('span', { key: 'icon', className: 'text-3xl bg-white/20 rounded-xl p-2 block' }, guide.icon),
+                                viewProgress === totalSteps && React.createElement('span', {
+                                    key: 'check',
+                                    className: 'absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center text-white text-xs'
+                                }, '✓')
+                            ]),
+                            React.createElement('div', { key: 'text' }, [
+                                React.createElement('h3', { key: 'title', className: 'text-white font-bold text-base' }, guide.title),
+                                React.createElement('p', { key: 'sub', className: 'text-white/80 text-xs' },
+                                    `${viewProgress}/${totalSteps} steps • ${overallProgress}% overall`
+                                )
                             ])
-                        )
+                        ]),
+                        React.createElement('div', { key: 'buttons', className: 'flex items-center gap-1' }, [
+                            React.createElement('button', {
+                                key: 'min',
+                                onClick: () => setIsMinimized(true),
+                                className: 'text-white/60 hover:text-white p-2 hover:bg-white/10 rounded-lg transition-colors',
+                                title: 'Minimize'
+                            }, Icon && React.createElement(Icon, { name: 'Minimize2', size: 16 })),
+                            React.createElement('button', {
+                                key: 'close',
+                                onClick: onClose,
+                                className: 'text-white/60 hover:text-white p-2 hover:bg-white/10 rounded-lg transition-colors',
+                                title: 'Close'
+                            }, Icon && React.createElement(Icon, { name: 'X', size: 16 }))
+                        ])
+                    ]),
+                    // Step indicators
+                    React.createElement('div', { key: 'steps-row', className: 'flex items-center gap-2' },
+                        guide.steps.map((s, i) => {
+                            const completed = isStepCompleted(currentView, i);
+                            const isCurrent = i === currentStep;
+                            const justCompleted = recentlyCompleted === `${currentView}_${i}`;
+
+                            return React.createElement('button', {
+                                key: i,
+                                onClick: () => setCurrentStep(i),
+                                className: `flex-1 h-10 rounded-lg transition-all duration-300 flex items-center justify-center gap-1 ${
+                                    isCurrent
+                                        ? 'bg-white text-indigo-600 shadow-lg scale-105'
+                                        : completed
+                                            ? 'bg-white/30 text-white'
+                                            : 'bg-white/10 text-white/60 hover:bg-white/20'
+                                } ${justCompleted ? 'animate-pulse ring-2 ring-green-400' : ''}`
+                            }, [
+                                completed
+                                    ? React.createElement('span', { key: 'check', className: 'text-green-500 font-bold' }, '✓')
+                                    : React.createElement('span', { key: 'num', className: 'font-bold text-sm' }, i + 1)
+                            ]);
+                        })
                     )
                 ]),
-                guide.tips && React.createElement('div', { key: 'tips' }, [
+                // Current step content
+                React.createElement('div', { key: 'content', className: 'p-5' }, [
+                    // Step card
+                    React.createElement('div', {
+                        key: 'step-card',
+                        className: `rounded-xl p-4 mb-4 transition-all duration-300 ${
+                            isStepCompleted(currentView, currentStep)
+                                ? 'bg-green-50 border-2 border-green-200'
+                                : 'bg-gradient-to-br from-indigo-50 to-purple-50 border-2 border-indigo-100'
+                        }`
+                    }, [
+                        // Status badge
+                        React.createElement('div', {
+                            key: 'status',
+                            className: 'flex items-center justify-between mb-3'
+                        }, [
+                            React.createElement('span', {
+                                key: 'label',
+                                className: `text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full ${
+                                    isStepCompleted(currentView, currentStep)
+                                        ? 'bg-green-200 text-green-700'
+                                        : step.action === 'auto'
+                                            ? 'bg-blue-200 text-blue-700'
+                                            : 'bg-amber-200 text-amber-700'
+                                }`
+                            }, isStepCompleted(currentView, currentStep)
+                                ? '✓ Completed'
+                                : step.action === 'auto'
+                                    ? '👁 Observe'
+                                    : '👆 Action Required'
+                            ),
+                            React.createElement('span', {
+                                key: 'step-num',
+                                className: 'text-xs text-gray-400'
+                            }, `Step ${currentStep + 1} of ${totalSteps}`)
+                        ]),
+                        // Step text
+                        React.createElement('h4', {
+                            key: 'text',
+                            className: `text-lg font-bold mb-2 ${
+                                isStepCompleted(currentView, currentStep) ? 'text-green-700' : 'text-gray-800'
+                            }`
+                        }, step.text),
+                        // Hint
+                        React.createElement('p', {
+                            key: 'hint',
+                            className: 'text-sm text-gray-500 flex items-center gap-2'
+                        }, [
+                            Icon && React.createElement(Icon, { key: 'icon', name: 'Info', size: 14, className: 'text-indigo-400' }),
+                            step.hint
+                        ]),
+                        // Completed checkmark animation
+                        isStepCompleted(currentView, currentStep) && React.createElement('div', {
+                            key: 'done',
+                            className: 'mt-3 flex items-center gap-2 text-green-600'
+                        }, [
+                            React.createElement('span', { key: 'icon', className: 'text-xl' }, '🎯'),
+                            React.createElement('span', { key: 'text', className: 'text-sm font-medium' }, 'Great job!')
+                        ])
+                    ]),
+                    // Navigation
+                    React.createElement('div', {
+                        key: 'nav',
+                        className: 'flex items-center justify-between'
+                    }, [
+                        React.createElement('button', {
+                            key: 'prev',
+                            onClick: goPrev,
+                            disabled: currentStep === 0,
+                            className: `flex items-center gap-1 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                                currentStep === 0
+                                    ? 'text-gray-300 cursor-not-allowed'
+                                    : 'text-gray-600 hover:bg-gray-100 border border-gray-200'
+                            }`
+                        }, [
+                            Icon && React.createElement(Icon, { key: 'icon', name: 'ChevronLeft', size: 18 }),
+                            'Back'
+                        ]),
+                        // Skip button (for action steps not yet completed)
+                        !isStepCompleted(currentView, currentStep) && step.action !== 'auto' && React.createElement('button', {
+                            key: 'skip',
+                            onClick: skipStep,
+                            className: 'text-xs text-gray-400 hover:text-gray-600 underline'
+                        }, 'Skip this step'),
+                        React.createElement('button', {
+                            key: 'next',
+                            onClick: goNext,
+                            className: `flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg hover:shadow-xl ${
+                                currentStep === totalSteps - 1
+                                    ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:from-green-600 hover:to-emerald-600'
+                                    : 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:from-indigo-700 hover:to-purple-700'
+                            }`
+                        }, [
+                            currentStep === totalSteps - 1 ? 'Next Section' : (step.action === 'auto' ? 'Got it!' : 'Next'),
+                            Icon && React.createElement(Icon, { key: 'icon', name: currentStep === totalSteps - 1 ? 'ArrowRight' : 'ChevronRight', size: 18 })
+                        ])
+                    ])
+                ]),
+                // Section navigation
+                React.createElement('div', {
+                    key: 'footer',
+                    className: 'px-5 py-4 bg-gray-50 border-t border-gray-100'
+                }, [
                     React.createElement('div', {
                         key: 'label',
-                        className: 'text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1'
+                        className: 'text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2'
                     }, [
-                        Icon && React.createElement(Icon, { key: 'icon', name: 'Lightbulb', size: 12 }),
-                        ' Pro Tips'
+                        Icon && React.createElement(Icon, { key: 'icon', name: 'Map', size: 12 }),
+                        'Tour Sections'
                     ]),
-                    React.createElement('div', { key: 'list', className: 'space-y-1' },
-                        guide.tips.map((tip, i) =>
-                            React.createElement('div', {
-                                key: i,
-                                className: 'text-[11px] text-gray-600 flex items-start gap-2'
+                    React.createElement('div', {
+                        key: 'sections',
+                        className: 'grid grid-cols-3 gap-2'
+                    },
+                        Object.entries(guides).map(([key, g]) => {
+                            const sectionSteps = g.steps.length;
+                            const sectionCompleted = g.steps.filter((_, i) => isStepCompleted(key, i)).length;
+                            const isComplete = sectionCompleted === sectionSteps;
+                            const isCurrent = key === currentView;
+
+                            return React.createElement('button', {
+                                key: key,
+                                onClick: () => onNavigate && onNavigate(key),
+                                className: `p-2 rounded-xl text-left transition-all ${
+                                    isCurrent
+                                        ? 'bg-indigo-100 border-2 border-indigo-300'
+                                        : isComplete
+                                            ? 'bg-green-50 border border-green-200'
+                                            : 'bg-white border border-gray-200 hover:border-gray-300'
+                                }`
                             }, [
-                                React.createElement('span', { key: 'dot', className: 'text-amber-500' }, '•'),
-                                tip
-                            ])
-                        )
+                                React.createElement('div', {
+                                    key: 'top',
+                                    className: 'flex items-center justify-between mb-1'
+                                }, [
+                                    React.createElement('span', { key: 'icon', className: 'text-lg' }, g.icon),
+                                    isComplete && React.createElement('span', {
+                                        key: 'check',
+                                        className: 'text-green-500 text-xs'
+                                    }, '✓')
+                                ]),
+                                React.createElement('div', {
+                                    key: 'title',
+                                    className: `text-[10px] font-bold truncate ${isCurrent ? 'text-indigo-700' : 'text-gray-700'}`
+                                }, g.title.split(' ')[0]),
+                                React.createElement('div', {
+                                    key: 'progress',
+                                    className: 'text-[9px] text-gray-400'
+                                }, `${sectionCompleted}/${sectionSteps}`)
+                            ]);
+                        })
                     )
                 ])
             ])
@@ -457,59 +954,161 @@
     // ═══════════════════════════════════════════════════════════════════════
     const getDemoMaterials = () => [
         {
-            id: 'demo-1',
-            receiptNumber: 'RCV-2024-001',
-            dateReceived: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
-            description: 'Netflix Campaign Posters',
-            posterCode: 'NFLX-2024-Q1',
-            client: 'Netflix',
-            advertiser: 'Netflix',
-            printer: 'ABC Print Co',
-            quantity: 150,
-            boxes: 3,
-            designs: 2,
-            status: 'Deployed',
-            warehouseLocation: 'Bay A-12',
-            campaignId: '251230001-0',
+            id: 'INV174705',
+            receiptNumber: 'INV174705',
+            dateReceived: new Date('2025-12-31T08:14:00'),
+            description: 'GET TRUE VALUE-AL',
+            posterCode: 'GET TRUE VALUE-AL',
+            client: 'ACCIDENT LAWYERS',
+            advertiser: 'Insider Accident Lawyers',
+            printer: 'CIRCLE GRAPHICS-P',
+            quantity: 11,
+            boxes: 1,
+            designs: 1,
+            comments: 'RECEIVED 1 BOX; 1 DESIGN ON 12.30.25',
+            status: 'Received',
+            warehouseLocation: 'Bay 3 - Shelf A2',
             matchedCampaign: '251230001-0',
-            productionSource: 'in-house',
-            comments: 'Delivered on time, good quality'
+            posterImage: 'https://picsum.photos/seed/accident-lawyers/400/500',
+            keywords: ['insider', 'accident', 'lawyers', 'get', 'true', 'value', '844', 'inside', 'accidentwin']
         },
         {
-            id: 'demo-2',
-            receiptNumber: 'RCV-2024-002',
-            dateReceived: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
-            description: 'Disney+ Streaming Launch',
-            posterCode: 'DIS-STRM-001',
-            client: 'Disney',
-            advertiser: 'Disney',
-            printer: 'XYZ Graphics',
-            quantity: 200,
-            boxes: 4,
+            id: 'INV174688',
+            receiptNumber: 'INV174688',
+            dateReceived: new Date('2025-12-30T14:22:00'),
+            description: 'STRANGER THINGS S5-NF',
+            posterCode: 'STRANGER-S5-NF',
+            client: 'NETFLIX',
+            advertiser: 'Netflix',
+            printer: 'VISION GRAPHICS',
+            quantity: 250,
+            boxes: 12,
             designs: 3,
-            status: 'Material Ready for Install',
-            warehouseLocation: 'Bay B-05',
-            campaignId: '258905855-0',
+            comments: 'RECEIVED 12 BOXES; 3 DESIGNS - MAIN CAST, LOGO, TEASER',
+            status: 'In Warehouse',
+            warehouseLocation: 'Bay 1 - Pallets 1-3',
             matchedCampaign: '258905855-0',
-            productionSource: 'in-house',
-            comments: ''
+            posterImage: 'https://picsum.photos/seed/netflix-stranger/400/500',
+            keywords: ['netflix', 'stranger', 'things', 'season', '5', 'streaming']
         },
         {
-            id: 'demo-3',
-            receiptNumber: 'RCV-2024-003',
-            dateReceived: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
-            description: 'Apple iPhone 16 Pro',
-            posterCode: 'APPL-IP16-PRO',
-            client: 'Apple',
+            id: 'INV174690',
+            receiptNumber: 'INV174690',
+            dateReceived: new Date('2025-12-29T09:45:00'),
+            description: 'AIR MAX 2025-NK',
+            posterCode: 'AIRMAX-2025-NK',
+            client: 'NIKE',
+            advertiser: 'Nike',
+            printer: 'COLORCRAFT INC',
+            quantity: 75,
+            boxes: 4,
+            designs: 2,
+            comments: 'RECEIVED 4 BOXES; 2 DESIGNS - PRODUCT SHOT, LIFESTYLE',
+            status: 'Partially Deployed',
+            warehouseLocation: 'Bay 2 - Shelf B1',
+            matchedCampaign: '250929011-0',
+            deployedQty: 45,
+            posterImage: 'https://picsum.photos/seed/nike-airmax/400/500',
+            keywords: ['nike', 'air', 'max', '2025', 'just', 'do', 'it']
+        },
+        {
+            id: 'INV174685',
+            receiptNumber: 'INV174685',
+            dateReceived: new Date('2025-12-28T11:30:00'),
+            description: 'iPHONE 16 PRO-APL',
+            posterCode: 'IP16PRO-APL',
+            client: 'APPLE',
             advertiser: 'Apple',
-            printer: 'Premium Print',
-            quantity: 100,
+            printer: 'PREMIUM PRINT CO',
+            quantity: 50,
+            boxes: 3,
+            designs: 1,
+            comments: 'RECEIVED 3 BOXES; 1 DESIGN - PRODUCT HERO',
+            status: 'Fully Deployed',
+            warehouseLocation: 'N/A - All Deployed',
+            matchedCampaign: '251115003-0',
+            deployedQty: 50,
+            posterImage: 'https://picsum.photos/seed/apple-iphone/400/500',
+            keywords: ['apple', 'iphone', '16', 'pro']
+        },
+        {
+            id: 'INV174680',
+            receiptNumber: 'INV174680',
+            dateReceived: new Date('2025-12-27T16:00:00'),
+            description: 'DAVID YURMAN JEWELRY-DY',
+            posterCode: 'JEWELRY-DY-2026',
+            client: 'DAVID YURMAN',
+            advertiser: 'David Yurman',
+            printer: 'LUXE GRAPHICS',
+            quantity: 25,
             boxes: 2,
             designs: 1,
-            status: 'Received at Warehouse',
-            warehouseLocation: 'Bay C-01',
-            productionSource: 'client',
-            comments: 'Client-produced materials'
+            comments: 'RECEIVED 2 BOXES; 1 DESIGN - SPRING COLLECTION',
+            status: 'Fully Deployed',
+            warehouseLocation: 'N/A - All Deployed',
+            matchedCampaign: '250922043-0',
+            deployedQty: 25,
+            posterImage: 'https://picsum.photos/seed/david-yurman/400/500',
+            keywords: ['david', 'yurman', 'jewelry', 'collection']
+        },
+        {
+            id: 'INV174675',
+            receiptNumber: 'INV174675',
+            dateReceived: new Date('2025-12-26T10:15:00'),
+            description: 'GALAXY S25 ULTRA-SAM',
+            posterCode: 'GS25U-SAM',
+            client: 'SAMSUNG',
+            advertiser: 'Samsung',
+            printer: 'DIGITAL PRINT WORKS',
+            quantity: 100,
+            boxes: 6,
+            designs: 2,
+            comments: 'RECEIVED 6 BOXES; 2 DESIGNS - PRODUCT, LIFESTYLE',
+            status: 'Partially Deployed',
+            warehouseLocation: 'Bay 2 - Shelf C3',
+            matchedCampaign: '250830022-0',
+            deployedQty: 68,
+            posterImage: 'https://picsum.photos/seed/samsung-galaxy/400/500',
+            keywords: ['samsung', 'galaxy', 's25', 'ultra']
+        },
+        {
+            id: 'INV174670',
+            receiptNumber: 'INV174670',
+            dateReceived: new Date('2025-12-24T08:00:00'),
+            description: 'COCA-COLA SUMMER-CC',
+            posterCode: 'SUMMER-CC-2025',
+            client: 'COCA-COLA',
+            advertiser: 'Coca-Cola',
+            printer: 'CLASSIC PRINT',
+            quantity: 40,
+            boxes: 2,
+            designs: 1,
+            comments: 'RECEIVED 2 BOXES; 1 DESIGN - SUMMER REFRESH',
+            status: 'In Warehouse',
+            warehouseLocation: 'Bay 4 - Shelf D1',
+            matchedCampaign: '251201044-0',
+            posterImage: 'https://picsum.photos/seed/coca-cola/400/500',
+            keywords: ['coca', 'cola', 'summer', 'refresh']
+        },
+        {
+            id: 'INV174665',
+            receiptNumber: 'INV174665',
+            dateReceived: new Date('2025-12-23T13:45:00'),
+            description: 'MCRIB RETURNS-MCD',
+            posterCode: 'MCRIB-2025-MCD',
+            client: 'MCDONALDS',
+            advertiser: 'McDonalds',
+            printer: 'GOLDEN ARCH PRINT',
+            quantity: 35,
+            boxes: 2,
+            designs: 1,
+            comments: 'RECEIVED 2 BOXES; 1 DESIGN - MCRIB PROMO',
+            status: 'Partially Deployed',
+            warehouseLocation: 'Bay 3 - Shelf B2',
+            matchedCampaign: '251010033-0',
+            deployedQty: 28,
+            posterImage: 'https://picsum.photos/seed/mcdonalds/400/500',
+            keywords: ['mcdonalds', 'mcrib', 'returns', '2025']
         }
     ];
     
@@ -521,8 +1120,10 @@
         FeatureBadge,
         DemoWelcomeModal,
         DemoGuidePanel,
+        Confetti,
+        DemoActions,
         generateMockData,
         getDemoMaterials
     };
-    
+
 })(window);
