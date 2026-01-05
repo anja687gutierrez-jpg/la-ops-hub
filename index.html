@@ -4332,7 +4332,7 @@
         // ═══════════════════════════════════════════════════════════════════════════
         // COLLAPSED MINI-BAR with Waterfall Cascade
         // ═══════════════════════════════════════════════════════════════════════════
-        const CollapsedMiniBar = ({ view, setView, onLogout }) => {
+        const CollapsedMiniBar = ({ view, setView, onLogout, onOpenImpressions }) => {
             const [pipelineExpanded, setPipelineExpanded] = useState(false);
             const [historyExpanded, setHistoryExpanded] = useState(false);
             
@@ -4398,9 +4398,9 @@
                     {/* Modules Section - Always show all */}
                     <div className="text-cyan-400 text-[9px] font-bold mb-2 tracking-wider">MOD</div>
                     {moduleItems.map((item, i) => (
-                        <IconButton 
-                            key={item.id} 
-                            item={item} 
+                        <IconButton
+                            key={item.id}
+                            item={item}
                             colorClass="text-cyan-400"
                             bgClass="bg-cyan-500/20"
                             borderClass="border border-cyan-400"
@@ -4408,7 +4408,16 @@
                             isVisible={true}
                         />
                     ))}
-                    
+
+                    {/* Impressions Dashboard - Always visible */}
+                    <button
+                        onClick={onOpenImpressions}
+                        className="w-10 h-10 mb-1 rounded-xl flex items-center justify-center transition-all duration-300 border border-emerald-500/50 hover:border-emerald-400 hover:bg-emerald-500/20 bg-emerald-500/10"
+                        title="Impressions Dashboard"
+                    >
+                        <Icon name="Globe" size={16} className="text-emerald-400" />
+                    </button>
+
                     {/* Pipeline Section - Collapsible waterfall */}
                     <div className="w-10 border-t border-slate-700 my-2" />
                     <div 
@@ -4529,7 +4538,7 @@
                         
                         {/* Collapsed mini-bar with waterfall cascade */}
                         {isCollapsed && (
-                            <CollapsedMiniBar view={view} setView={setView} onLogout={onLogout} />
+                            <CollapsedMiniBar view={view} setView={setView} onLogout={onLogout} onOpenImpressions={onOpenImpressions} />
                         )}
                     </div>
                     
