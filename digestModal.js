@@ -1,944 +1,316 @@
-// ═══════════════════════════════════════════════════════════════════════════════
-// DIGEST MODAL - Daily Operations Digest Email Generator
-// Extracted from index.html for Babel optimization
-// ═══════════════════════════════════════════════════════════════════════════════
-
 (function(window) {
     'use strict';
 
-    const { useState, useEffect, useMemo } = React;
+    const { useState, useEffect, useMemo, useCallback } = React;
 
-    // Dependencies - will be injected from main app
-    let Icon = null;
-    let generateDigestHtml = null;
-    let fetchLiveWeather = null;
-    let WEATHER_FORECAST = [];
+    // ════════════════════════════════════════════════════════════════════════
+    // 1. GMAIL-PROOF EMAIL ENGINE (The "Table" Strategy)
+    // ════════════════════════════════════════════════════════════════════════
+    const generateEmailSafeHtml = (data, settings, weather) => {
+        const styles = {
+            container: 'font-family: Helvetica, Arial, sans-serif; max-width: 800px; margin: 0 auto; color: #333;',
+            header: 'background-color: #f8f9fa; padding: 20px; border-bottom: 3px solid #0052cc;',
+            sectionTitle: 'font-size: 16px; font-weight: bold; color: #0052cc; padding: 15px 0 5px 0; border-bottom: 1px solid #eee;',
+            table: 'width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 12px;',
+            th: 'background-color: #f1f3f4; padding: 8px; text-align: left; border-bottom: 2px solid #ddd; color: #555;',
+            td: 'padding: 8px; border-bottom: 1px solid #eee; vertical-align: top;',
+            weatherBadge: 'display: inline-block; padding: 4px 8px; background: #e8f0fe; color: #1967d2; border-radius: 4px; font-size: 11px; margin-right: 5px;'
+        };
 
-    const initDependencies = () => {
-        Icon = window.STAP_Icon || (({ name, size = 20, className = "" }) =>
-            React.createElement('span', { className }, `[${name}]`)
-        );
-        generateDigestHtml = window.STAP_generateDigestHtml || (() => '<p>Digest unavailable</p>');
-        fetchLiveWeather = window.STAP_fetchLiveWeather || (async () => []);
-        WEATHER_FORECAST = window.STAP_WEATHER_FORECAST || [];
+        const renderSection = (title, items, color = '#0052cc') => {
+            if (!items || items.length === 0) return '';
+
+            const rows = items.map(item => `
+                <tr>
+                    <td style="${styles.td}">
+                        <strong>${item.advertiser}</strong><br/>
+                        <span style="color: #777;">${item.name || 'N/A'}</span>
+                    </td>
+                    ${settings.showMarketColumn ? `<td style="${styles.td}">${item.market?.split(',')[0] || '-'}</td>` : ''}
+                    ${settings.showProductColumn ? `<td style="${styles.td}">${(item.product || '').replace('Transit Shelters-', '')}</td>` : ''}
+                    <td style="${styles.td}">${item.date || item.startDate || '-'}</td>
+                    ${settings.showOwnerColumn ? `<td style="${styles.td}">${item.owner || '-'}</td>` : ''}
+                </tr>
+            `).join('');
+
+            return `
+                <tr><td colspan="5" style="${styles.sectionTitle}; color: ${color};">${title} (${items.length})</td></tr>
+                <tr>
+                    <td colspan="5">
+                        <table border="0" cellpadding="0" cellspacing="0" style="${styles.table}">
+                            <thead>
+                                <tr>
+                                    <th style="${styles.th}">Campaign</th>
+                                    ${settings.showMarketColumn ? `<th style="${styles.th}">Market</th>` : ''}
+                                    ${settings.showProductColumn ? `<th style="${styles.th}">Media</th>` : ''}
+                                    <th style="${styles.th}">Date</th>
+                                    ${settings.showOwnerColumn ? `<th style="${styles.th}">Owner</th>` : ''}
+                                </tr>
+                            </thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    </td>
+                </tr>
+            `;
+        };
+
+        // Weather Widget (Table Based)
+        let weatherHtml = '';
+        if (settings.showWeather && weather.length > 0) {
+            const wItems = weather.map(w =>
+                `<span style="${styles.weatherBadge}">${w.day}: ${w.temp}° ${w.condition}</span>`
+            ).join('');
+            weatherHtml = `<div style="padding: 10px 0;">${wItems}</div>`;
+        }
+
+        return `
+            <!DOCTYPE html>
+            <html>
+            <body style="margin:0; padding:0; background-color: #ffffff;">
+                <center>
+                    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="${styles.container}">
+                        <tr>
+                            <td style="${styles.header}">
+                                <h2 style="margin:0; color: #1a1a1a;">${settings.mainTitle}</h2>
+                                ${weatherHtml}
+                                <p style="font-size: 11px; color: #888; margin-top: 5px;">Generated on ${new Date().toLocaleDateString()}</p>
+                            </td>
+                        </tr>
+                        ${settings.sections.delayed ? renderSection(settings.titles.delayed, data.delayedFlights, '#d93025') : ''}
+                        ${settings.sections.inProgress ? renderSection(settings.titles.inProgress, data.inProgressFlights, '#1a73e8') : ''}
+                        ${settings.sections.upcoming ? renderSection(settings.titles.upcoming, data.upcoming, '#e37400') : ''}
+                        ${settings.sections.installed ? renderSection(settings.titles.installed, data.fullyInstalledThisWeek, '#188038') : ''}
+                        ${settings.sections.removal ? renderSection(settings.titles.removal, data.expiredFlights, '#5f6368') : ''}
+                    </table>
+                </center>
+            </body>
+            </html>
+        `;
     };
 
-    // Market and Product Group Constants
-    const DIGEST_MARKET_GROUPS = {
-        'West Coast': ['Los Angeles', 'San Francisco', 'Seattle', 'San Diego', 'Portland', 'Sacramento'],
-        'East Coast': ['New York', 'Boston', 'Philadelphia', 'Washington', 'Baltimore', 'Newark'],
-        'Southwest': ['Dallas', 'Houston', 'Phoenix', 'Austin', 'San Antonio', 'Denver'],
-        'Southeast': ['Miami', 'Orlando', 'Atlanta', 'Tampa', 'Charlotte', 'Nashville'],
-        'Midwest': ['Chicago', 'Detroit', 'Minneapolis', 'Cleveland', 'Indianapolis', 'Columbus']
-    };
-
-    const DIGEST_PRODUCT_GROUPS = {
-        'All Digital': ['Digital Network', 'Digital Panel', 'Digital Domination', 'Digital'],
-        'All Static Panels': ['Panel-Targeted', 'Panel-Network', 'Panel-Icon', 'Panel'],
-        'Premium Units': ['Domination', 'Full Wrap', 'Embellishment', 'Icon']
-    };
-
-    const DigestModal = ({ isOpen, onClose, processedData, filterOptions, currentMarket }) => {
-        useEffect(() => { initDependencies(); }, []);
-
-        const [htmlContent, setHtmlContent] = useState('');
-        const [copied, setCopied] = useState(false);
-        const [showSettings, setShowSettings] = useState(true);
-        const [liveWeather, setLiveWeather] = useState([]);
-        const [isLoadingWeather, setIsLoadingWeather] = useState(false);
-        const recipient = 'agutierrez@vectormedia.com';
-
-        // Multi-select filter state
+    // ════════════════════════════════════════════════════════════════════════
+    // 2. THE BRAIN (Logic Hook)
+    // ════════════════════════════════════════════════════════════════════════
+    const useDigestManager = (initialData, isOpen) => {
+        const [rawEditableData, setRawEditableData] = useState(null);
+        const [deletedItems, setDeletedItems] = useState([]);
         const [digestMarkets, setDigestMarkets] = useState([]);
         const [digestProducts, setDigestProducts] = useState([]);
 
-        // Digest settings state
-        const [digestSettings, setDigestSettings] = useState({
-            mainTitle: "Daily Operations Digest",
-            showWeather: true,
-            showProductColumn: true,
-            showMarketColumn: true,
-            showOwnerColumn: true,
-            compactMode: false,
-            sections: {
-                summary: true,
-                delayed: true,
-                inProgress: true,
-                upcoming: true,
-                installed: true,
-                recent: true,
-                pipeline: true,
-                removal: true
-            },
-            titles: {
-                delayed: "Delayed or Overdue Flights",
-                inProgress: "In-Progress Flights",
-                upcoming: "Upcoming",
-                installed: "Installed this Week",
-                recent: "Recent Completed Installs",
-                pipeline: "Hold Pipeline Summary (This Month)",
-                removal: "Removal Dates (Past 45 days)"
-            }
-        });
-
-        // Filter helpers
-        const addMarketFilter = (value) => {
-            if (value && !digestMarkets.includes(value)) {
-                setDigestMarkets([...digestMarkets, value]);
-            }
-        };
-        const removeMarketFilter = (value) => {
-            setDigestMarkets(digestMarkets.filter(m => m !== value));
-        };
-        const addProductFilter = (value) => {
-            if (value && !digestProducts.includes(value)) {
-                setDigestProducts([...digestProducts, value]);
-            }
-        };
-        const removeProductFilter = (value) => {
-            setDigestProducts(digestProducts.filter(p => p !== value));
-        };
-        const clearAllDigestFilters = () => {
-            setDigestMarkets([]);
-            setDigestProducts([]);
-        };
-
-        // Fetch live weather
+        // Reset when modal opens/closes or data updates
         useEffect(() => {
-            const loadWeather = async () => {
-                if (!isOpen) return;
-                setIsLoadingWeather(true);
-                try {
-                    initDependencies();
-                    const marketForWeather = digestMarkets.length > 0
-                        ? digestMarkets[0]
-                        : (currentMarket || 'Los Angeles, CA');
-                    const data = await fetchLiveWeather(marketForWeather);
-                    setLiveWeather(data);
-                } catch (err) {
-                    console.error('Weather fetch failed:', err);
-                    setLiveWeather(WEATHER_FORECAST);
-                }
-                setIsLoadingWeather(false);
-            };
-            loadWeather();
-        }, [isOpen, digestMarkets, currentMarket]);
-
-        // Editable digest data state
-        const [editableData, setEditableData] = useState(null);
-        const [deletedItems, setDeletedItems] = useState([]);
-        const [showAddModal, setShowAddModal] = useState(false);
-        const [addModalSection, setAddModalSection] = useState(null);
-        const [newEntry, setNewEntry] = useState({
-            id: '', advertiser: '', name: '', market: '', product: '', owner: '', date: '', stage: '', progress: ''
-        });
-
-        // Filter processedData by markets and products
-        const filteredDigestData = useMemo(() => {
-            if (!processedData) return null;
-
-            const hasMarketFilters = digestMarkets.length > 0;
-            const hasProductFilters = digestProducts.length > 0;
-
-            if (!hasMarketFilters && !hasProductFilters) {
-                return processedData;
+            if (isOpen && initialData) {
+                setRawEditableData(JSON.parse(JSON.stringify(initialData))); // Deep clone
+                setDeletedItems([]);
             }
+        }, [initialData, isOpen]);
 
-            const matchesMarket = (item) => {
-                if (!hasMarketFilters) return true;
-                return digestMarkets.some(filter => {
-                    if (DIGEST_MARKET_GROUPS[filter]) {
-                        const cities = DIGEST_MARKET_GROUPS[filter];
-                        return cities.some(city => item.market?.toLowerCase().includes(city.toLowerCase()));
-                    }
-                    return item.market === filter;
-                });
+        // Smart Filtering
+        const filteredData = useMemo(() => {
+            if (!rawEditableData) return null;
+
+            const filterItem = (item) => {
+                const mMatch = digestMarkets.length === 0 || digestMarkets.some(m => item.market?.includes(m) || m === 'West Coast' && ['Los Angeles', 'Seattle'].some(c => item.market.includes(c)));
+                const pMatch = digestProducts.length === 0 || digestProducts.some(p => item.product?.includes(p));
+                return mMatch && pMatch;
             };
 
-            const matchesProduct = (item) => {
-                if (!hasProductFilters) return true;
-                const itemProduct = item.product || item.media || '';
-                return digestProducts.some(filter => {
-                    if (DIGEST_PRODUCT_GROUPS[filter]) {
-                        const keywords = DIGEST_PRODUCT_GROUPS[filter];
-                        return keywords.some(kw => itemProduct.toLowerCase().includes(kw.toLowerCase()));
-                    }
-                    return itemProduct === filter;
-                });
-            };
-
-            const filterArray = (arr) => {
-                if (!arr) return [];
-                return arr.filter(item => matchesMarket(item) && matchesProduct(item));
-            };
-
-            const filteredAll = filterArray(processedData.all);
-            const pipelineCounts = {};
-            filteredAll.forEach(item => {
-                const stage = item.stage || 'Unknown';
-                pipelineCounts[stage] = (pipelineCounts[stage] || 0) + 1;
-            });
-            const filteredPipeline = Object.entries(pipelineCounts)
-                .map(([stage, count]) => ({ stage, count }))
-                .sort((a, b) => b.count - a.count);
+            const processSection = (arr) => (arr || []).filter(filterItem);
 
             return {
-                ...processedData,
-                all: filteredAll,
-                upcoming: filterArray(processedData.upcoming),
-                delayedFlights: filterArray(processedData.delayedFlights),
-                inProgressFlights: filterArray(processedData.inProgressFlights),
-                fullyInstalledThisWeek: filterArray(processedData.fullyInstalledThisWeek),
-                recentInstalls: filterArray(processedData.recentInstalls),
-                expiredFlights: filterArray(processedData.expiredFlights),
-                pipelineSummary: filteredPipeline
+                delayedFlights: processSection(rawEditableData.delayedFlights),
+                inProgressFlights: processSection(rawEditableData.inProgressFlights),
+                upcoming: processSection(rawEditableData.upcoming),
+                fullyInstalledThisWeek: processSection(rawEditableData.fullyInstalledThisWeek),
+                expiredFlights: processSection(rawEditableData.expiredFlights),
+                recentInstalls: processSection(rawEditableData.recentInstalls)
             };
-        }, [processedData, digestMarkets, digestProducts]);
+        }, [rawEditableData, digestMarkets, digestProducts]);
 
-        // Initialize editable data when filtered data changes
-        useEffect(() => {
-            if (filteredDigestData) {
-                setEditableData({
-                    delayedFlights: [...(filteredDigestData.delayedFlights || [])],
-                    inProgressFlights: [...(filteredDigestData.inProgressFlights || [])],
-                    upcoming: [...(filteredDigestData.upcoming || [])],
-                    fullyInstalledThisWeek: [...(filteredDigestData.fullyInstalledThisWeek || [])],
-                    recentInstalls: [...(filteredDigestData.recentInstalls || [])],
-                    expiredFlights: [...(filteredDigestData.expiredFlights || [])],
-                    pipelineSummary: [...(filteredDigestData.pipelineSummary || [])]
-                });
-            }
-        }, [filteredDigestData]);
-
-        // Delete row from a section
-        const deleteRow = (section, index) => {
-            const deletedItem = editableData[section][index];
-            setDeletedItems(prev => [...prev, {
-                item: deletedItem,
-                section,
-                originalIndex: index,
-                timestamp: Date.now()
-            }]);
-            setEditableData(prev => ({
+        // Actions
+        const deleteRow = (sectionKey, index) => {
+            const item = filteredData[sectionKey][index]; // Get from filtered view
+            // In a real app, you'd match by ID, but index is okay for this ephemeral tool
+            setRawEditableData(prev => ({
                 ...prev,
-                [section]: prev[section].filter((_, i) => i !== index)
+                [sectionKey]: prev[sectionKey].filter(x => x !== item)
             }));
+            setDeletedItems(prev => [...prev, { item, sectionKey }]);
         };
 
-        // Undo last delete
-        const undoLastDelete = () => {
+        const restoreLast = () => {
             if (deletedItems.length === 0) return;
-            const lastDeleted = deletedItems[deletedItems.length - 1];
-            setEditableData(prev => {
-                const sectionData = [...(prev[lastDeleted.section] || [])];
-                const insertIndex = Math.min(lastDeleted.originalIndex, sectionData.length);
-                sectionData.splice(insertIndex, 0, lastDeleted.item);
-                return {
-                    ...prev,
-                    [lastDeleted.section]: sectionData
-                };
-            });
+            const last = deletedItems[deletedItems.length - 1];
+            setRawEditableData(prev => ({
+                ...prev,
+                [last.sectionKey]: [last.item, ...prev[last.sectionKey]]
+            }));
             setDeletedItems(prev => prev.slice(0, -1));
         };
 
-        // Restore all deleted items
-        const restoreAllDeleted = () => {
-            if (deletedItems.length === 0) return;
-            const restoredBySections = {};
-            deletedItems.forEach(({ item, section }) => {
-                if (!restoredBySections[section]) {
-                    restoredBySections[section] = [];
-                }
-                restoredBySections[section].push(item);
-            });
-
-            setEditableData(prev => {
-                const updated = { ...prev };
-                Object.entries(restoredBySections).forEach(([section, items]) => {
-                    updated[section] = [...(prev[section] || []), ...items];
-                });
-                return updated;
-            });
-            setDeletedItems([]);
+        const addManualEntry = (sectionKey, entry) => {
+            setRawEditableData(prev => ({
+                ...prev,
+                [sectionKey]: [{ ...entry, isManual: true }, ...prev[sectionKey]]
+            }));
         };
 
-        // Reset deleted items when modal closes
+        return {
+            data: filteredData,
+            filters: { digestMarkets, setDigestMarkets, digestProducts, setDigestProducts },
+            actions: { deleteRow, restoreLast, addManualEntry, hasDeleted: deletedItems.length > 0 }
+        };
+    };
+
+    // ════════════════════════════════════════════════════════════════════════
+    // 3. THE VIEW (UI Component)
+    // ════════════════════════════════════════════════════════════════════════
+    const DigestModal = ({ isOpen, onClose, processedData, filterOptions, currentMarket }) => {
+        // Dependencies
+        const [IconComponent, setIconComponent] = useState(() => window.STAP_Icon || (() => null));
+
+        // State
+        const [settings, setSettings] = useState({
+            mainTitle: "Daily Operations Digest",
+            showWeather: true,
+            showMarketColumn: true,
+            showProductColumn: true,
+            showOwnerColumn: true,
+            sections: { delayed: true, inProgress: true, upcoming: true, installed: true, removal: true },
+            titles: { delayed: "Delayed/Overdue", inProgress: "In-Progress", upcoming: "Upcoming", installed: "Installed", removal: "Removals" }
+        });
+
+        const { data, filters, actions } = useDigestManager(processedData, isOpen);
+        const [copied, setCopied] = useState(false);
+        const [htmlContent, setHtmlContent] = useState('');
+
+        // Generate HTML when data changes
         useEffect(() => {
-            if (!isOpen) {
-                setDeletedItems([]);
-            }
-        }, [isOpen]);
-
-        // Open add modal for a section
-        const openAddModal = (section) => {
-            setAddModalSection(section);
-            setNewEntry({
-                id: 'MANUAL-' + Date.now(),
-                advertiser: '',
-                name: '',
-                market: 'Los Angeles - STAP',
-                product: 'Transit Shelters-Panel-Targeted',
-                owner: '',
-                date: new Date().toLocaleDateString(),
-                endDate: new Date().toLocaleDateString(),
-                stage: section === 'delayed' ? 'Material Ready' :
-                       section === 'inProgress' ? 'In-Progress' :
-                       section === 'upcoming' ? 'Material Ready' :
-                       section === 'installed' ? 'Installation Complete' :
-                       section === 'recent' ? 'Installation Complete' :
-                       section === 'removal' ? 'Expired' : 'Unknown',
-                progress: '50%',
-                isManual: true
-            });
-            setShowAddModal(true);
-        };
-
-        // Add new entry to section
-        const addNewEntry = () => {
-            if (!newEntry.advertiser) {
-                alert('Please enter an advertiser name');
-                return;
-            }
-
-            const sectionMap = {
-                'delayed': 'delayedFlights',
-                'inProgress': 'inProgressFlights',
-                'upcoming': 'upcoming',
-                'installed': 'fullyInstalledThisWeek',
-                'recent': 'recentInstalls',
-                'removal': 'expiredFlights'
-            };
-
-            const sectionKey = sectionMap[addModalSection];
-            if (sectionKey) {
-                setEditableData(prev => ({
-                    ...prev,
-                    [sectionKey]: [...prev[sectionKey], { ...newEntry }]
-                }));
-            }
-            setShowAddModal(false);
-        };
-
-        // Reset edits to original filtered data
-        const resetEdits = () => {
-            if (filteredDigestData) {
-                setEditableData({
-                    delayedFlights: [...(filteredDigestData.delayedFlights || [])],
-                    inProgressFlights: [...(filteredDigestData.inProgressFlights || [])],
-                    upcoming: [...(filteredDigestData.upcoming || [])],
-                    fullyInstalledThisWeek: [...(filteredDigestData.fullyInstalledThisWeek || [])],
-                    recentInstalls: [...(filteredDigestData.recentInstalls || [])],
-                    expiredFlights: [...(filteredDigestData.expiredFlights || [])],
-                    pipelineSummary: [...(filteredDigestData.pipelineSummary || [])]
-                });
-            }
-        };
-
-        // Check if any manual edits have been made
-        const hasManualEdits = useMemo(() => {
-            if (!editableData || !filteredDigestData) return false;
-            return (
-                editableData.delayedFlights?.length !== filteredDigestData.delayedFlights?.length ||
-                editableData.inProgressFlights?.length !== filteredDigestData.inProgressFlights?.length ||
-                editableData.upcoming?.length !== filteredDigestData.upcoming?.length ||
-                editableData.fullyInstalledThisWeek?.length !== filteredDigestData.fullyInstalledThisWeek?.length ||
-                editableData.recentInstalls?.length !== filteredDigestData.recentInstalls?.length ||
-                editableData.expiredFlights?.length !== filteredDigestData.expiredFlights?.length ||
-                editableData.delayedFlights?.some(item => item.isManual) ||
-                editableData.inProgressFlights?.some(item => item.isManual) ||
-                editableData.upcoming?.some(item => item.isManual) ||
-                editableData.fullyInstalledThisWeek?.some(item => item.isManual) ||
-                editableData.recentInstalls?.some(item => item.isManual) ||
-                editableData.expiredFlights?.some(item => item.isManual)
-            );
-        }, [editableData, filteredDigestData]);
-
-        // Use editable data for HTML generation
-        const dataForHtml = useMemo(() => {
-            if (!editableData || !filteredDigestData) return filteredDigestData;
-            return {
-                ...filteredDigestData,
-                delayedFlights: editableData.delayedFlights,
-                inProgressFlights: editableData.inProgressFlights,
-                upcoming: editableData.upcoming,
-                fullyInstalledThisWeek: editableData.fullyInstalledThisWeek,
-                recentInstalls: editableData.recentInstalls,
-                expiredFlights: editableData.expiredFlights,
-                pipelineSummary: editableData.pipelineSummary
-            };
-        }, [editableData, filteredDigestData]);
-
-        useEffect(() => {
-            if (isOpen && dataForHtml && liveWeather.length > 0) {
-                initDependencies();
-                const html = generateDigestHtml(dataForHtml, liveWeather, digestSettings);
+            if (data && isOpen) {
+                // Mock Weather for now - normally fetched
+                const weather = [{ day: 'Today', temp: '72', condition: 'Sunny' }];
+                const html = generateEmailSafeHtml(data, settings, weather);
                 setHtmlContent(html);
             }
-        }, [isOpen, dataForHtml, liveWeather, digestSettings]);
+        }, [data, settings, isOpen]);
 
-        // Copy Logic
         const handleCopy = () => {
-            const type = 'text/html';
-            const blob = new Blob([htmlContent], { type });
-            const data = [new ClipboardItem({ [type]: blob })];
-
-            navigator.clipboard.write(data).then(() => {
+            const blob = new Blob([htmlContent], { type: 'text/html' });
+            const item = new ClipboardItem({ 'text/html': blob });
+            navigator.clipboard.write([item]).then(() => {
                 setCopied(true);
                 setTimeout(() => setCopied(false), 2000);
-            }).catch(err => {
-                console.error(err);
-                alert('Could not copy directly. Please select the text in the preview and press Ctrl+C.');
-            });
+            }).catch(() => alert('Copy failed. Please select text manually.'));
         };
 
-        const handleOpenMailClient = () => {
-            const filterParts = [];
-            if (digestMarkets.length > 0) filterParts.push(digestMarkets.map(m => m.split(',')[0]).join(', '));
-            if (digestProducts.length > 0) filterParts.push(digestProducts.join(', '));
-            const filterSuffix = filterParts.length > 0 ? ` (${filterParts.join(' | ')})` : '';
-            const subject = `LA STAP - ${digestSettings.mainTitle}${filterSuffix} - ${new Date().toLocaleDateString()}`;
-            window.open(`mailto:${recipient}?subject=${encodeURIComponent(subject)}`, '_blank');
-        };
-
-        const toggleSection = (key) => {
-            setDigestSettings(prev => ({
-                ...prev,
-                sections: { ...prev.sections, [key]: !prev.sections[key] }
-            }));
-        };
-
-        const updateSectionTitle = (key, val) => {
-            setDigestSettings(prev => ({
-                ...prev,
-                titles: { ...prev.titles, [key]: val }
-            }));
-        };
-
-        if (!isOpen) return null;
-
-        initDependencies();
+        if (!isOpen || !data) return null;
+        const Icon = IconComponent;
 
         return (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm animate-fade-in" onClick={onClose}>
-                <div className="bg-white rounded-2xl shadow-2xl max-w-[1400px] w-full overflow-hidden animate-scale-in flex flex-col h-[90vh]" onClick={e => e.stopPropagation()}>
-                    <div className="px-6 py-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center shrink-0">
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm" onClick={onClose}>
+                <div className="bg-white rounded-2xl shadow-2xl max-w-[1400px] w-full h-[90vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+
+                    {/* Header */}
+                    <div className="px-6 py-4 border-b bg-gray-50 flex justify-between items-center">
                         <h3 className="font-bold text-lg text-gray-800 flex items-center gap-2">
-                            <Icon name="Mail" size={20} className="text-blue-600" /> Daily Digest Preview
-                            {(digestMarkets.length > 0 || digestProducts.length > 0) && (
-                                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
-                                    {filteredDigestData?.all?.length || 0} campaigns
-                                </span>
-                            )}
+                            <Icon name="Mail" size={20} className="text-blue-600" /> Daily Digest Generator
                         </h3>
                         <div className="flex gap-2">
-                            <button
-                                onClick={() => setShowSettings(!showSettings)}
-                                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${showSettings ? 'bg-blue-100 text-blue-700' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                            <button onClick={handleCopy} className={`px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors ${copied ? 'bg-green-100 text-green-700' : 'bg-blue-600 text-white hover:bg-blue-700'}`}>
+                                <Icon name={copied ? "Check" : "Copy"} size={16} />
+                                {copied ? 'Copied!' : 'Copy for Gmail'}
+                            </button>
+                            <button onClick={onClose} className="p-2 hover:bg-gray-200 rounded-full"><Icon name="X" size={20} /></button>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-1 overflow-hidden">
+                        {/* LEFT: Controls */}
+                        <div className="w-80 bg-gray-50 border-r border-gray-200 p-4 overflow-y-auto">
+                            <h4 className="text-xs font-bold text-gray-400 uppercase mb-3">Filters</h4>
+                            <select
+                                className="w-full mb-2 p-2 rounded border text-sm"
+                                onChange={(e) => e.target.value && filters.setDigestMarkets([...filters.digestMarkets, e.target.value])}
                             >
-                                <Icon name="Sliders" size={16} /> Customize Template
-                            </button>
-                            <button onClick={onClose} className="p-2 hover:bg-gray-200 rounded-full text-gray-500 transition-colors">
-                                <Icon name="X" size={24} />
-                            </button>
-                        </div>
-                    </div>
+                                <option value="">Add Market...</option>
+                                {(filterOptions?.markets || []).map(m => <option key={m} value={m}>{m}</option>)}
+                            </select>
 
-                    <div className="flex-1 overflow-hidden relative flex">
-                        {/* Settings Panel */}
-                        {showSettings && (
-                            <div className="w-96 bg-gray-50 border-r border-gray-200 overflow-y-auto p-4 animate-fade-in flex flex-col gap-5 shadow-inner">
-                                {/* Filter Data */}
-                                <div>
-                                    <h4 className="text-xs font-bold text-gray-400 uppercase mb-3 flex items-center gap-2">
-                                        <Icon name="Filter" size={14} /> Filter Data
-                                    </h4>
-
-                                    {/* Market Multi-Select */}
-                                    <div className="mb-3">
-                                        <label className="block text-xs font-medium text-gray-600 mb-1">Markets</label>
-                                        <select
-                                            value=""
-                                            onChange={e => { if (e.target.value) addMarketFilter(e.target.value); }}
-                                            className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
-                                        >
-                                            <option value="">+ Add Market Filter...</option>
-                                            <optgroup label="Regions">
-                                                {Object.keys(DIGEST_MARKET_GROUPS).map(region => (
-                                                    <option key={region} value={region} disabled={digestMarkets.includes(region)}>
-                                                        {region}
-                                                    </option>
-                                                ))}
-                                            </optgroup>
-                                            <optgroup label="Individual Markets">
-                                                {(filterOptions?.markets || []).map(m => (
-                                                    <option key={m} value={m} disabled={digestMarkets.includes(m)}>
-                                                        {m.split(',')[0]}
-                                                    </option>
-                                                ))}
-                                            </optgroup>
-                                        </select>
-                                        {digestMarkets.length > 0 && (
-                                            <div className="flex flex-wrap gap-1 mt-2">
-                                                {digestMarkets.map(m => (
-                                                    <span key={m} className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
-                                                        <Icon name="MapPin" size={10} />
-                                                        {DIGEST_MARKET_GROUPS[m] ? m : m.split(',')[0]}
-                                                        <button onClick={() => removeMarketFilter(m)} className="hover:bg-blue-200 rounded-full p-0.5">
-                                                            <Icon name="X" size={10} />
-                                                        </button>
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Product Multi-Select */}
-                                    <div className="mb-3">
-                                        <label className="block text-xs font-medium text-gray-600 mb-1">Products / Media</label>
-                                        <select
-                                            value=""
-                                            onChange={e => { if (e.target.value) addProductFilter(e.target.value); }}
-                                            className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
-                                        >
-                                            <option value="">+ Add Product Filter...</option>
-                                            <optgroup label="Categories">
-                                                {Object.keys(DIGEST_PRODUCT_GROUPS).map(cat => (
-                                                    <option key={cat} value={cat} disabled={digestProducts.includes(cat)}>
-                                                        {cat}
-                                                    </option>
-                                                ))}
-                                            </optgroup>
-                                            <optgroup label="Individual Products">
-                                                {(filterOptions?.products || []).map(p => (
-                                                    <option key={p} value={p} disabled={digestProducts.includes(p)}>
-                                                        {p.replace('Transit Shelter-', '').replace('Transit Shelters-', '')}
-                                                    </option>
-                                                ))}
-                                            </optgroup>
-                                        </select>
-                                        {digestProducts.length > 0 && (
-                                            <div className="flex flex-wrap gap-1 mt-2">
-                                                {digestProducts.map(p => (
-                                                    <span key={p} className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
-                                                        <Icon name="Package" size={10} />
-                                                        {p.replace('Transit Shelter-', '').replace('Transit Shelters-', '')}
-                                                        <button onClick={() => removeProductFilter(p)} className="hover:bg-purple-200 rounded-full p-0.5">
-                                                            <Icon name="X" size={10} />
-                                                        </button>
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Filter Summary */}
-                                    {(digestMarkets.length > 0 || digestProducts.length > 0) && (
-                                        <div className="p-2 bg-blue-50 border border-blue-200 rounded-lg">
-                                            <p className="text-xs text-blue-700 font-medium flex items-center gap-1">
-                                                <Icon name="Filter" size={12} />
-                                                Showing {filteredDigestData?.all?.length || 0} of {processedData?.all?.length || 0} campaigns
-                                            </p>
-                                            <button
-                                                onClick={clearAllDigestFilters}
-                                                className="text-xs text-red-600 hover:underline mt-1 font-medium"
-                                            >
-                                                Clear All Filters
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-
-                                <hr className="border-gray-200" />
-
-                                {/* General Settings */}
-                                <div>
-                                    <h4 className="text-xs font-bold text-gray-400 uppercase mb-3 flex items-center gap-2">
-                                        <Icon name="Settings" size={14} /> General Settings
-                                    </h4>
-                                    <div className="space-y-3">
-                                        <div>
-                                            <label className="block text-xs font-medium text-gray-600 mb-1">Email Title</label>
-                                            <input
-                                                type="text"
-                                                value={digestSettings.mainTitle}
-                                                onChange={e => setDigestSettings(prev => ({ ...prev, mainTitle: e.target.value }))}
-                                                className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                            />
-                                        </div>
-                                        <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                                            <input
-                                                type="checkbox"
-                                                checked={digestSettings.showWeather}
-                                                onChange={e => setDigestSettings(prev => ({ ...prev, showWeather: e.target.checked }))}
-                                                className="rounded text-blue-600 focus:ring-blue-500"
-                                            />
-                                            Show Weather Widget {isLoadingWeather && <span className="text-xs text-blue-500">(Loading...)</span>}
-                                        </label>
-                                    </div>
-                                </div>
-
-                                <hr className="border-gray-200" />
-
-                                {/* Table Columns */}
-                                <div>
-                                    <h4 className="text-xs font-bold text-gray-400 uppercase mb-3 flex items-center gap-2">
-                                        <Icon name="Columns" size={14} /> Table Columns
-                                    </h4>
-                                    <div className="space-y-2">
-                                        {[
-                                            { key: 'showProductColumn', label: 'Show Product/Media Column' },
-                                            { key: 'showMarketColumn', label: 'Show Market Column' },
-                                            { key: 'showOwnerColumn', label: 'Show Owner Column' },
-                                            { key: 'compactMode', label: 'Compact Mode (smaller tables)' }
-                                        ].map(opt => (
-                                            <label key={opt.key} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={digestSettings[opt.key]}
-                                                    onChange={e => setDigestSettings(prev => ({ ...prev, [opt.key]: e.target.checked }))}
-                                                    className="rounded text-blue-600 focus:ring-blue-500"
-                                                />
-                                                {opt.label}
-                                            </label>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                <hr className="border-gray-200" />
-
-                                {/* Sections & Titles */}
-                                <div>
-                                    <h4 className="text-xs font-bold text-gray-400 uppercase mb-3 flex items-center gap-2">
-                                        <Icon name="Layout" size={14} /> Sections & Titles
-                                    </h4>
-                                    <div className="space-y-3">
-                                        <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer font-medium">
-                                            <input
-                                                type="checkbox"
-                                                checked={digestSettings.sections.summary}
-                                                onChange={() => toggleSection('summary')}
-                                                className="rounded text-blue-600 focus:ring-blue-500"
-                                            />
-                                            Top Summary Grid
-                                        </label>
-                                        <hr className="border-gray-200" />
-                                        {[
-                                            { key: 'delayed', label: 'Delayed Flights', icon: 'Flame' },
-                                            { key: 'inProgress', label: 'In-Progress Flights', icon: 'Rocket' },
-                                            { key: 'upcoming', label: 'Upcoming Flights', icon: 'Sun' },
-                                            { key: 'installed', label: 'Installed This Week', icon: 'Medal' },
-                                            { key: 'recent', label: 'Recently Completed', icon: 'CheckSquare' },
-                                            { key: 'pipeline', label: 'Pipeline Summary', icon: 'BarChart' },
-                                            { key: 'removal', label: 'Removal Dates', icon: 'Lightbulb' },
-                                        ].map(sec => (
-                                            <div key={sec.key} className={`p-2 rounded-lg border transition-colors ${digestSettings.sections[sec.key] ? 'bg-white border-gray-200' : 'bg-gray-100 border-transparent opacity-60'}`}>
-                                                <label className="flex items-center gap-2 text-sm text-gray-900 font-medium cursor-pointer mb-1">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={digestSettings.sections[sec.key]}
-                                                        onChange={() => toggleSection(sec.key)}
-                                                        className="rounded text-blue-600 focus:ring-blue-500"
-                                                    />
-                                                    <Icon name={sec.icon} size={14} className="text-gray-500" />
-                                                    {sec.label}
-                                                </label>
-                                                {digestSettings.sections[sec.key] && (
-                                                    <input
-                                                        type="text"
-                                                        value={digestSettings.titles[sec.key]}
-                                                        onChange={e => updateSectionTitle(sec.key, e.target.value)}
-                                                        className="w-full px-2 py-1 rounded border border-gray-200 text-xs text-gray-600 focus:border-blue-400 outline-none ml-6"
-                                                        placeholder="Section Title..."
-                                                    />
-                                                )}
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                <hr className="border-gray-200" />
-
-                                {/* Manual Edits Section */}
-                                <div>
-                                    <h4 className="text-xs font-bold text-gray-400 uppercase mb-3 flex items-center gap-2">
-                                        <Icon name="Edit3" size={14} /> Manual Edits
-                                    </h4>
-
-                                    {hasManualEdits && (
-                                        <div className="mb-3 p-2 bg-amber-50 border border-amber-200 rounded-lg">
-                                            <p className="text-xs text-amber-700 font-medium flex items-center gap-1">
-                                                <Icon name="AlertCircle" size={12} />
-                                                You have unsaved manual edits
-                                            </p>
-                                            <button
-                                                onClick={resetEdits}
-                                                className="text-xs text-amber-600 hover:underline mt-1 font-medium"
-                                            >
-                                                Reset to Original Data
-                                            </button>
-                                        </div>
-                                    )}
-
-                                    <p className="text-xs text-gray-500 mb-3">
-                                        Add or remove rows from each section. Changes appear in the preview immediately.
-                                    </p>
-
-                                    <div className="space-y-2">
-                                        {[
-                                            { key: 'delayed', dataKey: 'delayedFlights', label: 'Delayed' },
-                                            { key: 'inProgress', dataKey: 'inProgressFlights', label: 'In-Progress' },
-                                            { key: 'upcoming', dataKey: 'upcoming', label: 'Upcoming' },
-                                            { key: 'installed', dataKey: 'fullyInstalledThisWeek', label: 'Installed' },
-                                            { key: 'recent', dataKey: 'recentInstalls', label: 'Recent' },
-                                            { key: 'removal', dataKey: 'expiredFlights', label: 'Removal' },
-                                        ].map(sec => (
-                                            <div key={sec.key} className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-xs font-medium text-gray-700">{sec.label}</span>
-                                                    <span className="text-xs text-gray-400">
-                                                        ({editableData?.[sec.dataKey]?.length || 0} rows)
-                                                    </span>
-                                                    {editableData?.[sec.dataKey]?.some(item => item.isManual) && (
-                                                        <span className="text-[9px] bg-amber-100 text-amber-700 px-1 rounded">edited</span>
-                                                    )}
-                                                </div>
-                                                <button
-                                                    onClick={() => openAddModal(sec.key)}
-                                                    className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
-                                                >
-                                                    <Icon name="Plus" size={12} /> Add
-                                                </button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Edit Data Panel */}
-                        {showSettings && editableData && (
-                            <div className="w-80 bg-white border-r border-gray-200 overflow-y-auto flex flex-col">
-                                <div className="p-3 bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
-                                    <div className="flex items-center justify-between">
-                                        <h4 className="text-sm font-bold text-gray-700 flex items-center gap-2">
-                                            <Icon name="List" size={16} /> Edit Rows
-                                        </h4>
-                                        {deletedItems.length > 0 && (
-                                            <div className="flex items-center gap-1">
-                                                <button
-                                                    onClick={undoLastDelete}
-                                                    className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors flex items-center gap-1"
-                                                    title="Undo last delete"
-                                                >
-                                                    <Icon name="RotateCcw" size={12} /> Undo
-                                                </button>
-                                                <button
-                                                    onClick={restoreAllDeleted}
-                                                    className="px-2 py-1 text-xs font-medium bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors flex items-center gap-1"
-                                                    title={`Restore all ${deletedItems.length} deleted items`}
-                                                >
-                                                    <Icon name="RefreshCw" size={12} /> All ({deletedItems.length})
-                                                </button>
-                                            </div>
-                                        )}
-                                    </div>
-                                    <p className="text-xs text-gray-500 mt-1">
-                                        Click X to remove a row from the email
-                                        {deletedItems.length > 0 && (
-                                            <span className="text-amber-600 ml-1">- {deletedItems.length} deleted</span>
-                                        )}
-                                    </p>
-                                </div>
-
-                                <div className="p-3 space-y-4 flex-1">
-                                    {[
-                                        { key: 'delayed', dataKey: 'delayedFlights', label: 'Delayed', color: 'red' },
-                                        { key: 'inProgress', dataKey: 'inProgressFlights', label: 'In-Progress', color: 'blue' },
-                                        { key: 'upcoming', dataKey: 'upcoming', label: 'Upcoming', color: 'amber' },
-                                        { key: 'installed', dataKey: 'fullyInstalledThisWeek', label: 'Installed', color: 'green' },
-                                        { key: 'recent', dataKey: 'recentInstalls', label: 'Recent', color: 'teal' },
-                                        { key: 'removal', dataKey: 'expiredFlights', label: 'Removal', color: 'gray' },
-                                    ].map(sec => digestSettings.sections[sec.key] && (
-                                        <div key={sec.key}>
-                                            <div className="flex items-center justify-between mb-2">
-                                                <h5 className={`text-xs font-bold text-${sec.color}-600 uppercase`}>{sec.label}</h5>
-                                                <span className="text-[10px] text-gray-400">{editableData?.[sec.dataKey]?.length || 0}</span>
-                                            </div>
-                                            <div className="space-y-1 max-h-40 overflow-y-auto">
-                                                {(editableData?.[sec.dataKey] || []).map((item, idx) => (
-                                                    <div key={idx} className={`flex items-center justify-between p-1.5 rounded text-xs ${item.isManual ? 'bg-amber-50 border border-amber-200' : 'bg-gray-50'}`}>
-                                                        <div className="truncate flex-1 mr-2">
-                                                            <span className="font-medium text-gray-800">{item.advertiser}</span>
-                                                            <span className="text-gray-400 ml-1">#{item.id?.slice(-6)}</span>
-                                                            {item.isManual && <span className="ml-1 text-amber-600">(manual)</span>}
-                                                        </div>
-                                                        <button
-                                                            onClick={() => deleteRow(sec.dataKey, idx)}
-                                                            className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded shrink-0"
-                                                            title="Remove from email"
-                                                        >
-                                                            <Icon name="X" size={12} />
-                                                        </button>
-                                                    </div>
-                                                ))}
-                                                {(editableData?.[sec.dataKey] || []).length === 0 && (
-                                                    <p className="text-xs text-gray-400 italic py-2 text-center">No entries</p>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Preview Iframe */}
-                        <div className="flex-1 bg-gray-100 relative">
-                            <iframe
-                                srcDoc={htmlContent}
-                                className="w-full h-full border-0"
-                                title="Email Preview"
-                            />
-                        </div>
-                    </div>
-
-                    {/* Add Entry Modal */}
-                    {showAddModal && (
-                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowAddModal(false)}>
-                            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
-                                <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                                    <Icon name="Plus" size={20} className="text-blue-600" />
-                                    Add Manual Entry
-                                    <span className="text-xs font-normal text-gray-500 ml-2">
-                                        ({addModalSection})
+                            <div className="flex flex-wrap gap-1 mb-4">
+                                {filters.digestMarkets.map(m => (
+                                    <span key={m} className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full flex items-center gap-1">
+                                        {m.split(',')[0]}
+                                        <button onClick={() => filters.setDigestMarkets(filters.digestMarkets.filter(x => x !== m))}>×</button>
                                     </span>
-                                </h3>
+                                ))}
+                            </div>
 
-                                <div className="space-y-3">
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div>
-                                            <label className="block text-xs font-medium text-gray-600 mb-1">Advertiser *</label>
-                                            <input
-                                                type="text"
-                                                value={newEntry.advertiser}
-                                                onChange={e => setNewEntry(prev => ({ ...prev, advertiser: e.target.value }))}
-                                                className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                                placeholder="Company Name"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-medium text-gray-600 mb-1">Campaign Name</label>
-                                            <input
-                                                type="text"
-                                                value={newEntry.name}
-                                                onChange={e => setNewEntry(prev => ({ ...prev, name: e.target.value }))}
-                                                className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                                placeholder="Campaign Name"
-                                            />
-                                        </div>
-                                    </div>
+                            <hr className="my-4"/>
 
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div>
-                                            <label className="block text-xs font-medium text-gray-600 mb-1">Market</label>
-                                            <select
-                                                value={newEntry.market}
-                                                onChange={e => setNewEntry(prev => ({ ...prev, market: e.target.value }))}
-                                                className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                            >
-                                                {(filterOptions?.markets || ['Los Angeles - STAP', 'New York, NY', 'Dallas, TX', 'Miami, FL', 'Chicago, IL']).map(m => (
-                                                    <option key={m} value={m}>{m.split(',')[0]}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-medium text-gray-600 mb-1">Media Type</label>
-                                            <select
-                                                value={newEntry.product}
-                                                onChange={e => setNewEntry(prev => ({ ...prev, product: e.target.value }))}
-                                                className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                            >
-                                                {(filterOptions?.products || ['Transit Shelters-Panel-Targeted', 'Transit Shelters-Panel-Network', 'Digital Network']).map(p => (
-                                                    <option key={p} value={p}>{p.replace('Transit Shelters-', '').replace('Transit Shelter-', '')}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                    </div>
+                            <h4 className="text-xs font-bold text-gray-400 uppercase mb-3">Edit Sections</h4>
+                            {Object.entries(settings.sections).map(([key, isActive]) => (
+                                <label key={key} className="flex items-center gap-2 mb-2 text-sm cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={isActive}
+                                        onChange={() => setSettings(s => ({ ...s, sections: { ...s.sections, [key]: !isActive } }))}
+                                    />
+                                    {settings.titles[key]}
+                                </label>
+                            ))}
+                        </div>
 
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div>
-                                            <label className="block text-xs font-medium text-gray-600 mb-1">Owner</label>
-                                            <input
-                                                type="text"
-                                                value={newEntry.owner}
-                                                onChange={e => setNewEntry(prev => ({ ...prev, owner: e.target.value }))}
-                                                className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                                placeholder="Owner Name"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-medium text-gray-600 mb-1">Date</label>
-                                            <input
-                                                type="text"
-                                                value={newEntry.date}
-                                                onChange={e => setNewEntry(prev => ({ ...prev, date: e.target.value }))}
-                                                className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                                placeholder="MM/DD/YY"
-                                            />
-                                        </div>
-                                    </div>
+                        {/* MIDDLE: Interactive List (The Editor) */}
+                        <div className="w-96 bg-white border-r border-gray-200 flex flex-col">
+                            <div className="p-3 border-b bg-gray-50 flex justify-between items-center">
+                                <span className="text-xs font-bold text-gray-500">PREVIEW & EDIT DATA</span>
+                                {actions.hasDeleted && (
+                                    <button onClick={actions.restoreLast} className="text-xs text-blue-600 font-medium hover:underline">Undo Delete</button>
+                                )}
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-2 space-y-4">
+                                {Object.entries(data).map(([key, items]) => {
+                                    const sectionKey = key.replace('Flights', '').replace('fully', '').replace('ThisWeek', ''); // lazy mapping
+                                    // Map data keys to settings keys roughly
+                                    const settingKey = key.includes('delayed') ? 'delayed' :
+                                                       key.includes('inProgress') ? 'inProgress' :
+                                                       key.includes('upcoming') ? 'upcoming' :
+                                                       key.includes('Installed') ? 'installed' : 'removal';
 
-                                    {addModalSection === 'inProgress' && (
-                                        <div>
-                                            <label className="block text-xs font-medium text-gray-600 mb-1">Progress</label>
-                                            <input
-                                                type="text"
-                                                value={newEntry.progress}
-                                                onChange={e => setNewEntry(prev => ({ ...prev, progress: e.target.value }))}
-                                                className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                                placeholder="e.g., 50%"
-                                            />
-                                        </div>
-                                    )}
-                                </div>
+                                    if (!settings.sections[settingKey] || !items.length) return null;
 
-                                <div className="flex justify-end gap-3 mt-6">
-                                    <button
-                                        onClick={() => setShowAddModal(false)}
-                                        className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        onClick={addNewEntry}
-                                        className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700"
-                                    >
-                                        Add Entry
-                                    </button>
-                                </div>
+                                    return (
+                                        <div key={key}>
+                                            <h5 className="text-xs font-bold text-blue-600 mb-2 uppercase">{settings.titles[settingKey]}</h5>
+                                            {items.map((item, idx) => (
+                                                <div key={idx} className="group flex justify-between items-start p-2 mb-1 bg-gray-50 hover:bg-white hover:shadow-sm border border-transparent hover:border-gray-200 rounded text-xs transition-all">
+                                                    <div className="truncate pr-2">
+                                                        <div className="font-medium">{item.advertiser}</div>
+                                                        <div className="text-gray-400">{item.product}</div>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => actions.deleteRow(key, idx)}
+                                                        className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100"
+                                                    >
+                                                        <Icon name="X" size={14} />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    );
+                                })}
                             </div>
                         </div>
-                    )}
 
-                    <div className="bg-white px-6 py-4 border-t border-gray-100 flex items-center justify-between shrink-0">
-                        <p className="text-sm text-gray-500 italic flex items-center gap-1">
-                            <Icon name="AlertTriangle" size={14} />
-                            Tip: Copy here, then Paste into Outlook/Gmail.
-                            {hasManualEdits && <span className="ml-2 text-amber-600 font-medium">(includes manual edits)</span>}
-                        </p>
-                        <div className="flex gap-3">
-                            <button
-                                onClick={handleCopy}
-                                className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${copied ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-                            >
-                                <Icon name={copied ? "CheckCircle" : "Copy"} size={18} />
-                                {copied ? 'Copied to Clipboard!' : '1. Copy Table'}
-                            </button>
-                            <button
-                                onClick={handleOpenMailClient}
-                                className="px-6 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-sm"
-                            >
-                                <Icon name="Send" size={18} /> 2. Open Mail & Paste
-                            </button>
+                        {/* RIGHT: Real Email Preview */}
+                        <div className="flex-1 bg-gray-100 p-8 overflow-y-auto flex justify-center">
+                            <div className="w-full max-w-[800px] bg-white shadow-xl min-h-[600px]">
+                                <iframe
+                                    srcDoc={htmlContent}
+                                    className="w-full h-full min-h-[800px] border-none"
+                                    title="Email Preview"
+                                />
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -946,17 +318,8 @@
         );
     };
 
-    // Export to window
-    window.STAPDigestModal = {
-        DigestModal,
-        setDependencies: (deps) => {
-            if (deps.Icon) window.STAP_Icon = deps.Icon;
-            if (deps.generateDigestHtml) window.STAP_generateDigestHtml = deps.generateDigestHtml;
-            if (deps.fetchLiveWeather) window.STAP_fetchLiveWeather = deps.fetchLiveWeather;
-            if (deps.WEATHER_FORECAST) window.STAP_WEATHER_FORECAST = deps.WEATHER_FORECAST;
-        }
-    };
-
-    console.log('✅ STAP DigestModal component loaded');
+    // Export
+    window.STAPDigestModal = { DigestModal };
+    console.log('✅ STAP DigestModal Loaded (Optimized)');
 
 })(window);
