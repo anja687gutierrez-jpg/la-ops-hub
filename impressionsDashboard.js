@@ -945,7 +945,6 @@
         const [viewMode, setViewMode] = useState('overview');
         const [campaignWeeks, setCampaignWeeks] = useState(4);
         const [selectedMarkets, setSelectedMarkets] = useState(['Los Angeles, CA']);
-        const [showFormulaModal, setShowFormulaModal] = useState(false);
         const dashboardRef = useRef(null);
 
         // Calculate region-level statistics
@@ -1181,13 +1180,6 @@
                                 React.createElement('option', { key: w, value: w }, `${w} wk`)
                             ))
                         ]),
-                        // Info button for formula transparency
-                        React.createElement('button', {
-                            key: 'formula-info',
-                            onClick: () => setShowFormulaModal(true),
-                            className: 'p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors',
-                            title: 'View Calculation Formula'
-                        }, React.createElement(Icon, { name: 'HelpCircle', size: 20 })),
                         showExport && React.createElement('button', {
                             key: 'export',
                             onClick: handleExportPDF,
@@ -1270,6 +1262,34 @@
                     )
                 )
             ),
+
+            // Calculation Transparency Box (Inline)
+            React.createElement('div', {
+                key: 'calc-info',
+                className: 'mx-6 mt-4 bg-purple-50 border border-purple-200 rounded-lg p-4'
+            }, [
+                // Headline
+                React.createElement('div', {
+                    key: 'headline',
+                    className: 'flex items-center gap-2 mb-3'
+                }, [
+                    React.createElement(Icon, { key: 'icon', name: 'Info', size: 16, className: 'text-purple-600' }),
+                    React.createElement('span', {
+                        key: 'text',
+                        className: 'text-sm font-semibold text-gray-700'
+                    }, 'How it\'s calculated')
+                ]),
+                // Formula Code Block
+                React.createElement('div', {
+                    key: 'formula',
+                    className: 'bg-white border border-purple-100 rounded-md px-4 py-3 font-mono text-sm text-gray-800 mb-3'
+                }, 'Weekly Imps = (Population ÷ Sq Miles) × 0.75 × Product Multiplier'),
+                // Multipliers Footer
+                React.createElement('div', {
+                    key: 'multipliers',
+                    className: 'text-xs text-purple-600'
+                }, 'Product Multipliers: Panel-Targeted: 1.15x • Panel-Network: 0.95x • Digital: 2.8x • Transit Shelter: 0.65x • Wallscape: 1.4x • Poster: 0.75x')
+            ]),
 
             // Main Content
             React.createElement('div', { key: 'content', className: 'p-6' }, [
@@ -1515,130 +1535,7 @@
                 'Census 2022 demographics • ',
                 `${Object.keys(LA_ZIP_DATA).length} LA ZIP codes • `,
                 `${Object.keys(MARKET_DATA).length} markets`
-            ]),
-
-            // Formula Transparency Modal
-            showFormulaModal && React.createElement('div', {
-                key: 'formula-modal',
-                className: 'fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm',
-                onClick: () => setShowFormulaModal(false)
-            },
-                React.createElement('div', {
-                    className: 'bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden',
-                    onClick: (e) => e.stopPropagation()
-                }, [
-                    // Modal Header
-                    React.createElement('div', {
-                        key: 'modal-header',
-                        className: 'px-6 py-4 border-b bg-gradient-to-r from-indigo-600 to-purple-600 text-white flex justify-between items-center'
-                    }, [
-                        React.createElement('h2', {
-                            key: 'title',
-                            className: 'text-xl font-bold flex items-center gap-2'
-                        }, [
-                            React.createElement(Icon, { key: 'icon', name: 'Calculator', size: 24 }),
-                            'Impression Calculation Formula'
-                        ]),
-                        React.createElement('button', {
-                            key: 'close',
-                            onClick: () => setShowFormulaModal(false),
-                            className: 'p-2 hover:bg-white/20 rounded-full transition-colors'
-                        }, React.createElement(Icon, { name: 'X', size: 20 }))
-                    ]),
-
-                    // Modal Body
-                    React.createElement('div', {
-                        key: 'modal-body',
-                        className: 'p-6'
-                    }, [
-                        // Formula Box
-                        React.createElement('div', {
-                            key: 'formula-box',
-                            className: 'bg-gray-900 text-gray-100 rounded-xl p-6 font-mono text-center mb-6'
-                        }, [
-                            React.createElement('div', {
-                                key: 'formula-label',
-                                className: 'text-indigo-400 text-sm mb-3 font-sans'
-                            }, 'WEEKLY IMPRESSIONS FORMULA'),
-                            React.createElement('div', {
-                                key: 'formula-main',
-                                className: 'text-lg leading-relaxed'
-                            }, [
-                                React.createElement('span', { key: 't1', className: 'text-emerald-400' }, 'Total Impressions'),
-                                ' = (',
-                                React.createElement('span', { key: 't2', className: 'text-yellow-400' }, 'Daily Traffic Count'),
-                                ' × ',
-                                React.createElement('span', { key: 't3', className: 'text-cyan-400' }, 'Dwell Time Factor'),
-                                ') + (',
-                                React.createElement('span', { key: 't4', className: 'text-pink-400' }, 'Visibility Index'),
-                                ' × ',
-                                React.createElement('span', { key: 't5', className: 'text-orange-400' }, 'Panel Count'),
-                                ')'
-                            ])
-                        ]),
-
-                        // Variable Definitions
-                        React.createElement('div', {
-                            key: 'variables',
-                            className: 'space-y-3'
-                        }, [
-                            React.createElement('h3', {
-                                key: 'var-title',
-                                className: 'font-bold text-gray-700 mb-2'
-                            }, 'Variable Definitions'),
-                            React.createElement('div', {
-                                key: 'var-1',
-                                className: 'flex items-start gap-3 text-sm'
-                            }, [
-                                React.createElement('span', { key: 'dot', className: 'text-yellow-500 font-bold' }, '●'),
-                                React.createElement('div', { key: 'content' }, [
-                                    React.createElement('span', { key: 'label', className: 'font-semibold text-gray-800' }, 'Daily Traffic Count: '),
-                                    React.createElement('span', { key: 'desc', className: 'text-gray-600' }, 'Estimated pedestrian/vehicle traffic based on ZIP code population density')
-                                ])
-                            ]),
-                            React.createElement('div', {
-                                key: 'var-2',
-                                className: 'flex items-start gap-3 text-sm'
-                            }, [
-                                React.createElement('span', { key: 'dot', className: 'text-cyan-500 font-bold' }, '●'),
-                                React.createElement('div', { key: 'content' }, [
-                                    React.createElement('span', { key: 'label', className: 'font-semibold text-gray-800' }, 'Dwell Time Factor: '),
-                                    React.createElement('span', { key: 'desc', className: 'text-gray-600' }, 'Average viewing duration multiplier (varies by media format)')
-                                ])
-                            ]),
-                            React.createElement('div', {
-                                key: 'var-3',
-                                className: 'flex items-start gap-3 text-sm'
-                            }, [
-                                React.createElement('span', { key: 'dot', className: 'text-pink-500 font-bold' }, '●'),
-                                React.createElement('div', { key: 'content' }, [
-                                    React.createElement('span', { key: 'label', className: 'font-semibold text-gray-800' }, 'Visibility Index: '),
-                                    React.createElement('span', { key: 'desc', className: 'text-gray-600' }, 'Panel visibility score based on placement and size (0.5 - 2.8x)')
-                                ])
-                            ]),
-                            React.createElement('div', {
-                                key: 'var-4',
-                                className: 'flex items-start gap-3 text-sm'
-                            }, [
-                                React.createElement('span', { key: 'dot', className: 'text-orange-500 font-bold' }, '●'),
-                                React.createElement('div', { key: 'content' }, [
-                                    React.createElement('span', { key: 'label', className: 'font-semibold text-gray-800' }, 'Panel Count: '),
-                                    React.createElement('span', { key: 'desc', className: 'text-gray-600' }, 'Number of advertising units in the campaign')
-                                ])
-                            ])
-                        ]),
-
-                        // Source Note
-                        React.createElement('div', {
-                            key: 'source',
-                            className: 'mt-6 pt-4 border-t border-gray-200 text-xs text-gray-500'
-                        }, [
-                            React.createElement(Icon, { key: 'icon', name: 'Info', size: 14, className: 'inline mr-1' }),
-                            'Methodology based on Geopath standards • Demographics from US Census 2022'
-                        ])
-                    ])
-                ])
-            )
+            ])
         ]);
     };
 
