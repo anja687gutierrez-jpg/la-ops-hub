@@ -252,8 +252,15 @@
                 );
             }
             
+            // Safely convert value to string for display
+            const displayValue = value === null || value === undefined
+                ? '-'
+                : typeof value === 'object'
+                    ? (value instanceof Date ? value.toLocaleDateString() : JSON.stringify(value))
+                    : String(value);
+
             return (
-                <span 
+                <span
                     onClick={(e) => {
                         e.stopPropagation();
                         startEditing(material.id, field, value);
@@ -261,7 +268,7 @@
                     className={`cursor-pointer hover:bg-orange-100 px-2 py-1 rounded block ${className}`}
                     title="Click to edit"
                 >
-                    {value || '-'}
+                    {displayValue || '-'}
                 </span>
             );
         };
@@ -2167,12 +2174,12 @@ function doGet(e) {
                                             <div className="mt-2">
                                                 <div className="flex justify-between text-[10px] text-gray-500 mb-1">
                                                     <span>Deployed</span>
-                                                    <span>{material.deployedQty}/{material.quantity}</span>
+                                                    <span>{material.deployedQty}/{material.quantity || 0}</span>
                                                 </div>
                                                 <div className="w-full bg-gray-200 rounded-full h-1.5">
-                                                    <div 
+                                                    <div
                                                         className="h-1.5 rounded-full bg-green-500"
-                                                        style={{ width: `${(material.deployedQty / material.quantity) * 100}%` }}
+                                                        style={{ width: `${Math.min((material.deployedQty / (material.quantity || 1)) * 100, 100)}%` }}
                                                     ></div>
                                                 </div>
                                             </div>
@@ -2679,7 +2686,7 @@ function doGet(e) {
                                                 <div className="flex items-center gap-2">
                                                     {material.matchedCampaign ? (
                                                         <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-[10px] font-medium flex items-center gap-1">
-                                                            <Icon name="Link" size={10} /> {material.matchedCampaign.length > 20 ? material.matchedCampaign.substring(0, 20) + '...' : material.matchedCampaign}
+                                                            <Icon name="Link" size={10} /> {typeof material.matchedCampaign === 'string' && material.matchedCampaign.length > 20 ? material.matchedCampaign.substring(0, 20) + '...' : String(material.matchedCampaign || '')}
                                                         </span>
                                                     ) : (
                                                         <span className="px-2 py-1 bg-gray-100 text-gray-500 rounded-full text-[10px]">
@@ -2705,12 +2712,12 @@ function doGet(e) {
                                                 <div className="mt-3 bg-gray-50 rounded-lg p-2">
                                                     <div className="flex justify-between text-[10px] text-gray-600 mb-1">
                                                         <span className="font-medium">Deployment Progress</span>
-                                                        <span>{material.deployedQty} / {material.quantity} units ({Math.round((material.deployedQty / material.quantity) * 100)}%)</span>
+                                                        <span>{material.deployedQty} / {material.quantity || 0} units ({Math.round((material.deployedQty / (material.quantity || 1)) * 100)}%)</span>
                                                     </div>
                                                     <div className="w-full bg-gray-200 rounded-full h-2">
-                                                        <div 
+                                                        <div
                                                             className="h-2 rounded-full bg-gradient-to-r from-purple-500 to-green-500 transition-all"
-                                                            style={{ width: `${(material.deployedQty / material.quantity) * 100}%` }}
+                                                            style={{ width: `${Math.min((material.deployedQty / (material.quantity || 1)) * 100, 100)}%` }}
                                                         ></div>
                                                     </div>
                                                 </div>
