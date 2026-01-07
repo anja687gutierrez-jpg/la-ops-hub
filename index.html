@@ -2826,10 +2826,20 @@
             };
 
             if (data.length === 0) return (
-                <div className="bg-white rounded-xl p-8 text-center shadow-sm border border-gray-100">
+                <div className="bg-white rounded-xl p-8 text-center shadow-sm border border-gray-100 relative">
+                    {onBack && view !== 'dashboard' && (
+                        <button onClick={onBack} className="absolute top-4 left-4 p-2 hover:bg-gray-100 rounded-full transition-colors" title="Back to Dashboard">
+                            <Icon name="ArrowLeft" size={18} />
+                        </button>
+                    )}
                     <div className="text-gray-400 mb-2 inline-block"><Icon name="Layers" size={40} /></div>
                     <h3 className="text-lg font-medium text-gray-900">No campaigns found</h3>
-                    <p className="text-gray-500 text-sm">No data matches your current filter.</p>
+                    <p className="text-gray-500 text-sm mb-4">No data matches your current filter.</p>
+                    {onBack && view !== 'dashboard' && (
+                        <button onClick={onBack} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
+                            <Icon name="ArrowLeft" size={14} className="inline mr-1" /> Back to Dashboard
+                        </button>
+                    )}
                 </div>
             );
 
@@ -3007,10 +3017,20 @@
             };
 
             if (data.length === 0) return (
-                <div className="bg-white rounded-xl p-8 text-center shadow-sm border border-gray-100">
+                <div className="bg-white rounded-xl p-8 text-center shadow-sm border border-gray-100 relative">
+                    {onBack && (
+                        <button onClick={onBack} className="absolute top-4 left-4 p-2 hover:bg-amber-100 rounded-full transition-colors" title="Back to Dashboard">
+                            <Icon name="ArrowLeft" size={18} />
+                        </button>
+                    )}
                     <div className="text-gray-400 mb-2 inline-block"><Icon name="ClipboardList" size={40} /></div>
                     <h3 className="text-lg font-medium text-gray-900">No holds found</h3>
-                    <p className="text-gray-500 text-sm">All campaigns are either completed or canceled.</p>
+                    <p className="text-gray-500 text-sm mb-4">All campaigns are either completed or canceled.</p>
+                    {onBack && (
+                        <button onClick={onBack} className="px-4 py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 transition-colors">
+                            <Icon name="ArrowLeft" size={14} className="inline mr-1" /> Back to Dashboard
+                        </button>
+                    )}
                 </div>
             );
 
@@ -3081,10 +3101,20 @@
             };
 
             if (data.length === 0) return (
-                <div className="bg-white rounded-xl p-8 text-center shadow-sm border border-gray-100">
+                <div className="bg-white rounded-xl p-8 text-center shadow-sm border border-gray-100 relative">
+                    {onBack && (
+                        <button onClick={onBack} className="absolute top-4 left-4 p-2 hover:bg-orange-100 rounded-full transition-colors" title="Back to Dashboard">
+                            <Icon name="ArrowLeft" size={18} />
+                        </button>
+                    )}
                     <div className="text-green-400 mb-2 inline-block"><Icon name="CheckCircle" size={40} /></div>
-                    <h3 className="text-lg font-medium text-gray-900">No ghost bookings 🎉</h3>
-                    <p className="text-gray-500 text-sm">All campaigns have assigned sales owners, valid stages, and products.</p>
+                    <h3 className="text-lg font-medium text-gray-900">No ghost bookings</h3>
+                    <p className="text-gray-500 text-sm mb-4">All campaigns have assigned sales owners, valid stages, and products.</p>
+                    {onBack && (
+                        <button onClick={onBack} className="px-4 py-2 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600 transition-colors">
+                            <Icon name="ArrowLeft" size={14} className="inline mr-1" /> Back to Dashboard
+                        </button>
+                    )}
                 </div>
             );
 
