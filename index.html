@@ -7233,10 +7233,31 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                             </div>
                             
                             {/* Filter Chips Bar */}
-                            {(marketFilters.length > 0 || productFilters.length > 0 || productionFilter !== 'ALL') && (
+                            {(marketFilters.length > 0 || productFilters.length > 0 || productionFilter !== 'ALL' || dateFilter.start || dateFilter.end) && (
                                 <div className="flex items-center gap-2 flex-wrap">
                                     <span className="text-xs text-gray-500 font-medium">Active Filters:</span>
-                                    
+
+                                    {/* Date Range Chip */}
+                                    {(dateFilter.start || dateFilter.end) && (
+                                        <span
+                                            className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-medium"
+                                        >
+                                            <Icon name="Calendar" size={12} />
+                                            {dateFilter.start && dateFilter.end
+                                                ? `${new Date(dateFilter.start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${new Date(dateFilter.end).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                                                : dateFilter.start
+                                                    ? `From ${new Date(dateFilter.start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                                                    : `Until ${new Date(dateFilter.end).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                                            }
+                                            <button
+                                                onClick={() => setDateFilter({ start: '', end: '' })}
+                                                className="ml-1 hover:bg-amber-200 rounded-full p-0.5"
+                                            >
+                                                <Icon name="X" size={10} />
+                                            </button>
+                                        </span>
+                                    )}
+
                                     {/* Market Chips */}
                                     {marketFilters.map(filter => (
                                         <span 
@@ -7288,8 +7309,8 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                                     )}
                                     
                                     {/* Clear All Button */}
-                                    <button 
-                                        onClick={() => { clearAllFilters(); setProductionFilter('ALL'); }}
+                                    <button
+                                        onClick={() => { clearAllFilters(); setProductionFilter('ALL'); setDateFilter({ start: '', end: '' }); }}
                                         className="text-xs text-red-600 hover:text-red-700 hover:underline font-medium"
                                     >
                                         Clear All
