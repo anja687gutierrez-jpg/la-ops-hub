@@ -6431,14 +6431,29 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
 
                 // 2. Master Tracking: Everything EXCEPT Lost Opportunities and Ghosts (unless included)
                 if (baseData.installs) {
-                    categories.masterTracking = [...baseData.installs].filter(i => {
-                        // Exclude ghosts unless explicitly included
-                        if (i.isGhost && !includeGhosts) return false;
-                        // Exclude Lost Opportunities
-                        const stageLower = (i.stage || '').toLowerCase().trim();
-                        if (stageLower === 'lost opportunity' || stageLower === '- none -') return false;
-                        return true;
-                    });
+                    categories.masterTracking = [...baseData.installs]
+                        .map(item => {
+                            const newItem = { ...item };
+                            // Reconvert dates from localStorage strings to Date objects
+                            if (newItem.dateObj && !(newItem.dateObj instanceof Date)) {
+                                newItem.dateObj = new Date(newItem.dateObj);
+                            }
+                            if (newItem.endDateObj && !(newItem.endDateObj instanceof Date)) {
+                                newItem.endDateObj = new Date(newItem.endDateObj);
+                            }
+                            if (!newItem.dateObj && newItem.date) {
+                                newItem.dateObj = new Date(newItem.date);
+                            }
+                            return newItem;
+                        })
+                        .filter(i => {
+                            // Exclude ghosts unless explicitly included
+                            if (i.isGhost && !includeGhosts) return false;
+                            // Exclude Lost Opportunities
+                            const stageLower = (i.stage || '').toLowerCase().trim();
+                            if (stageLower === 'lost opportunity' || stageLower === '- none -') return false;
+                            return true;
+                        });
                     // Ensure sorting consistency
                     categories.masterTracking.sort((a,b) => b.dateObj - a.dateObj);
                 }
