@@ -273,6 +273,15 @@
         const ACCESS_PASSWORD = "secret123";
 
         // --- PDF REPORT GENERATION UTILITIES ---
+        // Strip emojis and special characters for clean export
+        const stripEmojis = (str) => {
+            if (typeof str !== 'string') return str;
+            return str
+                .replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2300}-\u{23FF}]|[\u{2B50}]|[\u{1FA00}-\u{1FAFF}]|[\u{FE00}-\u{FE0F}]|[\u200D]/gu, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+        };
+
         const generatePDFReport = (data, options = {}) => {
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF({
@@ -281,8 +290,8 @@
                 format: 'letter'
             });
 
-            const title = options.title || 'Operations Report';
-            const subtitle = options.subtitle || `Generated ${new Date().toLocaleDateString()}`;
+            const title = stripEmojis(options.title || 'Operations Report');
+            const subtitle = stripEmojis(options.subtitle || `Generated ${new Date().toLocaleDateString()}`);
             const pageWidth = doc.internal.pageSize.getWidth();
             const pageHeight = doc.internal.pageSize.getHeight();
 
@@ -338,6 +347,8 @@
                     head: [columns.map(c => c.header)],
                     body: data.map(row => columns.map(c => {
                         let val = row[c.dataKey] || '-';
+                        // Strip emojis for clean PDF output
+                        val = stripEmojis(String(val));
                         if (typeof val === 'string' && val.length > 30) {
                             val = val.substring(0, 27) + '...';
                         }
@@ -2821,7 +2832,21 @@
 
             const downloadCSV = () => {
                 const headers = ["Product Start Date", "Campaign Number", "Market", "Advertiser", "Campaign", "Product", "Inventory Opportunity Stage", "Progress", "Quantity", "Installed", "Pending", "First Install", "Completion"];
-                const rows = data.map(row => [`"${row.rawDate || row.date || ''}"`, `"${row.id}"`, `"${row.market || ''}"`, `"${row.advertiser}"`, `"${row.name}"`, `"${row.product}"`, `"${row.stage}"`, `"${row.progress}"`, row.totalQty || row.quantity, row.totalInstalled || row.installed, row.pending, `"${row.firstInstall || ''}"`, `"${row.completion || ''}"`]);
+                const rows = data.map(row => [
+                    `"${stripEmojis(row.rawDate || row.date || '')}"`,
+                    `"${stripEmojis(row.id || '')}"`,
+                    `"${stripEmojis(row.market || '')}"`,
+                    `"${stripEmojis(row.advertiser || '')}"`,
+                    `"${stripEmojis(row.name || '')}"`,
+                    `"${stripEmojis(row.product || '')}"`,
+                    `"${stripEmojis(row.stage || '')}"`,
+                    `"${stripEmojis(row.progress || '')}"`,
+                    row.totalQty || row.quantity || 0,
+                    row.totalInstalled || row.installed || 0,
+                    row.pending || 0,
+                    `"${stripEmojis(row.firstInstall || '')}"`,
+                    `"${stripEmojis(row.completion || '')}"`
+                ]);
                 const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
                 const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
                 const url = URL.createObjectURL(blob);
@@ -3002,21 +3027,21 @@
             const downloadCSV = () => {
                 // Always use just Qty - never use "X / X" format (Excel misreads as dates)
                 const qtyHeader = view === 'expiredFlights' ? 'Removal Qty' : 'Qty';
-                
+
                 const headers = ["Stage", "Advertiser", "Campaign", "Product", "Market", dateLabel, qtyHeader, "ID"];
                 const rows = data.map(row => {
                     // Always use Qty (booked), not "Installed / Qty" format
                     const qtyValue = row.quantity || row.totalQty || 0;
-                    
+
                     return [
-                        `"${row.stage || ''}"`, 
-                        `"${row.advertiser || ''}"`, 
-                        `"${row.name || ''}"`, 
-                        `"${(row.product || row.media || '').replace('Transit Shelters-', '').replace('Transit Shelter-', '').replace('Transit Buses-', '')}"`,
-                        `"${row.market || ''}"`,
-                        `"${row[dateKey] || ''}"`, 
+                        `"${stripEmojis(row.stage || '')}"`,
+                        `"${stripEmojis(row.advertiser || '')}"`,
+                        `"${stripEmojis(row.name || '')}"`,
+                        `"${stripEmojis((row.product || row.media || '').replace('Transit Shelters-', '').replace('Transit Shelter-', '').replace('Transit Buses-', ''))}"`,
+                        `"${stripEmojis(row.market || '')}"`,
+                        `"${stripEmojis(row[dateKey] || '')}"`,
                         qtyValue,
-                        `"${row.id || ''}"`
+                        `"${stripEmojis(row.id || '')}"`
                     ];
                 });
                 const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
@@ -3204,19 +3229,19 @@
                 const csvContent = [
                     headers.join(','),
                     ...data.map(row => [
-                        row.id,
-                        row.date,
-                        row.endDate,
-                        `"${(row.market || '').replace(/"/g, '""')}"`,
-                        `"${(row.advertiser || '').replace(/"/g, '""')}"`,
-                        `"${(row.name || '').replace(/"/g, '""')}"`,
-                        `"${(row.product || '').replace(/"/g, '""')}"`,
-                        row.stage,
-                        row.owner,
-                        row.quantity || row.totalQty
+                        stripEmojis(row.id || ''),
+                        stripEmojis(row.date || ''),
+                        stripEmojis(row.endDate || ''),
+                        `"${stripEmojis((row.market || '').replace(/"/g, '""'))}"`,
+                        `"${stripEmojis((row.advertiser || '').replace(/"/g, '""'))}"`,
+                        `"${stripEmojis((row.name || '').replace(/"/g, '""'))}"`,
+                        `"${stripEmojis((row.product || '').replace(/"/g, '""'))}"`,
+                        stripEmojis(row.stage || ''),
+                        stripEmojis(row.owner || ''),
+                        row.quantity || row.totalQty || 0
                     ].join(','))
                 ].join('\n');
-                
+
                 const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement('a');
@@ -4437,20 +4462,20 @@
             const handleExportCSV = () => {
                 const headers = ['Campaign #', 'Advertiser', 'Campaign Name', 'Market', 'Product', 'Quantity', 'Impressions', 'Start Date', 'End Date', 'Status', 'Owner'];
                 const rows = filteredData.map(d => [
-                    d.campaignNumber || '',
-                    d.advertiser || '',
-                    d.campaign || '',
-                    d.market || '',
-                    d.product || '',
+                    stripEmojis(d.campaignNumber || ''),
+                    stripEmojis(d.advertiser || ''),
+                    stripEmojis(d.campaign || ''),
+                    stripEmojis(d.market || ''),
+                    stripEmojis(d.product || ''),
                     d.quantity || d.totalQty || '',
                     stats.calculateImpressions(d).toLocaleString(),
-                    d.date || '',
-                    d.endDate || '',
-                    d.stage || '',
-                    d.owner || ''
+                    stripEmojis(d.date || ''),
+                    stripEmojis(d.endDate || ''),
+                    stripEmojis(d.stage || ''),
+                    stripEmojis(d.owner || '')
                 ]);
-                
-                const csvContent = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+
+                const csvContent = [headers, ...rows].map(row => row.map(cell => `"${stripEmojis(String(cell))}"`).join(',')).join('\n');
                 const blob = new Blob([csvContent], { type: 'text/csv' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
