@@ -2861,6 +2861,7 @@
                             {view === 'delayedFlights' && <Icon name="Flame" size={16} className="text-red-500" />}
                             {view === 'onHoldCampaigns' && <Icon name="PauseCircle" size={16} className="text-gray-500" />}
                             {view === 'fullyInstalledThisWeek' && <Icon name="Award" size={16} className="text-yellow-500" />}
+                            {view === 'currentWeekInstallCount' && <Icon name="TrendingUp" size={16} className="text-emerald-500" />}
                             {view === 'rotations' && <Icon name="RefreshCw" size={16} className="text-purple-500" />}
                             {view === 'materialReadyFuture' && <Icon name="Package" size={16} className="text-teal-500" />}
                             {view === 'expiredFlights' && <Icon name="Lightbulb" size={16} className="text-amber-500" />}
@@ -3387,6 +3388,12 @@
                 subtitle: "Campaigns",
                 color: "text-yellow-600",
                 icon: "Medal"
+            },
+            currentWeekInstallCount: {
+                title: "Installs This Week",
+                subtitle: "Campaign Count",
+                color: "text-emerald-600",
+                icon: "TrendingUp"
             }
         };
 
@@ -6327,6 +6334,7 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                 else if (view === 'inProgressFlights') { activeSet = filteredStats.inProgressFlights; }
                 else if (view === 'delayedFlights') { activeSet = filteredStats.delayedFlights; }
                 else if (view === 'fullyInstalledThisWeek') { activeSet = filteredStats.fullyInstalledThisWeek; }
+                else if (view === 'currentWeekInstallCount') { activeSet = filteredStats.fullyInstalledThisWeek; }
                 else if (view === 'rotations') { activeSet = filteredStats.rotations; }
                 else if (view === 'expiredFlights') { activeSet = filteredStats.expiredFlights; }
                 else if (view === 'holdReport') { activeSet = filteredStats.holdReport; }
@@ -7020,7 +7028,7 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                                     {view === 'dashboard' && filteredStats && (
                                         <div>
                                             <div className="flex justify-between items-center mb-4">
-                                                <h2 className="text-lg font-bold text-gray-800">Overview</h2>
+                                                <h2 className="text-lg font-bold text-gray-800">Weekly Overview</h2>
                                                 <div className="flex items-center gap-3">
                                                     {/* AI Pipeline Health Button */}
                                                     <button 
@@ -7105,6 +7113,13 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                                                     let displayValue = data.length;
                                                     if (key === 'recentInstalls' && data) {
                                                         displayValue = data.reduce((sum, item) => sum + (item.quantity || item.totalQty || 0), 0);
+                                                    }
+
+                                                    // Current week install count: show campaign count this week
+                                                    if (key === 'currentWeekInstallCount') {
+                                                        const thisWeekData = filteredStats.fullyInstalledThisWeek || [];
+                                                        displayValue = thisWeekData.length;
+                                                        data = thisWeekData; // Use same data for click-through
                                                     }
 
                                                     return (
