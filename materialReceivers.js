@@ -2051,8 +2051,40 @@ function doGet(e) {
                     {filteredMaterials.length === 0 ? (
                         <div className="text-center py-16">
                             <Icon name="Package" size={48} className="mx-auto text-gray-300 mb-4" />
-                            <h3 className="text-lg font-semibold text-gray-500">No materials found</h3>
-                            <p className="text-gray-400 text-sm mt-1">Try adjusting your filters or upload material receipts</p>
+                            {allMaterials.length === 0 ? (
+                                /* No data at all - prompt to upload */
+                                <>
+                                    <h3 className="text-lg font-semibold text-gray-500">No materials yet</h3>
+                                    <p className="text-gray-400 text-sm mt-1 mb-4">Upload PDFs or connect a Google Sheet to get started</p>
+                                    <div className="flex justify-center gap-3">
+                                        <button
+                                            onClick={() => setShowLinkModal(true)}
+                                            className="px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white rounded-lg text-sm font-medium flex items-center gap-2"
+                                        >
+                                            <Icon name="Upload" size={16} /> Upload Data
+                                        </button>
+                                    </div>
+                                </>
+                            ) : (
+                                /* Has data but filters are hiding it */
+                                <>
+                                    <h3 className="text-lg font-semibold text-gray-500">No matches</h3>
+                                    <p className="text-gray-400 text-sm mt-1 mb-4">
+                                        {allMaterials.length} receipt{allMaterials.length !== 1 ? 's' : ''} loaded, but none match current filters
+                                    </p>
+                                    <button
+                                        onClick={() => {
+                                            setSelectedClient('ALL');
+                                            setSelectedStatus('ALL');
+                                            setSearchTerm('');
+                                            setDateFilter({ start: '', end: '' });
+                                        }}
+                                        className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium flex items-center gap-2 mx-auto"
+                                    >
+                                        <Icon name="RotateCcw" size={16} /> Clear All Filters
+                                    </button>
+                                </>
+                            )}
                         </div>
                     ) : viewMode === 'cards' ? (
                         /* Card View */
