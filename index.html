@@ -6952,8 +6952,8 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                             </div>
                         </div>
                     )}
-                    {digestModalLoaded && (
-                        <DigestModal
+                    {digestModalLoaded && window.STAPDigestModal && (
+                        <window.STAPDigestModal.DigestModal
                             isOpen={isDigestModalOpen}
                             onClose={() => setIsDigestModalOpen(false)}
                             processedData={processedData}
