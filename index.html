@@ -4475,7 +4475,7 @@
                                 </h3>
                                 <p className="text-sm text-gray-500">
                                     Installation proof with impression tracking for city compliance
-                                    {data.length > 0 && <span className="ml-2 text-xs text-emerald-600">(📋 {filteredData.length} installations • 👁 {(stats.totalImpressions / 1000000).toFixed(1)}M impressions)</span>}
+                                    {data.length > 0 && <span className="ml-2 text-xs text-emerald-600 flex items-center gap-1">(<Icon name="ClipboardList" size={12} /> {filteredData.length} installations • <Icon name="Eye" size={12} /> {(stats.totalImpressions / 1000000).toFixed(1)}M impressions)</span>}
                                 </p>
                             </div>
                         </div>
@@ -4741,7 +4741,7 @@
                                     <div className="text-lg font-bold text-gray-800">{data.units.toLocaleString()}</div>
                                     <div className="text-xs text-gray-600">{product}</div>
                                     <div className="text-[10px] text-gray-400">{data.campaigns} campaigns</div>
-                                    <div className="text-[10px] text-amber-600 font-medium mt-1">👁 {(data.impressions / 1000).toFixed(0)}K impressions</div>
+                                    <div className="text-[10px] text-amber-600 font-medium mt-1 flex items-center gap-1"><Icon name="Eye" size={10} /> {(data.impressions / 1000).toFixed(0)}K impressions</div>
                                 </div>
                             ))}
                         </div>
