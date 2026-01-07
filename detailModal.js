@@ -36,7 +36,9 @@
         const [editMode, setEditMode] = useState(false);
         const [newStage, setNewStage] = useState(item?.stage || '');
         const [emailDraft, setEmailDraft] = useState('');
+        const [subjectLine, setSubjectLine] = useState('');
         const [copyFeedback, setCopyFeedback] = useState("");
+        const [subjectCopied, setSubjectCopied] = useState(false);
 
         // Install count editing
         const [editingInstallCount, setEditingInstallCount] = useState(false);
@@ -44,6 +46,7 @@
 
         // Custom fields
         const [customQty, setCustomQty] = useState('');
+        const [emailInstalledQty, setEmailInstalledQty] = useState('');
         const [customDesigns, setCustomDesigns] = useState('');
         const [customPhotosLink, setCustomPhotosLink] = useState('');
         const [customReceiverLink, setCustomReceiverLink] = useState('');
@@ -91,6 +94,7 @@
 
                 if (savedData) {
                     setCustomQty(savedData.totalQty || item.quantity || item.totalQty || '0');
+                    setEmailInstalledQty(savedData.installed || item.totalInstalled || item.installed || '0');
                     setCustomDesigns(savedData.mediaType || item.media || item.product || '');
                     setCustomPhotosLink(savedData.photosLink || '');
                     setCustomReceiverLink(savedData.receiverLink || '');
@@ -101,6 +105,7 @@
                     }
                 } else {
                     setCustomQty(item.quantity || item.totalQty || '0');
+                    setEmailInstalledQty(item.totalInstalled || item.installed || '0');
                     setCustomDesigns(item.media || item.product || '');
                     setCustomPhotosLink('');
                     setCustomReceiverLink('');
@@ -134,13 +139,13 @@
                     <p style='margin:0 0 12px;'>Hi ${item.owner || 'Team'},</p>
                     <p style='margin:0 0 15px;'>Work orders have been submitted for scheduling:</p>
                     <table style='width:100%; font-size:13px; border-collapse:collapse; background:#f8f9fa; border-radius:4px;'>
-                        <tr><td style='padding:8px 10px; color:#666; width:110px; border-bottom:1px solid #eee;'>Advertiser</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${item.advertiser}</strong></td></tr>
-                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Campaign</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.id}</td></tr>
+                        <tr><td style='padding:8px 10px; color:#666; width:110px; border-bottom:1px solid #eee;'>Advertiser</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${item.advertiser || 'N/A'}</strong></td></tr>
+                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Campaign</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.id || 'N/A'}</td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Flight Name</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.name || 'N/A'}</td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Media Type</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${formatMediaType(customDesigns)}</strong></td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Market</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${formatMarketName(item.market)}</td></tr>
-                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Product Dates</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.date} — ${item.endDate || 'TBD'}</td></tr>
-                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Total Qty</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${customQty}</strong> faces</td></tr>
+                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Product Dates</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.date || 'N/A'} — ${item.endDate || 'TBD'}</td></tr>
+                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Total Qty</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${customQty || '0'}</strong> faces</td></tr>
                         ${designCodes.length > 0 ? `<tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Designs</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${designCodes.join(', ')}</td></tr>` : ''}
                         <tr><td style='padding:8px 10px; color:#666;'>Sales Owner</td><td style='padding:8px 10px;'>${item.owner || 'N/A'}</td></tr>
                     </table>
@@ -160,13 +165,13 @@
                     <p style='margin:0 0 12px;'>Hi ${item.owner || 'Team'},</p>
                     <p style='margin:0 0 15px;'>Great news! This campaign is now <strong>fully installed</strong>.</p>
                     <table style='width:100%; font-size:13px; border-collapse:collapse; background:#f8f9fa; border-radius:4px;'>
-                        <tr><td style='padding:8px 10px; color:#666; width:110px; border-bottom:1px solid #eee;'>Advertiser</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${item.advertiser}</strong></td></tr>
-                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Campaign</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.id}</td></tr>
+                        <tr><td style='padding:8px 10px; color:#666; width:110px; border-bottom:1px solid #eee;'>Advertiser</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${item.advertiser || 'N/A'}</strong></td></tr>
+                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Campaign</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.id || 'N/A'}</td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Flight Name</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.name || 'N/A'}</td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Media Type</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${formatMediaType(customDesigns)}</strong></td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Market</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${formatMarketName(item.market)}</td></tr>
-                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Product Dates</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.date} — ${item.endDate || 'TBD'}</td></tr>
-                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Qty Installed</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong style="color:#28a745;">${customQty}</strong> faces</td></tr>
+                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Product Dates</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.date || 'N/A'} — ${item.endDate || 'TBD'}</td></tr>
+                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Qty Installed</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong style="color:#28a745;">${emailInstalledQty || customQty}</strong> faces</td></tr>
                         ${designCodes.length > 0 ? `<tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Designs</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${designCodes.join(', ')}</td></tr>` : ''}
                         <tr><td style='padding:8px 10px; color:#666;'>Sales Owner</td><td style='padding:8px 10px;'>${item.owner || 'N/A'}</td></tr>
                     </table>
@@ -185,13 +190,13 @@
                     <p style='margin:0 0 10px;'>This campaign is <strong>on hold</strong>. We are missing:</p>
                     <p style='margin:0 0 15px; padding:10px; background:#fff5f5; border-left:3px solid #dc3545; color:#c92a2a;'><strong>${missingText}</strong></p>
                     <table style='width:100%; font-size:13px; border-collapse:collapse; background:#f8f9fa; border-radius:4px;'>
-                        <tr><td style='padding:8px 10px; color:#666; width:110px; border-bottom:1px solid #eee;'>Advertiser</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${item.advertiser}</strong></td></tr>
-                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Campaign</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.id}</td></tr>
+                        <tr><td style='padding:8px 10px; color:#666; width:110px; border-bottom:1px solid #eee;'>Advertiser</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${item.advertiser || 'N/A'}</strong></td></tr>
+                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Campaign</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.id || 'N/A'}</td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Flight Name</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.name || 'N/A'}</td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Media Type</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${formatMediaType(customDesigns)}</strong></td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Market</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${formatMarketName(item.market)}</td></tr>
-                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Product Dates</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.date} — ${item.endDate || 'TBD'}</td></tr>
-                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Total Qty</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${customQty}</strong> faces</td></tr>
+                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Product Dates</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.date || 'N/A'} — ${item.endDate || 'TBD'}</td></tr>
+                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Total Qty</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${customQty || '0'}</strong> faces</td></tr>
                         ${designCodes.length > 0 ? `<tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Designs</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${designCodes.join(', ')}</td></tr>` : ''}
                         <tr><td style='padding:8px 10px; color:#666;'>Sales Owner</td><td style='padding:8px 10px;'>${item.owner || 'N/A'}</td></tr>
                     </table>
@@ -212,13 +217,13 @@
                         <strong>New Target:</strong> ${newEta || 'TBD'}
                     </div>
                     <table style='width:100%; font-size:13px; border-collapse:collapse; background:#f8f9fa; border-radius:4px;'>
-                        <tr><td style='padding:8px 10px; color:#666; width:110px; border-bottom:1px solid #eee;'>Advertiser</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${item.advertiser}</strong></td></tr>
-                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Campaign</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.id}</td></tr>
+                        <tr><td style='padding:8px 10px; color:#666; width:110px; border-bottom:1px solid #eee;'>Advertiser</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${item.advertiser || 'N/A'}</strong></td></tr>
+                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Campaign</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.id || 'N/A'}</td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Flight Name</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.name || 'N/A'}</td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Media Type</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${formatMediaType(customDesigns)}</strong></td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Market</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${formatMarketName(item.market)}</td></tr>
-                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Product Dates</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.date} — ${item.endDate || 'TBD'}</td></tr>
-                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Total Qty</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${customQty}</strong> faces</td></tr>
+                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Product Dates</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.date || 'N/A'} — ${item.endDate || 'TBD'}</td></tr>
+                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Total Qty</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${customQty || '0'}</strong> faces</td></tr>
                         ${designCodes.length > 0 ? `<tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Designs</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${designCodes.join(', ')}</td></tr>` : ''}
                         <tr><td style='padding:8px 10px; color:#666;'>Sales Owner</td><td style='padding:8px 10px;'>${item.owner || 'N/A'}</td></tr>
                     </table>
@@ -235,13 +240,13 @@
                     <p style='margin:0 0 15px;'>Maintenance has been completed for this campaign:</p>
                     <p style='margin:0 0 15px; padding:10px; background:#e6fffa; border-left:3px solid #20c997; color:#0ca678;'><strong>Action Taken:</strong> ${issueReason || 'Repairs completed'}</p>
                     <table style='width:100%; font-size:13px; border-collapse:collapse; background:#f8f9fa; border-radius:4px;'>
-                        <tr><td style='padding:8px 10px; color:#666; width:110px; border-bottom:1px solid #eee;'>Advertiser</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${item.advertiser}</strong></td></tr>
-                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Campaign</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.id}</td></tr>
+                        <tr><td style='padding:8px 10px; color:#666; width:110px; border-bottom:1px solid #eee;'>Advertiser</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${item.advertiser || 'N/A'}</strong></td></tr>
+                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Campaign</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.id || 'N/A'}</td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Flight Name</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.name || 'N/A'}</td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Media Type</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${formatMediaType(customDesigns)}</strong></td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Market</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${formatMarketName(item.market)}</td></tr>
-                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Product Dates</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.date} — ${item.endDate || 'TBD'}</td></tr>
-                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Total Qty</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${customQty}</strong> faces</td></tr>
+                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Product Dates</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.date || 'N/A'} — ${item.endDate || 'TBD'}</td></tr>
+                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Total Qty</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${customQty || '0'}</strong> faces</td></tr>
                         ${designCodes.length > 0 ? `<tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Designs</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${designCodes.join(', ')}</td></tr>` : ''}
                         <tr><td style='padding:8px 10px; color:#666;'>Sales Owner</td><td style='padding:8px 10px;'>${item.owner || 'N/A'}</td></tr>
                     </table>
@@ -258,13 +263,13 @@
                     <p style='margin:0 0 12px;'>Hi ${item.owner || 'Team'},</p>
                     <p style='margin:0 0 15px;'>All materials have been removed for this campaign.</p>
                     <table style='width:100%; font-size:13px; border-collapse:collapse; background:#f8f9fa; border-radius:4px;'>
-                        <tr><td style='padding:8px 10px; color:#666; width:110px; border-bottom:1px solid #eee;'>Advertiser</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${item.advertiser}</strong></td></tr>
-                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Campaign</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.id}</td></tr>
+                        <tr><td style='padding:8px 10px; color:#666; width:110px; border-bottom:1px solid #eee;'>Advertiser</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${item.advertiser || 'N/A'}</strong></td></tr>
+                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Campaign</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.id || 'N/A'}</td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Flight Name</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.name || 'N/A'}</td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Media Type</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${formatMediaType(customDesigns)}</strong></td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Market</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${formatMarketName(item.market)}</td></tr>
-                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Product Dates</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.date} — ${item.endDate || 'TBD'}</td></tr>
-                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Total Qty</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${customQty}</strong> faces</td></tr>
+                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Product Dates</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.date || 'N/A'} — ${item.endDate || 'TBD'}</td></tr>
+                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Total Qty</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${customQty || '0'}</strong> faces</td></tr>
                         ${designCodes.length > 0 ? `<tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Designs</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${designCodes.join(', ')}</td></tr>` : ''}
                         <tr><td style='padding:8px 10px; color:#666;'>Sales Owner</td><td style='padding:8px 10px;'>${item.owner || 'N/A'}</td></tr>
                     </table>
@@ -312,7 +317,7 @@
                     <p style='margin:0 0 15px;'>Materials have landed in the warehouse and are being processed. Work orders are being drafted.</p>
                     <p style='margin:0 0 15px; padding:10px; background:#f8f9fa; border-left:3px solid ${statusColor};'>
                         <strong>Inventory Status:</strong> ${statusIcon} ${statusText}${overageNote}<br/>
-                        <span style="font-size:12px; color:#666;">Received: ${currentTotal} / Required: ${customQty}</span>
+                        <span style="font-size:12px; color:#666;">Received: ${currentTotal} / Required: ${customQty || '0'}</span>
                     </p>
                     ${noOverageNote}
                     ${breakdownRows ? `<table style='width:100%; font-size:12px; border-collapse:collapse; margin:0 0 15px; background:#faf8ff;'>
@@ -320,16 +325,42 @@
                         ${breakdownRows}
                     </table>` : ''}
                     <table style='width:100%; font-size:13px; border-collapse:collapse; background:#f8f9fa; border-radius:4px;'>
-                        <tr><td style='padding:8px 10px; color:#666; width:110px; border-bottom:1px solid #eee;'>Advertiser</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${item.advertiser}</strong></td></tr>
-                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Campaign</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.id}</td></tr>
+                        <tr><td style='padding:8px 10px; color:#666; width:110px; border-bottom:1px solid #eee;'>Advertiser</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${item.advertiser || 'N/A'}</strong></td></tr>
+                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Campaign</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.id || 'N/A'}</td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Flight Name</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.name || 'N/A'}</td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Media Type</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${formatMediaType(customDesigns)}</strong></td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Market</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${formatMarketName(item.market)}</td></tr>
-                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Product Dates</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.date} — ${item.endDate || 'TBD'}</td></tr>
+                        <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Product Dates</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.date || 'N/A'} — ${item.endDate || 'TBD'}</td></tr>
                         <tr><td style='padding:8px 10px; color:#666;'>Sales Owner</td><td style='padding:8px 10px;'>${item.owner || 'N/A'}</td></tr>
                     </table>
                 </div>
             </div>`;
+        };
+
+        // Subject line generator
+        const generateSubjectLine = (mode) => {
+            const advertiser = item.advertiser || 'Campaign';
+            const id = item.id || '';
+            const market = formatMarketName(item.market);
+
+            switch(mode) {
+                case 'schedule':
+                    return `[${advertiser}] Installation Scheduled - ${id}`;
+                case 'complete':
+                    return `[${advertiser}] ✅ INSTALLED - ${id} (${emailInstalledQty || customQty} faces)`;
+                case 'material_received':
+                    return `[${advertiser}] Materials Received - ${id}`;
+                case 'missing':
+                    return `[${advertiser}] ⚠️ ACTION REQUIRED - Missing Assets - ${id}`;
+                case 'delay':
+                    return `[${advertiser}] Schedule Update - ${id}`;
+                case 'maintenance':
+                    return `[${advertiser}] Maintenance Complete - ${id}`;
+                case 'removal':
+                    return `[${advertiser}] Removal Confirmed - ${id}`;
+                default:
+                    return `[${advertiser}] Campaign Update - ${id}`;
+            }
         };
 
         // Template router effect
@@ -345,6 +376,9 @@
                 else mode = 'schedule';
             }
 
+            // Generate subject line
+            setSubjectLine(generateSubjectLine(mode));
+
             if (mode === 'material_received') setEmailDraft(generateMaterialReceivedTemplate());
             else if (mode === 'schedule') setEmailDraft(generateScheduleTemplate());
             else if (mode === 'complete') setEmailDraft(generateCompletionTemplate());
@@ -352,7 +386,7 @@
             else if (mode === 'delay') setEmailDraft(generateDelayTemplate());
             else if (mode === 'maintenance') setEmailDraft(generateMaintenanceTemplate());
             else if (mode === 'removal') setEmailDraft(generateRemovalTemplate());
-        }, [customQty, selectedTemplate, item, materialBreakdown]);
+        }, [customQty, emailInstalledQty, selectedTemplate, item, materialBreakdown]);
 
         const handleCopyToWebmail = async () => {
             try {
@@ -596,6 +630,35 @@
                             </select>
                         </div>
 
+                        {/* Subject Line */}
+                        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                            <div className="flex items-center justify-between gap-2">
+                                <div className="flex-1">
+                                    <label className="text-xs font-bold text-blue-700 flex items-center gap-1 mb-1">
+                                        <Icon name="Mail" size={12} /> Subject Line
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={subjectLine}
+                                        onChange={(e) => setSubjectLine(e.target.value)}
+                                        className="w-full text-sm border border-blue-300 rounded px-3 py-2 font-medium"
+                                        placeholder="Email subject..."
+                                    />
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        navigator.clipboard.writeText(subjectLine);
+                                        setSubjectCopied(true);
+                                        setTimeout(() => setSubjectCopied(false), 1500);
+                                    }}
+                                    className={`mt-5 px-3 py-2 rounded text-xs font-bold transition-colors ${subjectCopied ? 'bg-green-500 text-white' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+                                    title="Copy subject line"
+                                >
+                                    <Icon name={subjectCopied ? "Check" : "Copy"} size={14} />
+                                </button>
+                            </div>
+                        </div>
+
                         {showInstallControls && (
                             <div className="mb-4 p-4 bg-gray-50 border rounded-lg">
                                 {/* Missing Asset Options */}
@@ -647,8 +710,15 @@
                                         <button onClick={addRow} className="text-xs text-blue-600 font-bold hover:underline">+ Add Row</button>
                                     </div>
                                 ) : (
-                                    <div className="grid grid-cols-2 gap-4 mb-3">
+                                    <div className="grid grid-cols-3 gap-4 mb-3">
                                         <div><label className="text-xs font-bold text-gray-500">Total Flight Qty</label><input type="text" value={customQty} onChange={(e)=>setCustomQty(e.target.value)} className="w-full text-sm border rounded px-2 py-1"/></div>
+                                        <div>
+                                            <label className="text-xs font-bold text-green-600 flex items-center gap-1">
+                                                Installed Qty
+                                                {selectedTemplate === 'complete' || (selectedTemplate === 'auto' && item.stage === 'Installed') ? <span className="text-[10px] text-green-500">(in email)</span> : null}
+                                            </label>
+                                            <input type="text" value={emailInstalledQty} onChange={(e)=>setEmailInstalledQty(e.target.value)} className="w-full text-sm border border-green-300 rounded px-2 py-1"/>
+                                        </div>
                                         <div><label className="text-xs font-bold text-gray-500">Media Type</label><input type="text" value={customDesigns} readOnly className="w-full text-sm border rounded px-2 py-1 bg-gray-50 text-gray-600 cursor-not-allowed"/></div>
                                     </div>
                                 )}
