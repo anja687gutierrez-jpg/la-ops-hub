@@ -31,6 +31,10 @@
     <!-- Leaflet Map (FREE - OpenStreetMap) -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- jsPDF for PDF Report Generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.1/jspdf.plugin.autotable.min.js"></script>
     
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
@@ -267,6 +271,204 @@
         // 🔒 SECURITY: Credentials
         const ACCESS_EMAIL = "admin@vectormedia.com";
         const ACCESS_PASSWORD = "secret123";
+
+        // --- PDF REPORT GENERATION UTILITIES ---
+        const generatePDFReport = (data, options = {}) => {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({
+                orientation: options.orientation || 'landscape',
+                unit: 'mm',
+                format: 'letter'
+            });
+
+            const title = options.title || 'Operations Report';
+            const subtitle = options.subtitle || `Generated ${new Date().toLocaleDateString()}`;
+            const pageWidth = doc.internal.pageSize.getWidth();
+            const pageHeight = doc.internal.pageSize.getHeight();
+
+            // Header
+            doc.setFillColor(30, 41, 59); // slate-800
+            doc.rect(0, 0, pageWidth, 25, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(18);
+            doc.setFont('helvetica', 'bold');
+            doc.text('VECTOR MEDIA', 10, 12);
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'normal');
+            doc.text('Operations Portal', 10, 18);
+
+            // Title section
+            doc.setTextColor(30, 41, 59);
+            doc.setFontSize(16);
+            doc.setFont('helvetica', 'bold');
+            doc.text(title, 10, 35);
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(100, 116, 139);
+            doc.text(subtitle, 10, 42);
+
+            // Summary stats if provided
+            if (options.stats) {
+                let xPos = pageWidth - 100;
+                doc.setFontSize(9);
+                Object.entries(options.stats).forEach(([label, value], idx) => {
+                    doc.setTextColor(100, 116, 139);
+                    doc.text(label + ':', xPos, 33 + (idx * 6));
+                    doc.setTextColor(30, 41, 59);
+                    doc.setFont('helvetica', 'bold');
+                    doc.text(String(value), xPos + 35, 33 + (idx * 6));
+                    doc.setFont('helvetica', 'normal');
+                });
+            }
+
+            // Table
+            if (data && data.length > 0) {
+                const columns = options.columns || [
+                    { header: 'Date', dataKey: 'date' },
+                    { header: 'ID', dataKey: 'id' },
+                    { header: 'Advertiser', dataKey: 'advertiser' },
+                    { header: 'Campaign', dataKey: 'name' },
+                    { header: 'Product', dataKey: 'product' },
+                    { header: 'Stage', dataKey: 'stage' },
+                    { header: 'Progress', dataKey: 'progress' }
+                ];
+
+                doc.autoTable({
+                    startY: 48,
+                    head: [columns.map(c => c.header)],
+                    body: data.map(row => columns.map(c => {
+                        let val = row[c.dataKey] || '-';
+                        if (typeof val === 'string' && val.length > 30) {
+                            val = val.substring(0, 27) + '...';
+                        }
+                        return val;
+                    })),
+                    theme: 'grid',
+                    headStyles: {
+                        fillColor: [51, 65, 85],
+                        textColor: [255, 255, 255],
+                        fontSize: 8,
+                        fontStyle: 'bold',
+                        halign: 'left'
+                    },
+                    bodyStyles: {
+                        fontSize: 7,
+                        textColor: [51, 65, 85],
+                        cellPadding: 2
+                    },
+                    alternateRowStyles: {
+                        fillColor: [248, 250, 252]
+                    },
+                    columnStyles: options.columnStyles || {
+                        0: { cellWidth: 22 },
+                        1: { cellWidth: 25 },
+                        2: { cellWidth: 35 },
+                        3: { cellWidth: 45 },
+                        4: { cellWidth: 35 },
+                        5: { cellWidth: 30 },
+                        6: { cellWidth: 20 }
+                    },
+                    margin: { left: 10, right: 10 },
+                    didDrawPage: (hookData) => {
+                        // Footer on each page
+                        const pageNum = doc.internal.getCurrentPageInfo().pageNumber;
+                        doc.setFontSize(8);
+                        doc.setTextColor(150);
+                        doc.text(`Page ${pageNum}`, pageWidth - 25, pageHeight - 10);
+                        doc.text('LA STAP Operations Portal', 10, pageHeight - 10);
+                    }
+                });
+            }
+
+            // Download
+            const filename = options.filename || `Report_${new Date().toISOString().split('T')[0]}.pdf`;
+            doc.save(filename);
+            return true;
+        };
+
+        // Quick PDF export for different report types
+        const exportToPDF = (reportType, data, customOptions = {}) => {
+            const reportConfigs = {
+                installations: {
+                    title: 'Master Installation Report',
+                    subtitle: `${data.length} Active Campaigns | ${new Date().toLocaleDateString()}`,
+                    columns: [
+                        { header: 'Start Date', dataKey: 'rawDate' },
+                        { header: 'Campaign ID', dataKey: 'id' },
+                        { header: 'Market', dataKey: 'market' },
+                        { header: 'Advertiser', dataKey: 'advertiser' },
+                        { header: 'Campaign', dataKey: 'name' },
+                        { header: 'Product', dataKey: 'product' },
+                        { header: 'Stage', dataKey: 'stage' },
+                        { header: 'Progress', dataKey: 'progress' }
+                    ],
+                    columnStyles: {
+                        0: { cellWidth: 20 },
+                        1: { cellWidth: 22 },
+                        2: { cellWidth: 25 },
+                        3: { cellWidth: 30 },
+                        4: { cellWidth: 40 },
+                        5: { cellWidth: 30 },
+                        6: { cellWidth: 25 },
+                        7: { cellWidth: 18 }
+                    },
+                    filename: `Installations_${new Date().toISOString().split('T')[0]}.pdf`
+                },
+                campaigns: {
+                    title: 'Campaign Status Report',
+                    subtitle: `${data.length} Campaigns | ${new Date().toLocaleDateString()}`,
+                    columns: [
+                        { header: 'Date', dataKey: 'date' },
+                        { header: 'Advertiser', dataKey: 'advertiser' },
+                        { header: 'Campaign', dataKey: 'name' },
+                        { header: 'Product', dataKey: 'product' },
+                        { header: 'Qty', dataKey: 'quantity' },
+                        { header: 'Stage', dataKey: 'stage' }
+                    ],
+                    columnStyles: {
+                        0: { cellWidth: 25 },
+                        1: { cellWidth: 40 },
+                        2: { cellWidth: 55 },
+                        3: { cellWidth: 40 },
+                        4: { cellWidth: 15 },
+                        5: { cellWidth: 30 }
+                    },
+                    filename: `Campaigns_${new Date().toISOString().split('T')[0]}.pdf`
+                },
+                holds: {
+                    title: 'Hold Report',
+                    subtitle: `${data.length} Items on Hold | ${new Date().toLocaleDateString()}`,
+                    columns: [
+                        { header: 'Date', dataKey: 'date' },
+                        { header: 'Advertiser', dataKey: 'advertiser' },
+                        { header: 'Campaign', dataKey: 'name' },
+                        { header: 'Reason', dataKey: 'holdReason' },
+                        { header: 'Status', dataKey: 'holdStatus' }
+                    ],
+                    filename: `Holds_${new Date().toISOString().split('T')[0]}.pdf`
+                },
+                expired: {
+                    title: 'Removal Schedule',
+                    subtitle: `${data.length} Pending Removals | ${new Date().toLocaleDateString()}`,
+                    columns: [
+                        { header: 'End Date', dataKey: 'endDate' },
+                        { header: 'Advertiser', dataKey: 'advertiser' },
+                        { header: 'Campaign', dataKey: 'name' },
+                        { header: 'Product', dataKey: 'product' },
+                        { header: 'Qty', dataKey: 'quantity' }
+                    ],
+                    filename: `Removals_${new Date().toISOString().split('T')[0]}.pdf`
+                },
+                summary: {
+                    title: 'Weekly Operations Summary',
+                    orientation: 'portrait',
+                    filename: `Weekly_Summary_${new Date().toISOString().split('T')[0]}.pdf`
+                }
+            };
+
+            const config = { ...reportConfigs[reportType], ...customOptions };
+            return generatePDFReport(data, config);
+        };
 
         // --- 3D "GRAND CHRONOS" SCENE (The Core Engine) ---
         const ChronosScene = ({ isHyperSpeed }) => {
@@ -2706,9 +2908,12 @@
                         <button onClick={downloadCSV} className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded transition-colors">
                             <Icon name="Download" size={12} /> CSV
                         </button>
+                        <button onClick={() => exportToPDF('installations', data)} className="flex items-center gap-1 text-xs font-medium text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 px-2 py-1 rounded transition-colors">
+                            <Icon name="FileText" size={12} /> PDF
+                        </button>
                     </div>
                 </div>
-                
+
                 {/* Click outside to close menu */}
                 {showColMenu && <div className="fixed inset-0 z-20" onClick={() => setShowColMenu(false)} />}
                 
@@ -2870,9 +3075,14 @@
                             {(title || '').replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]/gu, '').trim()}
                             <span className="bg-gray-200 text-gray-600 text-[10px] py-0.5 px-2 rounded-full">{data.length}</span>
                         </h3>
-                        <button onClick={downloadCSV} className="text-blue-600 text-xs flex gap-1.5 font-medium hover:text-blue-800 transition-colors">
-                            <Icon name="Download" size={14}/> CSV
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <button onClick={downloadCSV} className="text-blue-600 text-xs flex gap-1.5 font-medium hover:text-blue-800 transition-colors">
+                                <Icon name="Download" size={14}/> CSV
+                            </button>
+                            <button onClick={() => exportToPDF(view === 'expiredFlights' ? 'expired' : 'campaigns', data, { title: title || 'Campaign Report' })} className="text-red-600 text-xs flex gap-1.5 font-medium hover:text-red-800 transition-colors">
+                                <Icon name="FileText" size={14}/> PDF
+                            </button>
+                        </div>
                     </div>
                     <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
                         <table className="w-full text-left border-collapse table-fixed min-w-[1100px]">
@@ -3047,9 +3257,14 @@
                             <Icon name="ClipboardList" size={20} /> Hold Report (Simplified View)
                             <span className="bg-amber-200 text-amber-800 text-xs py-0.5 px-2 rounded-full">{data.length}</span>
                         </h3>
-                        <button onClick={downloadCSV} className="text-amber-700 text-sm flex gap-2 font-medium hover:text-amber-900 transition-colors">
-                            <Icon name="Download" size={16}/> CSV
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <button onClick={downloadCSV} className="text-amber-700 text-sm flex gap-2 font-medium hover:text-amber-900 transition-colors">
+                                <Icon name="Download" size={16}/> CSV
+                            </button>
+                            <button onClick={() => exportToPDF('holds', data)} className="text-red-600 text-sm flex gap-2 font-medium hover:text-red-800 transition-colors">
+                                <Icon name="FileText" size={16}/> PDF
+                            </button>
+                        </div>
                     </div>
                     <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
                         <table className="w-full text-left border-collapse">
@@ -3131,9 +3346,14 @@
                             <Icon name="Ghost" size={20} /> 👻 Ghost Bookings
                             <span className="bg-orange-200 text-orange-800 text-xs py-0.5 px-2 rounded-full">{data.length}</span>
                         </h3>
-                        <button onClick={copyIds} className="text-orange-700 text-sm flex gap-2 font-medium hover:text-orange-900 transition-colors">
-                            <Icon name="Copy" size={16}/> Copy IDs
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <button onClick={copyIds} className="text-orange-700 text-sm flex gap-2 font-medium hover:text-orange-900 transition-colors">
+                                <Icon name="Copy" size={16}/> Copy IDs
+                            </button>
+                            <button onClick={() => exportToPDF('campaigns', data, { title: 'Ghost Bookings Report', subtitle: `${data.length} Missing Data Records | ${new Date().toLocaleDateString()}` })} className="text-red-600 text-sm flex gap-2 font-medium hover:text-red-800 transition-colors">
+                                <Icon name="FileText" size={16}/> PDF
+                            </button>
+                        </div>
                     </div>
                     <div className="bg-orange-50 px-6 py-3 border-b border-orange-100">
                         <p className="text-sm text-orange-800">
@@ -4266,17 +4486,28 @@
                             >
                                 <Icon name="Camera" size={16} /> View POP Gallery
                             </button>
-                            <button 
+                            <button
                                 onClick={handleExportCSV}
                                 className="px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg text-sm font-medium flex items-center gap-2"
                             >
-                                <Icon name="Download" size={16} /> Export CSV
+                                <Icon name="Download" size={16} /> CSV
                             </button>
-                            <button 
+                            <button
+                                onClick={() => exportToPDF('campaigns', filteredData, {
+                                    title: 'Performance Report',
+                                    subtitle: `${filteredData.length} Installations | ${stats.totalImpressions.toLocaleString()} Impressions | ${dateRange.start} to ${dateRange.end}`,
+                                    stats: { 'Campaigns': filteredData.length, 'Units': stats.totalUnits, 'Impressions': (stats.totalImpressions / 1000000).toFixed(1) + 'M' },
+                                    filename: `Performance_Report_${dateRange.start}_to_${dateRange.end}.pdf`
+                                })}
+                                className="px-3 py-2 bg-red-50 border border-red-300 hover:bg-red-100 text-red-700 rounded-lg text-sm font-medium flex items-center gap-2"
+                            >
+                                <Icon name="FileText" size={16} /> PDF
+                            </button>
+                            <button
                                 onClick={handlePrint}
                                 className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-bold flex items-center gap-2"
                             >
-                                <Icon name="Printer" size={16} /> Print Report
+                                <Icon name="Printer" size={16} /> Print
                             </button>
                         </div>
                     </div>
@@ -7039,8 +7270,24 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                                                         <Icon name="Sparkles" size={16} className={isInsightLoading ? "animate-spin" : ""} />
                                                         {isInsightLoading ? "Analyzing..." : "AI Pipeline Insights"}
                                                     </button>
-                                                    <button 
-                                                        onClick={() => setIsCustomizeModalOpen(true)} 
+                                                    <button
+                                                        onClick={() => exportToPDF('installations', filteredStats.all || [], {
+                                                            title: 'Weekly Operations Summary',
+                                                            subtitle: `${(filteredStats.all || []).length} Total Campaigns | ${new Date().toLocaleDateString()}`,
+                                                            stats: {
+                                                                'In Progress': (filteredStats.inProgressFlights || []).length,
+                                                                'Upcoming': (filteredStats.upcoming || []).length,
+                                                                'Installed': (filteredStats.fullyInstalledThisWeek || []).length,
+                                                                'Delayed': (filteredStats.delayedFlights || []).length
+                                                            },
+                                                            filename: `Weekly_Summary_${new Date().toISOString().split('T')[0]}.pdf`
+                                                        })}
+                                                        className="text-sm flex items-center gap-2 text-red-600 hover:text-red-800 font-medium transition-colors bg-red-50 px-3 py-1.5 rounded-lg"
+                                                    >
+                                                        <Icon name="FileText" size={16} /> Export PDF
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setIsCustomizeModalOpen(true)}
                                                         className="text-sm flex items-center gap-2 text-blue-600 hover:text-blue-800 font-medium transition-colors"
                                                     >
                                                         <Icon name="Settings" size={16} /> Customize
