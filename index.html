@@ -259,7 +259,7 @@
     <script type="text/babel" src="availability.js" data-presets="react"></script>
     <script type="text/babel" src="canvasGearSidebar.js" data-presets="react"></script>
     <script type="text/babel" src="detailModal.js" data-presets="react"></script>
-    <script type="text/babel" src="digestModal.js" data-presets="react"></script>
+    <!-- digestModal.js is lazy-loaded on demand - see loadDigestModal() -->
     <script type="text/babel" src="riskCommandCenter.js" data-presets="react"></script>
     <script type="text/babel" src="materialReceivers.js" data-presets="react"></script>
     <script type="text/babel" src="popGallery.js" data-presets="react"></script>
@@ -5212,8 +5212,32 @@
                 localStorage.setItem('stap_custom_widgets', JSON.stringify(customWidgets));
             }, [customWidgets]);
             
-            // NEW: Digest Modal State
+            // NEW: Digest Modal State (Lazy-loaded)
             const [isDigestModalOpen, setIsDigestModalOpen] = useState(false);
+            const [digestModalLoaded, setDigestModalLoaded] = useState(false);
+            const [digestModalLoading, setDigestModalLoading] = useState(false);
+
+            // Lazy load digestModal.js only when needed
+            const openDigestModal = async () => {
+                if (!digestModalLoaded && !digestModalLoading) {
+                    setDigestModalLoading(true);
+                    try {
+                        // Fetch and compile the script with Babel
+                        const response = await fetch('digestModal.js');
+                        const code = await response.text();
+                        const compiled = Babel.transform(code, { presets: ['react'] }).code;
+                        const script = document.createElement('script');
+                        script.textContent = compiled;
+                        document.head.appendChild(script);
+                        setDigestModalLoaded(true);
+                        console.log('✅ digestModal.js lazy-loaded');
+                    } catch (err) {
+                        console.error('Failed to load digestModal.js:', err);
+                    }
+                    setDigestModalLoading(false);
+                }
+                setIsDigestModalOpen(true);
+            };
 
             // AI Pipeline Insight State
             const [pipelineInsight, setPipelineInsight] = useState('');
@@ -6883,7 +6907,7 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                         view={view}
                         setView={setView}
                         onReset={handleResetData}
-                        onOpenDigest={() => setIsDigestModalOpen(true)}
+                        onOpenDigest={openDigestModal}
                         onResetEmailLogs={handleResetEmailLogs}
                         onOpenSheetSettings={() => setShowSheetSettings(true)}
                         onLogout={onLogout}
@@ -6919,13 +6943,24 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                         onEditWidget={(widget) => { setEditingWidget(widget); setIsCustomWidgetModalOpen(true); }}
                         onDeleteWidget={(id) => { if(confirm('Delete this widget?')) setCustomWidgets(prev => prev.filter(w => w.id !== id)); }}
                     />
-                    <DigestModal 
-                        isOpen={isDigestModalOpen} 
-                        onClose={() => setIsDigestModalOpen(false)}
-                        processedData={processedData}
-                        filterOptions={filterOptions}
-                        currentMarket={marketFilters.length > 0 ? marketFilters[0] : 'Los Angeles, CA'}
-                    />
+                    {/* Digest Modal - Lazy loaded */}
+                    {digestModalLoading && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                            <div className="bg-white rounded-xl p-6 flex items-center gap-3">
+                                <div className="animate-spin w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+                                <span className="text-gray-700">Loading Daily Digest...</span>
+                            </div>
+                        </div>
+                    )}
+                    {digestModalLoaded && (
+                        <DigestModal
+                            isOpen={isDigestModalOpen}
+                            onClose={() => setIsDigestModalOpen(false)}
+                            processedData={processedData}
+                            filterOptions={filterOptions}
+                            currentMarket={marketFilters.length > 0 ? marketFilters[0] : 'Los Angeles, CA'}
+                        />
+                    )}
                     <CustomWidgetModal
                         isOpen={isCustomWidgetModalOpen}
                         onClose={() => { setIsCustomWidgetModalOpen(false); setEditingWidget(null); }}
