@@ -7544,24 +7544,24 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                                             data={filteredData} 
                                             title={
                                                 // Show view-specific title, add filter indicator if filters active
-                                                view === 'dashboard' ? ((marketFilters.length > 0 || productFilters.length > 0) ? 'Filtered Results 🔍' : 'Recent Activity 📅') :
+                                                view === 'dashboard' ? ((marketFilters.length > 0 || productFilters.length > 0) ? 'Filtered Results' : 'Recent Activity') :
                                                 view === 'thisWeek' ? 'Scheduled This Week' :
                                                 view === 'nextMonth' ? 'Scheduled Next Month' :
-                                                view === 'upcoming' ? 'Upcoming (Next 7 Days) 🌤️' :
-                                                view === 'recentInstalls' ? 'Installed ✅ (Last 30 Days)' :
-                                                view === 'activeInstalls' ? 'Active Installs 🔨 (Last 30 Days)' :
+                                                view === 'upcoming' ? 'Upcoming (Next 7 Days)' :
+                                                view === 'recentInstalls' ? 'Installed (Last 30 Days)' :
+                                                view === 'activeInstalls' ? 'Active Installs (Last 30 Days)' :
                                                 view === 'history' ? 'Install History (6 Months)' :
                                                 view === 'lostOpportunities' ? 'Lost Opportunities' :
                                                 view === 'specialMedia' ? 'Specialty Media Pipeline' :
-                                                view === 'inProgressFlights' ? 'In-Progress Flights 🚀 (Material Ready - Last 4 Weeks)' :
-                                                view === 'delayedFlights' ? 'Delayed / Overdue 🔥 (Last 3 Weeks)' :
-                                                view === 'onHoldCampaigns' ? 'On Hold Campaigns ⏸️' :
-                                                view === 'fullyInstalledThisWeek' ? 'Installed This Week 🥇' :
-                                                view === 'rotations' ? 'Rotations 🔁' :
-                                                view === 'materialReadyFuture' ? 'Material Ready 📦' :
-                                                view === 'expiredFlights' ? `Expired Flights 💡 (${processedData.expiredRangeStart} - ${processedData.expiredRangeEnd})` :
-                                                view === 'pastDue' ? 'Past Due ⚠️ (Older Backlog 3+ Weeks)' :
-                                                view.startsWith('custom_') ? (customWidgets.find(w => w.id === view)?.title || 'Custom Widget') + ' ⭐' :
+                                                view === 'inProgressFlights' ? 'In-Progress Flights (Material Ready - Last 4 Weeks)' :
+                                                view === 'delayedFlights' ? 'Delayed / Overdue (Last 3 Weeks)' :
+                                                view === 'onHoldCampaigns' ? 'On Hold Campaigns' :
+                                                view === 'fullyInstalledThisWeek' ? 'Installed This Week' :
+                                                view === 'rotations' ? 'Rotations' :
+                                                view === 'materialReadyFuture' ? 'Material Ready' :
+                                                view === 'expiredFlights' ? `Expired Flights (${processedData.expiredRangeStart} - ${processedData.expiredRangeEnd})` :
+                                                view === 'pastDue' ? 'Past Due (Older Backlog 3+ Weeks)' :
+                                                view.startsWith('custom_') ? (customWidgets.find(w => w.id === view)?.title || 'Custom Widget') :
                                                 'Campaigns'
                                             } 
                                             onRowClick={setSelectedItem}
