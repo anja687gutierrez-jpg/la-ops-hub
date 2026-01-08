@@ -846,17 +846,17 @@
 <body>
     <div class="page">
         <div class="header">
-            <h1>📊 ${proposalName}</h1>
+            <h1>${proposalName}</h1>
             <div class="subtitle">${clientName ? `Prepared for ${clientName}` : 'OOH Impressions Analysis'}</div>
             <div class="meta">
-                <span>📅 ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
-                <span>⏱️ ${weeks}-Week Campaign</span>
-                <span>📍 ${selectedMarkets.length} Market${selectedMarkets.length > 1 ? 's' : ''}</span>
+                <span>Date: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                <span>Duration: ${weeks}-Week Campaign</span>
+                <span>Markets: ${selectedMarkets.length} Market${selectedMarkets.length > 1 ? 's' : ''}</span>
             </div>
         </div>
 
         <div class="section">
-            <div class="section-title">📈 Campaign Summary</div>
+            <div class="section-title">Campaign Summary</div>
             <div class="stats-grid">
                 <div class="stat-card">
                     <div class="stat-value">${formatNumber(campaignSummary.total || 0)}</div>
@@ -878,19 +878,19 @@
         </div>
 
         <div class="section">
-            <div class="section-title">📦 Product Format Breakdown</div>
+            <div class="section-title">Product Format Breakdown</div>
             <div class="format-grid">
                 ${Object.entries(PRODUCT_FORMATS).map(([name, data]) => `
                     <div class="format-card" style="border-color: ${data.color};">
-                        <div class="format-name">${data.icon} ${name}</div>
-                        <div class="format-stats">${formatNumber(data.weekly)} weekly/unit • ${data.tier}</div>
+                        <div class="format-name">${name}</div>
+                        <div class="format-stats">${formatNumber(data.weekly)} weekly/unit - ${data.tier}</div>
                     </div>
                 `).join('')}
             </div>
         </div>
 
         <div class="section">
-            <div class="section-title">📍 Regional Coverage (LA Metro)</div>
+            <div class="section-title">Regional Coverage (LA Metro)</div>
             ${sortedRegions.slice(0, 10).map(region => {
                 const width = (region.totalPop / totalRegionPop) * 100;
                 return `
@@ -905,7 +905,7 @@
         </div>
 
         <div class="highlight">
-            <strong>💡 Methodology:</strong> Impressions estimates are based on Geopath-equivalent methodology using US Census 2022 population data,
+            <strong>Methodology:</strong> Impressions estimates are based on Geopath-equivalent methodology using US Census 2022 population data,
             population density calculations, and industry-standard visibility multipliers per product format.
         </div>
 
