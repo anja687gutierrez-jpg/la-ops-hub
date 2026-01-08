@@ -1138,16 +1138,16 @@
                         React.createElement('button', {
                             key: 'reset',
                             onClick: () => {
-                                if (confirm('Reset tour progress? This will start the guide from the beginning.')) {
-                                    localStorage.removeItem('stap_demo_progress');
+                                if (confirm('Restart demo tour? This will reset progress and show the welcome guide.')) {
+                                    // Reset local state
                                     setCompletedSteps({});
                                     setCurrentStep(0);
-                                    // Reopen the welcome modal
+                                    // Call parent's unified restart function
                                     if (onRestart) onRestart();
                                 }
                             },
                             className: 'flex-shrink-0 px-2 py-1.5 rounded-lg text-center transition-all bg-white border border-gray-200 hover:border-red-300 hover:bg-red-50',
-                            title: 'Reset Tour'
+                            title: 'Restart Tour'
                         }, [
                             React.createElement('div', { key: 'icon', className: 'text-sm leading-none' }, '↺'),
                             React.createElement('div', {

@@ -5128,6 +5128,21 @@
             const [showDemoTips, setShowDemoTips] = useState(isDemoMode);
             const [isLiveMode, setIsLiveMode] = useState(false); // Set to true when real data is uploaded
             const [showWelcomeModal, setShowWelcomeModal] = useState(isDemoMode); // Show welcome on first demo entry
+
+            // Unified function to restart the demo tour completely
+            const restartDemoTour = () => {
+                // Clear all demo progress from localStorage
+                localStorage.removeItem('stap_demo_progress');
+                // Reset to demo mode (not live)
+                setIsLiveMode(false);
+                // Enable demo tips
+                setShowDemoTips(true);
+                // Navigate to dashboard
+                setView('dashboard');
+                // Open welcome modal
+                setShowWelcomeModal(true);
+                console.log('🎓 Demo tour restarted');
+            };
             
             // Material Receivers data (lifted to parent to persist across navigation)
             // Initialize from localStorage if available
@@ -7718,9 +7733,8 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                                 <div className="flex items-center gap-2">
                                     <button
                                         onClick={() => {
-                                            if (confirm('Restart demo tour? This will reset progress and show the welcome guide.')) {
-                                                localStorage.removeItem('stap_demo_progress');
-                                                setShowWelcomeModal(true);
+                                            if (confirm('Restart demo tour? This will reset progress, exit live mode, and show the welcome guide.')) {
+                                                restartDemoTour();
                                             }
                                         }}
                                         className="px-3 py-2 bg-white text-gray-600 border border-gray-300 rounded-full text-xs font-bold flex items-center gap-2 shadow-lg hover:bg-gray-50 transition-all"
@@ -7753,7 +7767,7 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                             onClose={() => setShowDemoTips(false)}
                             currentView={view}
                             onNavigate={(newView) => setView(newView)}
-                            onRestart={() => setShowWelcomeModal(true)}
+                            onRestart={restartDemoTour}
                         />
                     )}
                 </div>
