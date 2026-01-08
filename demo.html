@@ -7381,12 +7381,16 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                             ) : view === 'availability' ? (
                                 <AvailabilityComponent allData={processedData.all} />
                             ) : view === 'impressions' ? (
-                                <ImpressionsDashboard
-                                    campaignData={processedData?.all || []}
-                                    proposalName="OOH Impressions Analysis"
-                                    clientName=""
-                                    showExport={true}
-                                />
+                                ImpressionsDashboard ? (
+                                    <ImpressionsDashboard
+                                        campaignData={processedData?.all || []}
+                                        proposalName="OOH Impressions Analysis"
+                                        clientName=""
+                                        showExport={true}
+                                    />
+                                ) : (
+                                    <div className="p-8 text-center text-gray-500">Loading Impressions Dashboard...</div>
+                                )
                             ) : (
                                 <>
                                     {/* --- DASHBOARD VIEW --- */}
