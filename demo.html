@@ -7716,6 +7716,18 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                                 </button>
                             ) : (
                                 <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => {
+                                            if (confirm('Restart demo tour? This will reset progress and show the welcome guide.')) {
+                                                localStorage.removeItem('stap_demo_progress');
+                                                setShowWelcomeModal(true);
+                                            }
+                                        }}
+                                        className="px-3 py-2 bg-white text-gray-600 border border-gray-300 rounded-full text-xs font-bold flex items-center gap-2 shadow-lg hover:bg-gray-50 transition-all"
+                                        title="Restart Demo Tour"
+                                    >
+                                        <span>↺</span> Restart Tour
+                                    </button>
                                     <span className="px-3 py-2 bg-green-500 text-white rounded-full text-xs font-bold flex items-center gap-2 shadow-lg">
                                         <span>✓</span> Live
                                     </span>
