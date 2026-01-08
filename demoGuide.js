@@ -539,7 +539,7 @@
     // ===================================================================================================
     // DEMO GUIDE PANEL - Interactive step-by-step instructions
     // ===================================================================================================
-    const DemoGuidePanel = ({ isOpen, onClose, currentView, onNavigate, Icon }) => {
+    const DemoGuidePanel = ({ isOpen, onClose, currentView, onNavigate, onRestart, Icon }) => {
         const [isMinimized, setIsMinimized] = useState(false);
         const [currentStep, setCurrentStep] = useState(0);
         const [showConfetti, setShowConfetti] = useState(false);
@@ -1142,6 +1142,8 @@
                                     localStorage.removeItem('stap_demo_progress');
                                     setCompletedSteps({});
                                     setCurrentStep(0);
+                                    // Reopen the welcome modal
+                                    if (onRestart) onRestart();
                                 }
                             },
                             className: 'flex-shrink-0 px-2 py-1.5 rounded-lg text-center transition-all bg-white border border-gray-200 hover:border-red-300 hover:bg-red-50',

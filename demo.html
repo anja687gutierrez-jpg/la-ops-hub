@@ -7736,11 +7736,12 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                     
                     {/* Floating Demo Guide Panel - Only show in Demo Mode when NOT in live mode */}
                     {isDemoMode && !isLiveMode && !showWelcomeModal && (
-                        <DemoGuidePanel 
-                            isOpen={showDemoTips} 
+                        <DemoGuidePanel
+                            isOpen={showDemoTips}
                             onClose={() => setShowDemoTips(false)}
                             currentView={view}
                             onNavigate={(newView) => setView(newView)}
+                            onRestart={() => setShowWelcomeModal(true)}
                         />
                     )}
                 </div>
