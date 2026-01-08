@@ -1563,7 +1563,7 @@
                         <div className="flex items-center gap-2">
                             <span className="text-amber-600 text-lg">💡</span>
                             <p className="text-sm text-amber-800">
-                                <strong>Reminder:</strong> Adjust the <span className="font-bold text-amber-900">Inventory Total</span> below if needed for accurate availability calculations.
+                                <strong>Reminder:</strong> Adjust the <span className="font-bold text-amber-900">Inventory Total</span> below if needed (default: <span className="font-bold">9,150</span>).
                             </p>
                         </div>
                         <button
