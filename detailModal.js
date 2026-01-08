@@ -175,7 +175,10 @@
                         ${designCodes.length > 0 ? `<tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Designs</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${designCodes.join(', ')}</td></tr>` : ''}
                         <tr><td style='padding:8px 10px; color:#666;'>Sales Owner</td><td style='padding:8px 10px;'>${item.owner || 'N/A'}</td></tr>
                     </table>
-                    ${customPhotosLink ? `<p style='margin:15px 0 0;'><a href="${customPhotosLink}" style="background:#28a745; color:white; padding:10px 20px; text-decoration:none; border-radius:4px; display:inline-block;">📸 View Photos</a></p>` : ''}
+                    <div style='margin:15px 0 0; display:flex; gap:10px;'>
+                        ${customPhotosLink ? `<a href="${customPhotosLink}" style="background:#28a745; color:white; padding:10px 20px; text-decoration:none; border-radius:4px; display:inline-block;">📸 View Photos</a>` : ''}
+                        ${customReceiverLink ? `<a href="${customReceiverLink}" style="color:#28a745; padding:10px 20px; text-decoration:none; border:1px solid #28a745; border-radius:4px; display:inline-block;">📄 Receiver PDF</a>` : ''}
+                    </div>
                 </div>
             </div>`;
         };
@@ -273,6 +276,7 @@
                         ${designCodes.length > 0 ? `<tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Designs</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${designCodes.join(', ')}</td></tr>` : ''}
                         <tr><td style='padding:8px 10px; color:#666;'>Sales Owner</td><td style='padding:8px 10px;'>${item.owner || 'N/A'}</td></tr>
                     </table>
+                    ${customPhotosLink ? `<p style='margin:15px 0 0;'><a href="${customPhotosLink}" style="background:#6c757d; color:white; padding:10px 20px; text-decoration:none; border-radius:4px; display:inline-block;">📸 View Removal Photos</a></p>` : ''}
                 </div>
             </div>`;
         };
@@ -335,7 +339,10 @@
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Product Dates</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.date || 'N/A'} — ${item.endDate || 'TBD'}</td></tr>
                         <tr><td style='padding:8px 10px; color:#666;'>Sales Owner</td><td style='padding:8px 10px;'>${item.owner || 'N/A'}</td></tr>
                     </table>
-                    ${customReceiverLink ? `<p style='margin:15px 0 0;'><a href="${customReceiverLink}" style="color:#6f42c1;">📄 View Receiver PDF</a></p>` : ''}
+                    <div style='margin:15px 0 0; display:flex; gap:10px;'>
+                        ${customPhotosLink ? `<a href="${customPhotosLink}" style="background:#6f42c1; color:white; padding:10px 20px; text-decoration:none; border-radius:4px; display:inline-block;">📸 View Photos</a>` : ''}
+                        ${customReceiverLink ? `<a href="${customReceiverLink}" style="color:#6f42c1; padding:10px 20px; text-decoration:none; border:1px solid #6f42c1; border-radius:4px; display:inline-block;">📄 Receiver PDF</a>` : ''}
+                    </div>
                 </div>
             </div>`;
         };
@@ -389,7 +396,7 @@
             else if (mode === 'delay') setEmailDraft(generateDelayTemplate());
             else if (mode === 'maintenance') setEmailDraft(generateMaintenanceTemplate());
             else if (mode === 'removal') setEmailDraft(generateRemovalTemplate());
-        }, [customQty, emailInstalledQty, selectedTemplate, item, materialBreakdown, customDesigns, customReceiverLink, issueReason, newEta, missingType, deadlineDate]);
+        }, [customQty, emailInstalledQty, selectedTemplate, item, materialBreakdown, customDesigns, customPhotosLink, customReceiverLink, issueReason, newEta, missingType, deadlineDate]);
 
         const handleCopyToWebmail = async () => {
             try {
