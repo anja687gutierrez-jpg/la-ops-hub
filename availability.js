@@ -157,7 +157,16 @@
         // Popup state for campaign details (click to open, click outside to close)
         const [expandedRowId, setExpandedRowId] = useState(null);
         const [isFullscreen, setIsFullscreen] = useState(false);
-        
+        const [showInventoryReminder, setShowInventoryReminder] = useState(true);
+
+        // Show inventory reminder on component mount
+        useEffect(() => {
+            const timer = setTimeout(() => {
+                setShowInventoryReminder(false);
+            }, 8000); // Auto-dismiss after 8 seconds
+            return () => clearTimeout(timer);
+        }, []);
+
         // Handle escape key to exit fullscreen
         useEffect(() => {
             const handleEscape = (e) => {
@@ -1548,6 +1557,25 @@
 
         return (
             <div className={`bg-white rounded-xl shadow-sm border border-gray-200 ${isFullscreen ? 'fixed inset-0 z-50 rounded-none overflow-auto' : ''}`}>
+                {/* Inventory Reminder Notification */}
+                {showInventoryReminder && (
+                    <div className="mx-4 mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center justify-between animate-fade-in">
+                        <div className="flex items-center gap-2">
+                            <span className="text-amber-600 text-lg">💡</span>
+                            <p className="text-sm text-amber-800">
+                                <strong>Reminder:</strong> Adjust the <span className="font-bold text-amber-900">Inventory Total</span> below if needed for accurate availability calculations.
+                            </p>
+                        </div>
+                        <button
+                            onClick={() => setShowInventoryReminder(false)}
+                            className="text-amber-600 hover:text-amber-800 p-1"
+                            title="Dismiss"
+                        >
+                            <Icon name="X" size={16} />
+                        </button>
+                    </div>
+                )}
+
                 {/* HEADER with View Toggle */}
                 <div className="p-4 border-b border-gray-100">
                     <div className="flex justify-between items-center">
