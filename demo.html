@@ -1542,21 +1542,25 @@
         };
 
         // Find best matching column with fuzzy logic
-        const smartFindColumn = (headers, targetField, minScore = 0.6) => {
+        // usedHeaders: Set of headers already claimed by other fields (to prevent collisions)
+        const smartFindColumn = (headers, targetField, minScore = 0.6, usedHeaders = new Set()) => {
             const synonyms = COLUMN_SYNONYMS[targetField] || [targetField];
             let bestMatch = null;
             let bestScore = 0;
 
             for (const header of headers) {
+                // Skip headers already claimed by other fields
+                if (usedHeaders.has(header)) continue;
+
                 const headerClean = header.toLowerCase().trim();
-                
+
                 for (const synonym of synonyms) {
                     // Exact match (highest priority)
                     if (headerClean === synonym.toLowerCase()) {
                         return header;
                     }
-                    
-                    // Check similarity
+
+                    // Check similarity (raised threshold to 0.7 to reduce false positives)
                     const score = similarityScore(headerClean, synonym);
                     if (score > bestScore && score >= minScore) {
                         bestScore = score;
@@ -1572,16 +1576,18 @@
         const buildSmartColumnMap = (headers) => {
             const colMap = {};
             const mappingResults = []; // Track results for user feedback
-            
+            const usedHeaders = new Set(); // Track claimed headers to prevent collisions
+
             // Field mappings with clear distinction between Product (flight) and Program (contract) dates
+            // IMPORTANT: Order matters! More specific/critical fields should be matched first
             const fieldMappings = [
                 { field: 'id', target: 'campaign_id', fallback: 'Campaign Number', required: true, description: 'Unique campaign identifier' },
+                { field: 'owner', target: 'owner', fallback: 'Opportunity Owner', required: false, description: 'Sales rep/owner' },
+                { field: 'advertiser', target: 'advertiser', fallback: 'Advertiser', required: true, description: 'Client/Advertiser name' },
                 { field: 'startDate', target: 'start_date', fallback: 'Product Start Date', required: true, description: 'Product/Flight start (for rotations/copy changes)' },
                 { field: 'productEndDate', target: 'product_end_date', fallback: 'Product End Date', required: false, description: 'Product/Flight end date' },
                 { field: 'programEndDate', target: 'program_end_date', fallback: 'Program End Date', required: false, description: 'Program/Contract end date' },
                 { field: 'market', target: 'market', fallback: 'Market', required: false, description: 'Market/DMA' },
-                { field: 'owner', target: 'owner', fallback: 'Opportunity Owner', required: false, description: 'Sales rep/owner' },
-                { field: 'advertiser', target: 'advertiser', fallback: 'Advertiser', required: true, description: 'Client/Advertiser name' },
                 { field: 'campaign', target: 'campaign', fallback: 'Campaign', required: false, description: 'Campaign name' },
                 { field: 'product', target: 'product', fallback: 'Product', required: false, description: 'Media type/Product' },
                 { field: 'stage', target: 'stage', fallback: 'Inventory Opportunity Stage', required: true, description: 'Workflow stage/status' },
@@ -1595,11 +1601,17 @@
             ];
 
             fieldMappings.forEach(({ field, target, fallback, required }) => {
-                const match = smartFindColumn(headers, target);
+                // Pass usedHeaders to prevent column collisions
+                const match = smartFindColumn(headers, target, 0.6, usedHeaders);
                 const found = match && headers.includes(match);
-                
+
                 colMap[field] = match || fallback;
-                
+
+                // Claim this header so other fields can't use it
+                if (match) {
+                    usedHeaders.add(match);
+                }
+
                 mappingResults.push({
                     field,
                     mappedTo: match || fallback,

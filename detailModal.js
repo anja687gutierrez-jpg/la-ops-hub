@@ -278,7 +278,9 @@
         };
 
         const generateMaterialReceivedTemplate = () => {
-            const breakdownRows = materialBreakdown.map(row => {
+            // Bug 3 fix: Only include rows that have actual data (code or qty)
+            const validRows = materialBreakdown.filter(row => row.code || row.qty);
+            const breakdownRows = validRows.map(row => {
                 const codeDisplay = row.link
                     ? `<a href="${row.link}" style="color: #6f42c1; font-weight: bold; text-decoration: underline;" target="_blank">${row.code || 'N/A'}</a>`
                     : (row.code || 'N/A');
@@ -320,7 +322,7 @@
                         <span style="font-size:12px; color:#666;">Received: ${currentTotal} / Required: ${customQty || '0'}</span>
                     </p>
                     ${noOverageNote}
-                    ${breakdownRows ? `<table style='width:100%; font-size:12px; border-collapse:collapse; margin:0 0 15px; background:#faf8ff;'>
+                    ${validRows.length > 0 ? `<table style='width:100%; font-size:12px; border-collapse:collapse; margin:0 0 15px; background:#faf8ff;'>
                         <tr style='background:#6f42c1; color:white;'><th style='padding:8px 10px; text-align:left;'>Design Code</th><th style='padding:8px 10px; text-align:right;'>Qty</th></tr>
                         ${breakdownRows}
                     </table>` : ''}
@@ -333,6 +335,7 @@
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Product Dates</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.date || 'N/A'} — ${item.endDate || 'TBD'}</td></tr>
                         <tr><td style='padding:8px 10px; color:#666;'>Sales Owner</td><td style='padding:8px 10px;'>${item.owner || 'N/A'}</td></tr>
                     </table>
+                    ${customReceiverLink ? `<p style='margin:15px 0 0;'><a href="${customReceiverLink}" style="color:#6f42c1;">📄 View Receiver PDF</a></p>` : ''}
                 </div>
             </div>`;
         };
@@ -386,7 +389,7 @@
             else if (mode === 'delay') setEmailDraft(generateDelayTemplate());
             else if (mode === 'maintenance') setEmailDraft(generateMaintenanceTemplate());
             else if (mode === 'removal') setEmailDraft(generateRemovalTemplate());
-        }, [customQty, emailInstalledQty, selectedTemplate, item, materialBreakdown]);
+        }, [customQty, emailInstalledQty, selectedTemplate, item, materialBreakdown, customDesigns, customReceiverLink, issueReason, newEta, missingType, deadlineDate]);
 
         const handleCopyToWebmail = async () => {
             try {
@@ -676,9 +679,22 @@
                                 {/* Inventory Breakdown or Standard Inputs */}
                                 {selectedTemplate === 'material_received' ? (
                                     <div className="mb-4 bg-gray-50 border rounded p-3">
+                                        {/* Required Qty and Media Type - Bug 1 & 5 fix */}
+                                        <div className="grid grid-cols-2 gap-3 mb-3 pb-3 border-b border-gray-200">
+                                            <div>
+                                                <label className="text-xs font-bold text-purple-600">Required Qty</label>
+                                                <input type="text" value={customQty} onChange={(e)=>setCustomQty(e.target.value)} className="w-full text-sm border border-purple-300 rounded px-2 py-1"/>
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-bold text-gray-500">Media Type</label>
+                                                <input type="text" value={customDesigns} onChange={(e)=>setCustomDesigns(e.target.value)} className="w-full text-sm border rounded px-2 py-1"/>
+                                            </div>
+                                        </div>
                                         <div className="flex justify-between items-center mb-2">
                                             <label className="text-xs font-bold text-gray-500">Inventory Breakdown</label>
-                                            <span className="text-xs font-bold text-gray-400">Total: {getInventoryStatus().currentTotal}</span>
+                                            <span className={`text-xs font-bold ${getInventoryStatus().isSufficient ? 'text-green-600' : 'text-red-500'}`}>
+                                                Received: {getInventoryStatus().currentTotal} / {customQty || 0}
+                                            </span>
                                         </div>
                                         <div className="space-y-2 mb-2">
                                             {materialBreakdown.map((row, idx) => (
@@ -719,7 +735,7 @@
                                             </label>
                                             <input type="text" value={emailInstalledQty} onChange={(e)=>setEmailInstalledQty(e.target.value)} className="w-full text-sm border border-green-300 rounded px-2 py-1"/>
                                         </div>
-                                        <div><label className="text-xs font-bold text-gray-500">Media Type</label><input type="text" value={customDesigns} readOnly className="w-full text-sm border rounded px-2 py-1 bg-gray-50 text-gray-600 cursor-not-allowed"/></div>
+                                        <div><label className="text-xs font-bold text-gray-500">Media Type</label><input type="text" value={customDesigns} onChange={(e)=>setCustomDesigns(e.target.value)} className="w-full text-sm border rounded px-2 py-1"/></div>
                                     </div>
                                 )}
 
