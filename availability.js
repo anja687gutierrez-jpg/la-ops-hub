@@ -13,6 +13,9 @@
     const Icon = window.STAP_Icon || (({ name }) => React.createElement('span', { title: name }, '?'));
 
     const AvailabilityComponent = ({ allData }) => {
+        // Get LA_ZIP_DATA lazily inside component (ensures impressionsDashboard.js is loaded)
+        const LA_ZIP_DATA = window.STAPImpressions?.LA_ZIP_DATA || {};
+
         // Helper to ensure we have a valid Date object (handles localStorage string serialization)
         const ensureDate = (dateValue) => {
             if (!dateValue) return null;
