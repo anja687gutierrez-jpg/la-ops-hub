@@ -31,7 +31,11 @@
     <!-- Leaflet Map (FREE - OpenStreetMap) -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    
+
+    <!-- jsPDF for PDF export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.1/jspdf.plugin.autotable.min.js"></script>
+
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
     <style>
@@ -1192,7 +1196,7 @@
 
         const parseDate = (dateStr) => {
             if (!dateStr) return null;
-            const clean = dateStr.trim().split(' ')[0]; 
+            const clean = dateStr.trim().split(' ')[0];
 
             // Handle MM/DD/YYYY (Standard US CSV)
             const usParts = clean.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
@@ -1210,6 +1214,212 @@
 
             const d = new Date(dateStr);
             return isNaN(d) ? null : d;
+        };
+
+        // --- PDF REPORT GENERATION UTILITIES ---
+        // Strip emojis and special characters for clean export
+        const stripEmojis = (str) => {
+            if (typeof str !== 'string') return str;
+            return str
+                .replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2300}-\u{23FF}]|[\u{2B50}]|[\u{1FA00}-\u{1FAFF}]|[\u{FE00}-\u{FE0F}]|[\u200D]/gu, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+        };
+
+        const generatePDFReport = (data, options = {}) => {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({
+                orientation: options.orientation || 'landscape',
+                unit: 'mm',
+                format: 'letter'
+            });
+
+            const title = stripEmojis(options.title || 'Operations Report');
+            const subtitle = stripEmojis(options.subtitle || `Generated ${new Date().toLocaleDateString()}`);
+            const pageWidth = doc.internal.pageSize.getWidth();
+            const pageHeight = doc.internal.pageSize.getHeight();
+
+            // Header
+            doc.setFillColor(30, 41, 59); // slate-800
+            doc.rect(0, 0, pageWidth, 25, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(18);
+            doc.setFont('helvetica', 'bold');
+            doc.text('VECTOR MEDIA', 10, 12);
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'normal');
+            doc.text('Operations Portal', 10, 18);
+
+            // Title section
+            doc.setTextColor(30, 41, 59);
+            doc.setFontSize(16);
+            doc.setFont('helvetica', 'bold');
+            doc.text(title, 10, 35);
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(100, 116, 139);
+            doc.text(subtitle, 10, 42);
+
+            // Summary stats if provided
+            if (options.stats) {
+                let xPos = pageWidth - 100;
+                doc.setFontSize(9);
+                Object.entries(options.stats).forEach(([label, value], idx) => {
+                    doc.setTextColor(100, 116, 139);
+                    doc.text(label + ':', xPos, 33 + (idx * 6));
+                    doc.setTextColor(30, 41, 59);
+                    doc.setFont('helvetica', 'bold');
+                    doc.text(String(value), xPos + 35, 33 + (idx * 6));
+                    doc.setFont('helvetica', 'normal');
+                });
+            }
+
+            // Table
+            if (data && data.length > 0) {
+                const columns = options.columns || [
+                    { header: 'Date', dataKey: 'date' },
+                    { header: 'ID', dataKey: 'id' },
+                    { header: 'Advertiser', dataKey: 'advertiser' },
+                    { header: 'Campaign', dataKey: 'name' },
+                    { header: 'Product', dataKey: 'product' },
+                    { header: 'Stage', dataKey: 'stage' },
+                    { header: 'Progress', dataKey: 'progress' }
+                ];
+
+                doc.autoTable({
+                    startY: 48,
+                    head: [columns.map(c => c.header)],
+                    body: data.map(row => columns.map(c => {
+                        let val = row[c.dataKey] || '-';
+                        val = stripEmojis(String(val));
+                        if (typeof val === 'string' && val.length > 30) {
+                            val = val.substring(0, 27) + '...';
+                        }
+                        return val;
+                    })),
+                    theme: 'grid',
+                    headStyles: {
+                        fillColor: [51, 65, 85],
+                        textColor: [255, 255, 255],
+                        fontSize: 8,
+                        fontStyle: 'bold',
+                        halign: 'left'
+                    },
+                    bodyStyles: {
+                        fontSize: 7,
+                        textColor: [51, 65, 85],
+                        cellPadding: 2
+                    },
+                    alternateRowStyles: {
+                        fillColor: [248, 250, 252]
+                    },
+                    columnStyles: options.columnStyles || {
+                        0: { cellWidth: 22 },
+                        1: { cellWidth: 25 },
+                        2: { cellWidth: 35 },
+                        3: { cellWidth: 45 },
+                        4: { cellWidth: 35 },
+                        5: { cellWidth: 30 },
+                        6: { cellWidth: 20 }
+                    },
+                    margin: { left: 10, right: 10 },
+                    didDrawPage: (hookData) => {
+                        const pageNum = doc.internal.getCurrentPageInfo().pageNumber;
+                        doc.setFontSize(8);
+                        doc.setTextColor(150);
+                        doc.text(`Page ${pageNum}`, pageWidth - 25, pageHeight - 10);
+                        doc.text('LA STAP Operations Portal - DEMO', 10, pageHeight - 10);
+                    }
+                });
+            }
+
+            const filename = options.filename || `Report_${new Date().toISOString().split('T')[0]}.pdf`;
+            doc.save(filename);
+            return true;
+        };
+
+        // Quick PDF export for different report types
+        const exportToPDF = (reportType, data, customOptions = {}) => {
+            const reportConfigs = {
+                installations: {
+                    title: 'Master Installation Report',
+                    subtitle: `${data.length} Active Campaigns | ${new Date().toLocaleDateString()}`,
+                    columns: [
+                        { header: 'Product Start', dataKey: 'date' },
+                        { header: 'Campaign ID', dataKey: 'id' },
+                        { header: 'Market', dataKey: 'market' },
+                        { header: 'Advertiser', dataKey: 'advertiser' },
+                        { header: 'Campaign', dataKey: 'name' },
+                        { header: 'Product', dataKey: 'product' },
+                        { header: 'Stage', dataKey: 'stage' },
+                        { header: 'Progress', dataKey: 'progress' }
+                    ],
+                    columnStyles: {
+                        0: { cellWidth: 20 },
+                        1: { cellWidth: 22 },
+                        2: { cellWidth: 25 },
+                        3: { cellWidth: 30 },
+                        4: { cellWidth: 40 },
+                        5: { cellWidth: 30 },
+                        6: { cellWidth: 25 },
+                        7: { cellWidth: 18 }
+                    },
+                    filename: `Installations_${new Date().toISOString().split('T')[0]}.pdf`
+                },
+                campaigns: {
+                    title: 'Campaign Status Report',
+                    subtitle: `${data.length} Campaigns | ${new Date().toLocaleDateString()}`,
+                    columns: [
+                        { header: 'Date', dataKey: 'date' },
+                        { header: 'Advertiser', dataKey: 'advertiser' },
+                        { header: 'Campaign', dataKey: 'name' },
+                        { header: 'Product', dataKey: 'product' },
+                        { header: 'Qty', dataKey: 'quantity' },
+                        { header: 'Stage', dataKey: 'stage' }
+                    ],
+                    columnStyles: {
+                        0: { cellWidth: 25 },
+                        1: { cellWidth: 40 },
+                        2: { cellWidth: 55 },
+                        3: { cellWidth: 40 },
+                        4: { cellWidth: 15 },
+                        5: { cellWidth: 30 }
+                    },
+                    filename: `Campaigns_${new Date().toISOString().split('T')[0]}.pdf`
+                },
+                holds: {
+                    title: 'Hold Report',
+                    subtitle: `${data.length} Items on Hold | ${new Date().toLocaleDateString()}`,
+                    columns: [
+                        { header: 'Date', dataKey: 'date' },
+                        { header: 'Advertiser', dataKey: 'advertiser' },
+                        { header: 'Campaign', dataKey: 'name' },
+                        { header: 'Reason', dataKey: 'holdReason' },
+                        { header: 'Status', dataKey: 'holdStatus' }
+                    ],
+                    filename: `Holds_${new Date().toISOString().split('T')[0]}.pdf`
+                },
+                expired: {
+                    title: 'Removal Schedule',
+                    subtitle: `${data.length} Pending Removals | ${new Date().toLocaleDateString()}`,
+                    columns: [
+                        { header: 'End Date', dataKey: 'endDate' },
+                        { header: 'Advertiser', dataKey: 'advertiser' },
+                        { header: 'Campaign', dataKey: 'name' },
+                        { header: 'Product', dataKey: 'product' },
+                        { header: 'Qty', dataKey: 'quantity' }
+                    ],
+                    filename: `Removals_${new Date().toISOString().split('T')[0]}.pdf`
+                },
+                summary: {
+                    title: 'Weekly Operations Summary',
+                    orientation: 'portrait',
+                    filename: `Weekly_Summary_${new Date().toISOString().split('T')[0]}.pdf`
+                }
+            };
+
+            const config = { ...reportConfigs[reportType], ...customOptions };
+            return generatePDFReport(data, config);
         };
 
         const getStatusColor = (stage, date) => {
@@ -18662,14 +18872,29 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
 
                 // 2. Master Tracking: Everything EXCEPT Lost Opportunities and Ghosts (unless included)
                 if (baseData.installs) {
-                    categories.masterTracking = [...baseData.installs].filter(i => {
-                        // Exclude ghosts unless explicitly included
-                        if (i.isGhost && !includeGhosts) return false;
-                        // Exclude Lost Opportunities
-                        const stageLower = (i.stage || '').toLowerCase().trim();
-                        if (stageLower === 'lost opportunity' || stageLower === '- none -') return false;
-                        return true;
-                    });
+                    categories.masterTracking = [...baseData.installs]
+                        .map(item => {
+                            const newItem = { ...item };
+                            // Reconvert dates from localStorage strings to Date objects
+                            if (newItem.dateObj && !(newItem.dateObj instanceof Date)) {
+                                newItem.dateObj = new Date(newItem.dateObj);
+                            }
+                            if (newItem.endDateObj && !(newItem.endDateObj instanceof Date)) {
+                                newItem.endDateObj = new Date(newItem.endDateObj);
+                            }
+                            if (!newItem.dateObj && newItem.date) {
+                                newItem.dateObj = new Date(newItem.date);
+                            }
+                            return newItem;
+                        })
+                        .filter(i => {
+                            // Exclude ghosts unless explicitly included
+                            if (i.isGhost && !includeGhosts) return false;
+                            // Exclude Lost Opportunities
+                            const stageLower = (i.stage || '').toLowerCase().trim();
+                            if (stageLower === 'lost opportunity' || stageLower === '- none -') return false;
+                            return true;
+                        });
                     // Ensure sorting consistency
                     categories.masterTracking.sort((a,b) => b.dateObj - a.dateObj);
                 }
@@ -18925,14 +19150,25 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
 
                 // 2. Date Range Filter (Global)
                 if (dateFilter.start || dateFilter.end) {
-                    const startDate = dateFilter.start ? new Date(dateFilter.start) : null;
-                    const endDate = dateFilter.end ? new Date(dateFilter.end) : null;
+                    // Parse dates as LOCAL time (not UTC) by using yyyy/mm/dd format or manual parsing
+                    const parseLocalDate = (dateStr) => {
+                        if (!dateStr) return null;
+                        // dateStr is "YYYY-MM-DD" from input type="date"
+                        const [year, month, day] = dateStr.split('-').map(Number);
+                        return new Date(year, month - 1, day, 0, 0, 0, 0); // Local midnight
+                    };
+
+                    const startDate = parseLocalDate(dateFilter.start);
+                    const endDate = parseLocalDate(dateFilter.end);
+                    // Set end date to end of day for inclusive comparison
+                    if (endDate) endDate.setHours(23, 59, 59, 999);
+
                     // Determine which date to filter on (expired flights use End Date, others Start Date)
                     const keyToUse = view === 'expiredFlights' ? 'endDateObj' : 'dateObj';
-                    
+
                     result = result.filter(item => {
                         const itemDate = item[keyToUse];
-                        if (!itemDate) return false;
+                        if (!itemDate || isNaN(itemDate.getTime())) return false; // Skip invalid dates
                         if (startDate && itemDate < startDate) return false;
                         if (endDate && itemDate > endDate) return false;
                         return true;
@@ -19501,10 +19737,31 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                             </div>
                             
                             {/* Filter Chips Bar */}
-                            {(marketFilters.length > 0 || productFilters.length > 0 || productionFilter !== 'ALL') && (
+                            {(marketFilters.length > 0 || productFilters.length > 0 || productionFilter !== 'ALL' || dateFilter.start || dateFilter.end) && (
                                 <div className="flex items-center gap-2 flex-wrap">
                                     <span className="text-xs text-gray-500 font-medium">Active Filters:</span>
-                                    
+
+                                    {/* Date Range Chip */}
+                                    {(dateFilter.start || dateFilter.end) && (
+                                        <span
+                                            className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-medium"
+                                        >
+                                            <Icon name="Calendar" size={12} />
+                                            {dateFilter.start && dateFilter.end
+                                                ? `${new Date(dateFilter.start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${new Date(dateFilter.end).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                                                : dateFilter.start
+                                                    ? `From ${new Date(dateFilter.start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                                                    : `Until ${new Date(dateFilter.end).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                                            }
+                                            <button
+                                                onClick={() => setDateFilter({ start: '', end: '' })}
+                                                className="ml-1 hover:bg-amber-200 rounded-full p-0.5"
+                                            >
+                                                <Icon name="X" size={10} />
+                                            </button>
+                                        </span>
+                                    )}
+
                                     {/* Market Chips */}
                                     {marketFilters.map(filter => (
                                         <span 
@@ -19556,8 +19813,8 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                                     )}
                                     
                                     {/* Clear All Button */}
-                                    <button 
-                                        onClick={() => { clearAllFilters(); setProductionFilter('ALL'); }}
+                                    <button
+                                        onClick={() => { clearAllFilters(); setProductionFilter('ALL'); setDateFilter({ start: '', end: '' }); }}
                                         className="text-xs text-red-600 hover:text-red-700 hover:underline font-medium"
                                     >
                                         Clear All
