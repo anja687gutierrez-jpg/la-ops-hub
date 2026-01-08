@@ -214,7 +214,11 @@
         FileSearch: 'file-search',
         Maximize: 'maximize',
         Loader: 'loader',
-        ScanEye: 'scan-eye'
+        ScanEye: 'scan-eye',
+        Share2: 'share-2',
+        RotateCcw: 'rotate-ccw',
+        Check: 'check',
+        LogOut: 'log-out'
     };
 
     // ═══════════════════════════════════════════════════════════════════════════════
