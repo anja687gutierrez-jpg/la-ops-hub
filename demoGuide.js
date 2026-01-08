@@ -1108,30 +1108,52 @@
                     React.createElement('div', {
                         key: 'sections',
                         className: 'flex gap-1.5 overflow-x-auto pb-0.5 hide-scrollbar'
-                    }, Object.entries(guides).map(([key, g]) => {
-                        const sectionSteps = g.steps.length;
-                        const sectionDone = g.steps.filter((_, i) => isStepDone(key, i)).length;
-                        const isComplete = sectionDone === sectionSteps;
-                        const isCurrent = key === currentView;
+                    }, [
+                        // Section buttons
+                        ...Object.entries(guides).map(([key, g]) => {
+                            const sectionSteps = g.steps.length;
+                            const sectionDone = g.steps.filter((_, i) => isStepDone(key, i)).length;
+                            const isComplete = sectionDone === sectionSteps;
+                            const isCurrent = key === currentView;
 
-                        return React.createElement('button', {
-                            key: key,
-                            onClick: () => onNavigate?.(key),
-                            className: `flex-shrink-0 px-2 py-1.5 rounded-lg text-center transition-all ${
-                                isCurrent
-                                    ? 'bg-indigo-100 border border-indigo-300'
-                                    : isComplete
-                                        ? 'bg-green-50 border border-green-200'
-                                        : 'bg-white border border-gray-200 hover:border-gray-300'
-                            }`
+                            return React.createElement('button', {
+                                key: key,
+                                onClick: () => onNavigate?.(key),
+                                className: `flex-shrink-0 px-2 py-1.5 rounded-lg text-center transition-all ${
+                                    isCurrent
+                                        ? 'bg-indigo-100 border border-indigo-300'
+                                        : isComplete
+                                            ? 'bg-green-50 border border-green-200'
+                                            : 'bg-white border border-gray-200 hover:border-gray-300'
+                                }`
+                            }, [
+                                React.createElement('div', { key: 'icon', className: 'text-sm leading-none' }, g.icon),
+                                React.createElement('div', {
+                                    key: 'progress',
+                                    className: `text-[8px] font-medium mt-0.5 ${isCurrent ? 'text-indigo-600' : 'text-gray-400'}`
+                                }, `${sectionDone}/${sectionSteps}`)
+                            ]);
+                        }),
+                        // Reset button
+                        React.createElement('button', {
+                            key: 'reset',
+                            onClick: () => {
+                                if (confirm('Reset tour progress? This will start the guide from the beginning.')) {
+                                    localStorage.removeItem('stap_demo_progress');
+                                    setCompletedSteps({});
+                                    setCurrentStep(0);
+                                }
+                            },
+                            className: 'flex-shrink-0 px-2 py-1.5 rounded-lg text-center transition-all bg-white border border-gray-200 hover:border-red-300 hover:bg-red-50',
+                            title: 'Reset Tour'
                         }, [
-                            React.createElement('div', { key: 'icon', className: 'text-sm leading-none' }, g.icon),
+                            React.createElement('div', { key: 'icon', className: 'text-sm leading-none' }, '↺'),
                             React.createElement('div', {
-                                key: 'progress',
-                                className: `text-[8px] font-medium mt-0.5 ${isCurrent ? 'text-indigo-600' : 'text-gray-400'}`
-                            }, `${sectionDone}/${sectionSteps}`)
-                        ]);
-                    }))
+                                key: 'label',
+                                className: 'text-[8px] font-medium mt-0.5 text-gray-400'
+                            }, 'Reset')
+                        ])
+                    ])
                 ])
             ])
         ]);

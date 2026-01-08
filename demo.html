@@ -7033,17 +7033,29 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                                         <Icon name="HelpCircle" size={14} />
                                         <span className="hidden sm:inline">Help</span>
                                     </button>
-                                    <button 
+                                    <button
                                         onClick={() => setShowDemoTips(!showDemoTips)}
                                         className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center gap-1.5 ${
-                                            showDemoTips 
-                                                ? 'bg-amber-400 text-amber-900 hover:bg-amber-300' 
+                                            showDemoTips
+                                                ? 'bg-amber-400 text-amber-900 hover:bg-amber-300'
                                                 : 'bg-white/10 hover:bg-white/20'
                                         }`}
                                         title={showDemoTips ? 'Hide guide panel' : 'Show guide panel'}
                                     >
                                         <Icon name={showDemoTips ? 'Eye' : 'EyeOff'} size={14} />
                                         <span className="hidden sm:inline">Guide {showDemoTips ? 'ON' : 'OFF'}</span>
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            localStorage.removeItem('stap_demo_progress');
+                                            setShowDemoTips(true);
+                                            setShowWelcomeModal(true);
+                                        }}
+                                        className="text-xs bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center gap-1.5"
+                                        title="Restart the demo tour from the beginning"
+                                    >
+                                        <Icon name="RotateCcw" size={14} />
+                                        <span className="hidden sm:inline">Restart Tour</span>
                                     </button>
                                     <button 
                                         onClick={onLogout}
