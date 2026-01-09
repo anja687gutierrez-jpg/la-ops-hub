@@ -1121,26 +1121,29 @@
                         if (settings.showMarketColumn) row.push(formatMarket(item.market));
                         if (settings.showProductColumn) row.push(formatProduct(item.product || item.media));
                         if (settings.showOwnerColumn) row.push(item.owner);
-                        
-                        // Build visual progress bar
-                        const totalQty = item.quantity || item.totalQty || 0;
+
+                        // Build visual progress bar - use adjustedQty if set for charted qty override
+                        const totalQty = item.adjustedQty || item.quantity || item.totalQty || 0;
                         const installedQty = item.installed || item.totalInstalled || 0;
                         const pendingQty = item.pending || item.totalPending || (totalQty - installedQty);
                         const pct = totalQty > 0 ? Math.round((installedQty / totalQty) * 100) : 0;
                         const barColor = pct >= 75 ? '#4caf50' : pct >= 50 ? '#ff9800' : '#f44336';
-                        
+
+                        // Add adjusted qty badge if applicable
+                        const adjustedBadge = item.hasQtyAdjustment ? `<span style="background: #2196f3; color: white; font-size: 9px; padding: 1px 4px; border-radius: 3px; margin-left: 4px;">ADJ</span>` : '';
+
                         const progressHtml = totalQty > 0 ? `
                             <div style="display: flex; align-items: center; gap: 6px;">
                                 <div style="flex: 1; background: #e0e0e0; border-radius: 4px; height: 8px; min-width: 80px;">
                                     <div style="width: ${pct}%; background: ${barColor}; height: 100%; border-radius: 4px;"></div>
                                 </div>
                                 <span style="font-size: 11px; white-space: nowrap; color: #333;">
-                                    <strong>${installedQty}</strong>/${totalQty}
+                                    <strong>${installedQty}</strong>/${totalQty}${adjustedBadge}
                                 </span>
                             </div>
                             <div style="font-size: 10px; color: #666; margin-top: 2px;">${pct}% • ${pendingQty} pending</div>
                         ` : '-';
-                        
+
                         row.push(formatDate(item.date), progressHtml);
                         return row;
                     });
@@ -2977,9 +2980,9 @@
                         <tr 
                             key={idx} 
                             onClick={() => onRowClick(row)}
-                            className={`hover:bg-gray-50 transition-colors cursor-pointer ${row.isComplete ? 'bg-green-50/30' : ''} ${row.isGhost ? 'bg-orange-50' : ''}`}
+                            className={`hover:bg-gray-50 transition-colors cursor-pointer ${row.hasQtyAdjustment ? 'bg-blue-50/50' : ''} ${row.isComplete ? 'bg-green-50/30' : ''} ${row.isGhost ? 'bg-orange-50' : ''}`}
                         >
-                            {visibleCols.date && <td className={`${cellPad} ${fontSize} text-gray-600 whitespace-nowrap sticky left-0 bg-white ${row.isComplete ? 'bg-green-50/30' : ''} ${row.isGhost ? 'bg-orange-50' : ''}`}>{row.rawDate || row.date}</td>}
+                            {visibleCols.date && <td className={`${cellPad} ${fontSize} text-gray-600 whitespace-nowrap sticky left-0 bg-white ${row.hasQtyAdjustment ? 'bg-blue-50/50' : ''} ${row.isComplete ? 'bg-green-50/30' : ''} ${row.isGhost ? 'bg-orange-50' : ''}`}>{row.rawDate || row.date}</td>}
                             {visibleCols.id && <td className={`${cellPad} text-[10px] font-mono text-gray-500 ${!visibleCols.date ? 'sticky left-0 bg-white' : ''}`}>{row.id}</td>}
                             {visibleCols.market && <td className={`${cellPad} ${fontSize}`}>
                                 {row.market ? (
@@ -6052,12 +6055,21 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                                 newItem.stage = override.stage;
                                 newItem.isOverridden = true;
                             }
+                            // Apply adjusted quantity override
+                            if (override.adjustedQty && override.adjustedQty > 0) {
+                                newItem.adjustedQty = override.adjustedQty;
+                                newItem.hasQtyAdjustment = true;
+                                newItem.isOverridden = true;
+                            }
                             if (override.installed !== undefined) {
                                 newItem.totalInstalled = override.installed;
                                 newItem.installed = override.installed;
-                                const totalQty = newItem.totalQty || newItem.quantity || 0;
-                                newItem.pending = Math.max(0, totalQty - override.installed);
+                                const targetQty = newItem.adjustedQty || newItem.totalQty || newItem.quantity || 0;
+                                newItem.pending = Math.max(0, targetQty - override.installed);
                                 newItem.isOverridden = true;
+                            } else if (newItem.hasQtyAdjustment) {
+                                const installed = newItem.totalInstalled || newItem.installed || 0;
+                                newItem.pending = Math.max(0, newItem.adjustedQty - installed);
                             }
                             if (override.productionProof) {
                                 newItem.productionProof = override.productionProof;
@@ -6097,10 +6109,21 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                                 newItem.stage = override.stage;
                                 newItem.isOverridden = true;
                             }
+                            // Apply adjusted quantity override
+                            if (override.adjustedQty && override.adjustedQty > 0) {
+                                newItem.adjustedQty = override.adjustedQty;
+                                newItem.hasQtyAdjustment = true;
+                                newItem.isOverridden = true;
+                            }
                             if (override.installed !== undefined) {
                                 newItem.totalInstalled = override.installed;
                                 newItem.installed = override.installed;
+                                const targetQty = newItem.adjustedQty || newItem.totalQty || newItem.quantity || 0;
+                                newItem.pending = Math.max(0, targetQty - override.installed);
                                 newItem.isOverridden = true;
+                            } else if (newItem.hasQtyAdjustment) {
+                                const installed = newItem.totalInstalled || newItem.installed || 0;
+                                newItem.pending = Math.max(0, newItem.adjustedQty - installed);
                             }
                             if (override.productionProof) {
                                 newItem.productionProof = override.productionProof;
@@ -6169,19 +6192,33 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                                 item.stage = override.stage;
                                 item.isOverridden = true;
                             }
+                            // Apply adjusted quantity override (charted qty)
+                            if (override.adjustedQty && override.adjustedQty > 0) {
+                                item.adjustedQty = override.adjustedQty;
+                                item.hasQtyAdjustment = true;
+                                item.isOverridden = true;
+                            }
                             // Apply installed count override
                             if (override.installed !== undefined) {
                                 item.totalInstalled = override.installed;
                                 item.installed = override.installed;
-                                // Recalculate pending
-                                const totalQty = item.totalQty || item.quantity || 0;
-                                item.pending = Math.max(0, totalQty - override.installed);
+                                // Recalculate pending using adjustedQty if set, else original qty
+                                const targetQty = item.adjustedQty || item.totalQty || item.quantity || 0;
+                                item.pending = Math.max(0, targetQty - override.installed);
                                 // Update progress
-                                if (totalQty > 0) {
-                                    const pct = Math.round((override.installed / totalQty) * 100);
-                                    item.progress = `${override.installed}/${totalQty} (${pct}%)`;
+                                if (targetQty > 0) {
+                                    const pct = Math.round((override.installed / targetQty) * 100);
+                                    item.progress = `${override.installed}/${targetQty} (${pct}%)`;
                                 }
                                 item.isOverridden = true;
+                            } else if (item.hasQtyAdjustment) {
+                                // If only adjustedQty set (no installed override), recalculate pending
+                                const installed = item.totalInstalled || item.installed || 0;
+                                item.pending = Math.max(0, item.adjustedQty - installed);
+                                if (item.adjustedQty > 0) {
+                                    const pct = Math.round((installed / item.adjustedQty) * 100);
+                                    item.progress = `${installed}/${item.adjustedQty} (${pct}%)`;
+                                }
                             }
                             // Apply pending override (if explicitly set)
                             if (override.pending !== undefined) {

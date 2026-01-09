@@ -44,6 +44,11 @@
         const [editingInstallCount, setEditingInstallCount] = useState(false);
         const [newInstalledCount, setNewInstalledCount] = useState(0);
 
+        // Adjusted quantity editing (for charted qty override)
+        const [editingAdjustedQty, setEditingAdjustedQty] = useState(false);
+        const [adjustedQty, setAdjustedQty] = useState(null);
+        const [originalQty, setOriginalQty] = useState(0);
+
         // Custom fields
         const [customQty, setCustomQty] = useState('');
         const [emailInstalledQty, setEmailInstalledQty] = useState('');
@@ -87,6 +92,13 @@
                 setNewInstalledCount(item.totalInstalled || item.installed || 0);
                 setEditingInstallCount(false);
 
+                // Initialize original and adjusted quantity
+                const origQty = item.quantity || item.totalQty || 0;
+                setOriginalQty(origQty);
+                // Check if item has an adjustedQty override
+                setAdjustedQty(item.adjustedQty || null);
+                setEditingAdjustedQty(false);
+
                 // Load saved material data
                 const uniqueKey = `${item.id}_${item.date}`;
                 const savedMaterialData = JSON.parse(localStorage.getItem('stap_material_data') || '{}');
@@ -118,6 +130,16 @@
                 setShowInstallControls(true);
             }
         }, [item]);
+
+        // Sync email template values with INSTALL PROGRESS values
+        useEffect(() => {
+            const effectiveQty = parseInt(adjustedQty) || item?.adjustedQty || originalQty || 0;
+            setCustomQty(effectiveQty.toString());
+        }, [adjustedQty, originalQty, item?.adjustedQty]);
+
+        useEffect(() => {
+            setEmailInstalledQty(newInstalledCount.toString());
+        }, [newInstalledCount]);
 
         // Helper functions for templates
         const formatMediaType = (media) => {
@@ -445,8 +467,41 @@
 
         const handleSaveInstallCount = () => {
             const uniqueKey = `${item.id}_${item.date}`;
-            onSave(uniqueKey, item.stage, { installed: newInstalledCount });
+            // Calculate pending using adjustedQty if set, otherwise original qty
+            const targetQty = parseInt(adjustedQty) || item.adjustedQty || originalQty || 0;
+            const newPending = Math.max(0, targetQty - newInstalledCount);
+            onSave(uniqueKey, item.stage, {
+                installed: newInstalledCount,
+                pending: newPending
+            });
             setEditingInstallCount(false);
+        };
+
+        // Save adjusted quantity override
+        const handleSaveAdjustedQty = () => {
+            const uniqueKey = `${item.id}_${item.date}`;
+            const adjQty = parseInt(adjustedQty) || null;
+            // Validate: adjusted qty must be >= installed count
+            const installed = newInstalledCount || 0;
+            if (adjQty !== null && adjQty < installed) {
+                alert(`Adjusted quantity (${adjQty}) cannot be less than installed count (${installed})`);
+                return;
+            }
+            // Save adjustedQty and recalculated pending
+            const newPending = adjQty !== null ? Math.max(0, adjQty - installed) : undefined;
+            onSave(uniqueKey, item.stage, {
+                adjustedQty: adjQty,
+                pending: newPending
+            });
+            setEditingAdjustedQty(false);
+        };
+
+        // Clear adjusted quantity override
+        const handleClearAdjustedQty = () => {
+            const uniqueKey = `${item.id}_${item.date}`;
+            onSave(uniqueKey, item.stage, { adjustedQty: null });
+            setAdjustedQty(null);
+            setEditingAdjustedQty(false);
         };
 
         const handleSaveAllData = () => {
@@ -504,11 +559,55 @@
                                 <p className="text-sm"><strong>Start:</strong> {item.date}</p>
                                 <p className="text-sm"><strong>End:</strong> {item.endDate}</p>
                             </div>
-                            <div className="bg-gray-50 p-4 rounded border">
-                                <h4 className="font-bold text-xs text-gray-500 mb-2">INSTALL PROGRESS</h4>
-                                <div className="flex items-center justify-between mb-2">
-                                    <span className="text-sm"><strong>Booked Qty:</strong> {item.quantity || item.totalQty || 0}</span>
+                            <div className={`p-4 rounded border ${(adjustedQty || item.adjustedQty) ? 'bg-blue-50 border-blue-200' : 'bg-gray-50'}`}>
+                                <h4 className="font-bold text-xs text-gray-500 mb-2 flex items-center gap-2">
+                                    INSTALL PROGRESS
+                                    {(adjustedQty || item.adjustedQty) && (
+                                        <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-[10px] rounded font-medium">QTY ADJUSTED</span>
+                                    )}
+                                </h4>
+                                {/* Qty Row - editable like installed */}
+                                <div className="flex items-center gap-2 mb-2">
+                                    <span className="text-sm"><strong>Qty:</strong></span>
+                                    {editingAdjustedQty ? (
+                                        <div className="flex items-center gap-1">
+                                            <input
+                                                type="number"
+                                                value={adjustedQty || ''}
+                                                onChange={(e) => setAdjustedQty(e.target.value)}
+                                                className="w-16 px-2 py-1 border rounded text-sm"
+                                                min="0"
+                                            />
+                                            <button onClick={handleSaveAdjustedQty} className="text-green-600 hover:text-green-700" title="Save">
+                                                <Icon name="Check" size={16} />
+                                            </button>
+                                            <button onClick={() => { setEditingAdjustedQty(false); setAdjustedQty(item.adjustedQty || null); }} className="text-gray-400 hover:text-gray-600" title="Cancel">
+                                                <Icon name="X" size={16} />
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <span
+                                            onClick={() => { setAdjustedQty(adjustedQty || item.adjustedQty || originalQty); setEditingAdjustedQty(true); }}
+                                            className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded cursor-pointer hover:bg-blue-200 transition-colors text-sm font-medium"
+                                            title="Click to edit quantity"
+                                        >
+                                            {adjustedQty || item.adjustedQty || originalQty} <Icon name="Edit" size={10} className="inline ml-1 opacity-50"/>
+                                        </span>
+                                    )}
+                                    {(adjustedQty || item.adjustedQty) && !editingAdjustedQty && (
+                                        <span className="text-xs text-gray-400">(was {originalQty})</span>
+                                    )}
+                                    {(adjustedQty || item.adjustedQty) && !editingAdjustedQty && (
+                                        <button
+                                            onClick={handleClearAdjustedQty}
+                                            className="text-xs text-gray-400 hover:text-red-500"
+                                            title="Reset to original"
+                                        >
+                                            <Icon name="RotateCcw" size={12} />
+                                        </button>
+                                    )}
                                 </div>
+                                {/* Installed Row */}
                                 <div className="flex items-center gap-2 mb-2">
                                     <span className="text-sm"><strong>Installed:</strong></span>
                                     {editingInstallCount ? (
@@ -519,7 +618,7 @@
                                                 onChange={(e) => setNewInstalledCount(parseInt(e.target.value) || 0)}
                                                 className="w-16 px-2 py-1 border rounded text-sm"
                                                 min="0"
-                                                max={item.quantity || item.totalQty || 999}
+                                                max={adjustedQty || item.adjustedQty || originalQty || 999}
                                             />
                                             <button onClick={handleSaveInstallCount} className="text-green-600 hover:text-green-700" title="Save">
                                                 <Icon name="Check" size={16} />
@@ -534,13 +633,29 @@
                                             className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded cursor-pointer hover:bg-blue-200 transition-colors text-sm font-medium"
                                             title="Click to edit installed count"
                                         >
-                                            {item.totalInstalled || item.installed || 0} <Icon name="Edit" size={10} className="inline ml-1 opacity-50"/>
+                                            {newInstalledCount} <Icon name="Edit" size={10} className="inline ml-1 opacity-50"/>
                                         </span>
                                     )}
                                 </div>
-                                <div className="flex items-center justify-between">
-                                    <span className="text-sm"><strong>Pending:</strong> <span className={item.pending > 0 ? 'text-orange-600 font-bold' : 'text-green-600'}>{item.pending || 0}</span></span>
-                                </div>
+                                {/* Pending Row - calculated locally from qty and installed */}
+                                {(() => {
+                                    const targetQty = parseInt(adjustedQty) || item.adjustedQty || originalQty || 0;
+                                    const installed = newInstalledCount || 0;
+                                    const pending = Math.max(0, targetQty - installed);
+                                    return (
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-sm">
+                                                <strong>Pending:</strong>{' '}
+                                                <span className={pending > 0 ? 'text-orange-600 font-bold' : 'text-green-600 font-bold'}>
+                                                    {pending}
+                                                </span>
+                                                {pending === 0 && installed > 0 && (
+                                                    <span className="ml-2 text-green-600 text-xs">Complete!</span>
+                                                )}
+                                            </span>
+                                        </div>
+                                    );
+                                })()}
                                 {item.isOverridden && (
                                     <div className="mt-2 text-xs text-purple-600 flex items-center gap-1">
                                         <Icon name="Edit" size={10} /> Manual override active
@@ -640,35 +755,6 @@
                             </select>
                         </div>
 
-                        {/* Subject Line */}
-                        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                            <div className="flex items-center justify-between gap-2">
-                                <div className="flex-1">
-                                    <label className="text-xs font-bold text-blue-700 flex items-center gap-1 mb-1">
-                                        <Icon name="Mail" size={12} /> Subject Line
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={subjectLine}
-                                        onChange={(e) => setSubjectLine(e.target.value)}
-                                        className="w-full text-sm border border-blue-300 rounded px-3 py-2 font-medium"
-                                        placeholder="Email subject..."
-                                    />
-                                </div>
-                                <button
-                                    onClick={() => {
-                                        navigator.clipboard.writeText(subjectLine);
-                                        setSubjectCopied(true);
-                                        setTimeout(() => setSubjectCopied(false), 1500);
-                                    }}
-                                    className={`mt-5 px-3 py-2 rounded text-xs font-bold transition-colors ${subjectCopied ? 'bg-green-500 text-white' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
-                                    title="Copy subject line"
-                                >
-                                    <Icon name={subjectCopied ? "Check" : "Copy"} size={14} />
-                                </button>
-                            </div>
-                        </div>
-
                         {showInstallControls && (
                             <div className="mb-4 p-4 bg-gray-50 border rounded-lg">
                                 {/* Missing Asset Options */}
@@ -733,15 +819,7 @@
                                         <button onClick={addRow} className="text-xs text-blue-600 font-bold hover:underline">+ Add Row</button>
                                     </div>
                                 ) : (
-                                    <div className="grid grid-cols-3 gap-4 mb-3">
-                                        <div><label className="text-xs font-bold text-gray-500">Total Flight Qty</label><input type="text" value={customQty} onChange={(e)=>setCustomQty(e.target.value)} className="w-full text-sm border rounded px-2 py-1"/></div>
-                                        <div>
-                                            <label className="text-xs font-bold text-green-600 flex items-center gap-1">
-                                                Installed Qty
-                                                {selectedTemplate === 'complete' || (selectedTemplate === 'auto' && item.stage === 'Installed') ? <span className="text-[10px] text-green-500">(in email)</span> : null}
-                                            </label>
-                                            <input type="text" value={emailInstalledQty} onChange={(e)=>setEmailInstalledQty(e.target.value)} className="w-full text-sm border border-green-300 rounded px-2 py-1"/>
-                                        </div>
+                                    <div className="mb-3">
                                         <div><label className="text-xs font-bold text-gray-500">Media Type</label><input type="text" value={customDesigns} onChange={(e)=>setCustomDesigns(e.target.value)} className="w-full text-sm border rounded px-2 py-1"/></div>
                                     </div>
                                 )}
