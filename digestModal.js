@@ -59,9 +59,11 @@
             showProductColumn: true,
             showMarketColumn: true,
             showOwnerColumn: true,
+            showProductionIcon: true,
             compactMode: false,
             sections: {
                 summary: true,
+                productionBreakdown: true,
                 delayed: true,
                 inProgress: true,
                 upcoming: true,
@@ -589,6 +591,7 @@
                                             { key: 'showProductColumn', label: 'Show Product/Media Column' },
                                             { key: 'showMarketColumn', label: 'Show Market Column' },
                                             { key: 'showOwnerColumn', label: 'Show Owner Column' },
+                                            { key: 'showProductionIcon', label: 'Show In-House Icon (🏠)' },
                                             { key: 'compactMode', label: 'Compact Mode (smaller tables)' }
                                         ].map(opt => (
                                             <label key={opt.key} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
@@ -619,7 +622,16 @@
                                                 onChange={() => toggleSection('summary')}
                                                 className="rounded text-blue-600 focus:ring-blue-500"
                                             />
-                                            Top Summary Grid
+                                            Top Summary Grid (Delayed, In-Progress, etc.)
+                                        </label>
+                                        <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer font-medium">
+                                            <input
+                                                type="checkbox"
+                                                checked={digestSettings.sections.productionBreakdown}
+                                                onChange={() => toggleSection('productionBreakdown')}
+                                                className="rounded text-blue-600 focus:ring-blue-500"
+                                            />
+                                            Production Source Breakdown
                                         </label>
                                         <hr className="border-gray-200" />
                                         {[

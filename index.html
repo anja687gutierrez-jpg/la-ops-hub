@@ -1043,8 +1043,13 @@
             };
 
             // --- Generate Tables ---
-            // Helper for formatting Client/Campaign cell
-            const formatClient = (client, campaign) => `<strong>${client}</strong><br/><span style="font-size:11px;color:#666;">${campaign}</span>`;
+            // Helper for formatting Client/Campaign cell (with optional in-house icon)
+            const formatClient = (client, campaign, productionProof) => {
+                const inHouseIcon = (settings.showProductionIcon && productionProof === 'in-house')
+                    ? '<span style="margin-left:4px;" title="In-House Production">&#127968;</span>'
+                    : '';
+                return `<strong>${client}</strong>${inHouseIcon}<br/><span style="font-size:11px;color:#666;">${campaign}</span>`;
+            };
             
             // Helper to shorten product names
             const formatProduct = (product) => {
@@ -1097,7 +1102,7 @@
                     base.headers.push('Start', 'Late'); base.widths.push('7%', '5%');
                     
                     return createHtmlTable(processedData.delayedFlights, base.headers, base.widths, item => {
-                        const row = [item.id, formatClient(item.advertiser, item.name)];
+                        const row = [item.id, formatClient(item.advertiser, item.name, item.productionProof)];
                         if (settings.showMarketColumn) row.push(formatMarket(item.market));
                         if (settings.showProductColumn) row.push(formatProduct(item.product || item.media));
                         if (settings.showOwnerColumn) row.push(item.owner);
@@ -1117,7 +1122,7 @@
                     base.headers.push('Start', 'Progress'); base.widths.push('7%', '22%');
                     
                     return createHtmlTable(processedData.inProgressFlights, base.headers, base.widths, item => {
-                        const row = [item.id, formatClient(item.advertiser, item.name)];
+                        const row = [item.id, formatClient(item.advertiser, item.name, item.productionProof)];
                         if (settings.showMarketColumn) row.push(formatMarket(item.market));
                         if (settings.showProductColumn) row.push(formatProduct(item.product || item.media));
                         if (settings.showOwnerColumn) row.push(item.owner);
@@ -1157,7 +1162,7 @@
                     base.headers.push('Start'); base.widths.push('7%');
                     
                     return createHtmlTable(processedData.upcoming, base.headers, base.widths, item => {
-                        const row = [item.stage, item.id, formatClient(item.advertiser, item.name)];
+                        const row = [item.stage, item.id, formatClient(item.advertiser, item.name, item.productionProof)];
                         if (settings.showMarketColumn) row.push(formatMarket(item.market));
                         if (settings.showProductColumn) row.push(formatProduct(item.product || item.media));
                         if (settings.showOwnerColumn) row.push(item.owner);
@@ -1174,7 +1179,7 @@
                     base.headers.push('Start', 'Units'); base.widths.push('7%', '10%');
                     
                     return createHtmlTable(processedData.fullyInstalledThisWeek, base.headers, base.widths, item => {
-                        const row = [item.id, formatClient(item.advertiser, item.name)];
+                        const row = [item.id, formatClient(item.advertiser, item.name, item.productionProof)];
                         if (settings.showMarketColumn) row.push(formatMarket(item.market));
                         if (settings.showProductColumn) row.push(formatProduct(item.product || item.media));
                         if (settings.showOwnerColumn) row.push(item.owner);
@@ -1199,7 +1204,7 @@
                     if (settings.showOwnerColumn) { base.headers.push('Owner'); base.widths.push('15%'); }
                     
                     return createHtmlTable(processedData.recentInstalls, base.headers, base.widths, item => {
-                        const row = [item.stage, item.id, formatClient(item.advertiser, item.name)];
+                        const row = [item.stage, item.id, formatClient(item.advertiser, item.name, item.productionProof)];
                         if (settings.showMarketColumn) row.push(formatMarket(item.market));
                         if (settings.showProductColumn) row.push(formatProduct(item.product || item.media));
                         if (settings.showOwnerColumn) row.push(item.owner);
@@ -1242,7 +1247,7 @@
                     base.headers.push('End', 'Ago'); base.widths.push('7%', '5%');
                     
                     return createHtmlTable(processedData.expiredFlights, base.headers, base.widths, item => {
-                        const row = [item.id, formatClient(item.advertiser, item.name)];
+                        const row = [item.id, formatClient(item.advertiser, item.name, item.productionProof)];
                         if (settings.showMarketColumn) row.push(formatMarket(item.market));
                         if (settings.showProductColumn) row.push(formatProduct(item.product || item.media));
                         if (settings.showOwnerColumn) row.push(item.owner);
@@ -1280,7 +1285,7 @@
                     <div class="summary-item"><div class="count normal">${processedData.upcoming.length}</div><div class="label">UPCOMING</div></div>
                     <div class="summary-item"><div class="count" style="color: #4caf50;">${processedData.fullyInstalledThisWeek.length}</div><div class="label">INSTALLED</div></div>
                 </div>
-                ${hasProductionData ? `
+                ${hasProductionData && (settings.sections?.productionBreakdown !== false) ? `
                 <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #e0e0e8;">
                     <h3 style="margin: 0 0 10px; font-size: 14px; color: #666; text-align: center;">PRODUCTION SOURCE BREAKDOWN</h3>
                     <div class="summary-grid">
@@ -5263,7 +5268,7 @@
                     setDigestModalLoading(true);
                     try {
                         // Fetch and compile the script with Babel
-                        const response = await fetch('digestModal.js');
+                        const response = await fetch('digestModal.js?v=' + Date.now());
                         const code = await response.text();
                         const compiled = Babel.transform(code, { presets: ['react'] }).code;
                         const script = document.createElement('script');
