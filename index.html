@@ -6055,6 +6055,9 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                                 newItem.stage = override.stage;
                                 newItem.isOverridden = true;
                             }
+                            if (override.previousStage) {
+                                newItem.previousStage = override.previousStage;
+                            }
                             // Apply adjusted quantity override
                             if (override.adjustedQty && override.adjustedQty > 0) {
                                 newItem.adjustedQty = override.adjustedQty;
@@ -6108,6 +6111,9 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                             if (override.stage) {
                                 newItem.stage = override.stage;
                                 newItem.isOverridden = true;
+                            }
+                            if (override.previousStage) {
+                                newItem.previousStage = override.previousStage;
                             }
                             // Apply adjusted quantity override
                             if (override.adjustedQty && override.adjustedQty > 0) {
@@ -6191,6 +6197,10 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                             if (override.stage) {
                                 item.stage = override.stage;
                                 item.isOverridden = true;
+                            }
+                            // Store previous stage for auto-stage reversal
+                            if (override.previousStage) {
+                                item.previousStage = override.previousStage;
                             }
                             // Apply adjusted quantity override (charted qty)
                             if (override.adjustedQty && override.adjustedQty > 0) {

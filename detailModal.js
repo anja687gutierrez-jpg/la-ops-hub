@@ -470,10 +470,27 @@
             // Calculate pending using adjustedQty if set, otherwise original qty
             const targetQty = parseInt(adjustedQty) || item.adjustedQty || originalQty || 0;
             const newPending = Math.max(0, targetQty - newInstalledCount);
-            onSave(uniqueKey, item.stage, {
+
+            // Auto-stage logic: when pending = 0, auto-set to "Installed"
+            let newStage = item.stage;
+            let saveData = {
                 installed: newInstalledCount,
                 pending: newPending
-            });
+            };
+
+            if (newPending === 0 && newInstalledCount > 0 && item.stage !== 'Installed') {
+                // Store previous stage for reversal, then set to Installed
+                saveData.previousStage = item.previousStage || item.stage;
+                newStage = 'Installed';
+                setNewStage('Installed');
+            } else if (newPending > 0 && item.previousStage && item.stage === 'Installed') {
+                // Revert to previous stage when pending > 0 again
+                newStage = item.previousStage;
+                saveData.previousStage = null; // Clear the stored previous stage
+                setNewStage(item.previousStage);
+            }
+
+            onSave(uniqueKey, newStage, saveData);
             setEditingInstallCount(false);
         };
 
@@ -489,17 +506,49 @@
             }
             // Save adjustedQty and recalculated pending
             const newPending = adjQty !== null ? Math.max(0, adjQty - installed) : undefined;
-            onSave(uniqueKey, item.stage, {
+
+            // Auto-stage logic: when pending = 0, auto-set to "Installed"
+            let newStage = item.stage;
+            let saveData = {
                 adjustedQty: adjQty,
                 pending: newPending
-            });
+            };
+
+            if (newPending === 0 && installed > 0 && item.stage !== 'Installed') {
+                // Store previous stage for reversal, then set to Installed
+                saveData.previousStage = item.previousStage || item.stage;
+                newStage = 'Installed';
+                setNewStage('Installed');
+            } else if (newPending > 0 && item.previousStage && item.stage === 'Installed') {
+                // Revert to previous stage when pending > 0 again
+                newStage = item.previousStage;
+                saveData.previousStage = null; // Clear the stored previous stage
+                setNewStage(item.previousStage);
+            }
+
+            onSave(uniqueKey, newStage, saveData);
             setEditingAdjustedQty(false);
         };
 
         // Clear adjusted quantity override
         const handleClearAdjustedQty = () => {
             const uniqueKey = `${item.id}_${item.date}`;
-            onSave(uniqueKey, item.stage, { adjustedQty: null });
+            // When clearing, recalculate pending with original qty
+            const installed = newInstalledCount || 0;
+            const newPending = Math.max(0, originalQty - installed);
+
+            // Check if we need to revert stage
+            let newStage = item.stage;
+            let saveData = { adjustedQty: null, pending: newPending };
+
+            if (newPending > 0 && item.previousStage && item.stage === 'Installed') {
+                // Revert to previous stage
+                newStage = item.previousStage;
+                saveData.previousStage = null;
+                setNewStage(item.previousStage);
+            }
+
+            onSave(uniqueKey, newStage, saveData);
             setAdjustedQty(null);
             setEditingAdjustedQty(false);
         };
