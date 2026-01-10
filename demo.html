@@ -5986,8 +5986,7 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
 
                 const today = new Date(); today.setHours(0,0,0,0);
                 
-                // Excluded stages for Hold Report
-                const HOLD_EXCLUDED_STAGES = ['installed', 'material ready for install', 'photos taken', 'pop completed', 'takedown complete'];
+                // Hold Report now includes ALL stages (simplified version of Install Report)
                 
                 // Hold stages
                 const HOLD_STAGES = ['pending hold', 'on hold'];
@@ -6304,10 +6303,8 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                             categories.activeInstalls.push(item); 
                         }
                         
-                        // 📋 HOLD REPORT: Everything EXCEPT completed stages (unless pending > 0)
-                        if (!HOLD_EXCLUDED_STAGES.includes(stageLower) || item.pending > 0) {
-                            categories.holdReport.push(item);
-                        }
+                        // 📋 HOLD REPORT: All campaigns (simplified version of Install Report)
+                        categories.holdReport.push(item);
                         
                         // ⏸️ ON HOLD CAMPAIGNS: Specifically Pending Hold or On Hold stage
                         if (HOLD_STAGES.includes(stageLower)) {
