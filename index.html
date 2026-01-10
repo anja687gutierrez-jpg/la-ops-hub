@@ -1957,7 +1957,7 @@
                 const stageLower = (finalItem.stage || '').toLowerCase().trim();
                 
                 // Route to appropriate category
-                if (stageLower === 'lost opportunity' || stageLower === '- none -') {
+                if (stageLower === 'lost opportunity' || stageLower === '- none -' || stageLower === '-none-') {
                     lostItems.push(finalItem);
                 } else if (SPECIALTY_KEYWORDS.some(k => (finalItem.product || '').toLowerCase().includes(k))) {
                     specialtyItems.push(finalItem);
@@ -6257,8 +6257,8 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                         const advName = (item.rawName || item.name || '').toLowerCase();
                         const campId = (item.id || '').toLowerCase();
 
-                        // Skip Lost Opportunities to separate list
-                        if (stageLower === 'lost opportunity' || stageLower === '- none -') {
+                        // Skip Lost Opportunities to separate list (includes -none- stage)
+                        if (stageLower === 'lost opportunity' || stageLower === '- none -' || stageLower === '-none-') {
                              categories.lostOpportunities.push(item);
                              return;
                         }
@@ -6510,9 +6510,9 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                         .filter(i => {
                             // Exclude ghosts unless explicitly included
                             if (i.isGhost && !includeGhosts) return false;
-                            // Exclude Lost Opportunities
+                            // Exclude Lost Opportunities (includes -none- stage)
                             const stageLower = (i.stage || '').toLowerCase().trim();
-                            if (stageLower === 'lost opportunity' || stageLower === '- none -') return false;
+                            if (stageLower === 'lost opportunity' || stageLower === '- none -' || stageLower === '-none-') return false;
                             return true;
                         });
                     // Ensure sorting consistency
@@ -6840,7 +6840,7 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                                     </div>
                                     <div className="p-6">
                                         <p className="text-gray-700 mb-4">
-                                            <strong>{ghostBookings.length} bookings</strong> have no sales owner or no stage assigned. 
+                                            <strong>{ghostBookings.length} bookings</strong> have no sales owner or no stage assigned.
                                             These need attention in Salesforce before being tracked.
                                         </p>
                                         <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-4 max-h-40 overflow-y-auto">
@@ -6855,20 +6855,20 @@ Be direct, use the specific numbers provided, and focus on actionable insights f
                                             )}
                                         </div>
                                         <div className="flex gap-3">
-                                            <button 
+                                            <button
                                                 onClick={() => { setShowGhostAlert(false); setView('ghostBookings'); }}
                                                 className="flex-1 py-2 bg-orange-500 text-white rounded-lg font-bold hover:bg-orange-600 transition-colors"
                                             >
                                                 Review Ghost Bookings
                                             </button>
-                                            <button 
+                                            <button
                                                 onClick={() => { setShowGhostAlert(false); setIncludeGhosts(false); }}
                                                 className="flex-1 py-2 bg-gray-200 text-gray-700 rounded-lg font-bold hover:bg-gray-300 transition-colors"
                                             >
                                                 Exclude & Continue
                                             </button>
                                         </div>
-                                        <button 
+                                        <button
                                             onClick={() => { setShowGhostAlert(false); setIncludeGhosts(true); }}
                                             className="w-full mt-2 py-2 text-sm text-gray-500 hover:text-gray-700"
                                         >
