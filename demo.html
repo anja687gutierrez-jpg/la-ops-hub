@@ -970,17 +970,17 @@
             // Dynamic Sections based on settings
             let sectionsHtml = '';
             
+            // Calculate production breakdown (used by both summary and production breakdown sections)
+            const allCampaigns = processedData.all || [];
+            const productionBreakdown = {
+                inHouse: allCampaigns.filter(c => c.productionProof === 'in-house').length,
+                client: allCampaigns.filter(c => c.productionProof === 'client').length,
+                mixed: allCampaigns.filter(c => c.productionProof === 'mixed').length,
+                unset: allCampaigns.filter(c => !c.productionProof).length
+            };
+            const hasProductionData = productionBreakdown.inHouse > 0 || productionBreakdown.client > 0 || productionBreakdown.mixed > 0;
+
             if (settings.sections.summary) {
-                // Calculate production breakdown
-                const allCampaigns = processedData.all || [];
-                const productionBreakdown = {
-                    inHouse: allCampaigns.filter(c => c.productionProof === 'in-house').length,
-                    client: allCampaigns.filter(c => c.productionProof === 'client').length,
-                    mixed: allCampaigns.filter(c => c.productionProof === 'mixed').length,
-                    unset: allCampaigns.filter(c => !c.productionProof).length
-                };
-                const hasProductionData = productionBreakdown.inHouse > 0 || productionBreakdown.client > 0 || productionBreakdown.mixed > 0;
-                
                 sectionsHtml += `
                 <tr><td class="summary-section">
                 <h2>THIS WEEK AT A GLANCE</h2>
@@ -990,35 +990,38 @@
                     <div class="summary-item"><div class="count normal">${processedData.upcoming.length}</div><div class="label">UPCOMING</div></div>
                     <div class="summary-item"><div class="count" style="color: #4caf50;">${processedData.fullyInstalledThisWeek.length}</div><div class="label">INSTALLED</div></div>
                 </div>
-                ${hasProductionData && (settings.sections?.productionBreakdown !== false) ? `
-                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #e0e0e8;">
-                    <h3 style="margin: 0 0 10px; font-size: 14px; color: #666; text-align: center;">PRODUCTION SOURCE BREAKDOWN</h3>
-                    <div class="summary-grid">
-                        <div class="summary-item">
-                            <div class="count" style="font-size: 20px; color: #7c3aed;">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-                                ${productionBreakdown.inHouse}
-                            </div>
-                            <div class="label" style="font-size: 10px;">IN-HOUSE</div>
+                </td></tr>`;
+            }
+
+            // Production Source Breakdown - now independent section
+            if (settings.sections.productionBreakdown && hasProductionData) {
+                sectionsHtml += `
+                <tr><td class="summary-section" style="padding-top: 15px; padding-bottom: 15px;">
+                <h3 style="margin: 0 0 10px; font-size: 14px; color: #666; text-align: center;">PRODUCTION SOURCE BREAKDOWN</h3>
+                <div class="summary-grid">
+                    <div class="summary-item">
+                        <div class="count" style="font-size: 20px; color: #7c3aed;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                            ${productionBreakdown.inHouse}
                         </div>
-                        <div class="summary-item">
-                            <div class="count" style="font-size: 20px; color: #2563eb;">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
-                                ${productionBreakdown.client}
-                            </div>
-                            <div class="label" style="font-size: 10px;">CLIENT</div>
-                        </div>
-                        <div class="summary-item">
-                            <div class="count" style="font-size: 20px; color: #d97706;">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
-                                ${productionBreakdown.mixed}
-                            </div>
-                            <div class="label" style="font-size: 10px;">MIXED</div>
-                        </div>
-                        ${productionBreakdown.unset > 0 ? `<div class="summary-item"><div class="count" style="font-size: 20px; color: #9ca3af;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>${productionBreakdown.unset}</div><div class="label" style="font-size: 10px;">NOT SET</div></div>` : ''}
+                        <div class="label" style="font-size: 10px;">IN-HOUSE</div>
                     </div>
+                    <div class="summary-item">
+                        <div class="count" style="font-size: 20px; color: #2563eb;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+                            ${productionBreakdown.client}
+                        </div>
+                        <div class="label" style="font-size: 10px;">CLIENT</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="count" style="font-size: 20px; color: #d97706;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
+                            ${productionBreakdown.mixed}
+                        </div>
+                        <div class="label" style="font-size: 10px;">MIXED</div>
+                    </div>
+                    ${productionBreakdown.unset > 0 ? `<div class="summary-item"><div class="count" style="font-size: 20px; color: #9ca3af;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>${productionBreakdown.unset}</div><div class="label" style="font-size: 10px;">NOT SET</div></div>` : ''}
                 </div>
-                ` : ''}
                 </td></tr>`;
             }
 
