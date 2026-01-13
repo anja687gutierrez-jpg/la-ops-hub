@@ -1755,7 +1755,7 @@
         // 🧠 UNIFIED PROCESSOR: Single Source of Truth (Master_Tracking_Export)
         // Handles aggregation, ghost detection, and all data transformation
         const processMasterExport = (rawRows) => {
-            if (rawRows.length === 0) return { regular: [], specialty: [], lost: [], ghosts: [] };
+            if (!rawRows || rawRows.length === 0) return { regular: [], specialty: [], lost: [], ghosts: [] };
             
             const headers = Object.keys(rawRows[0]);
             
@@ -5726,18 +5726,18 @@
                     const maxRain = Math.max(...next3Days.map(d => d.rainChance));
                     const avgTemp = Math.round(next3Days.reduce((s, d) => s + d.temp, 0) / 3);
                     const rainDays = next3Days.filter(d => d.rainChance > 50).map(d => d.day).join(', ');
-                    
+
                     if (maxRain > 85) {
-                        weatherContext = `🚨 CRITICAL: Heavy rain (${maxRain}% chance) expected${rainDays ? ` on ${rainDays}` : ''}. Recommend halting field installs.`;
+                        weatherContext = `🚨 CRITICAL: Heavy rain (${maxRain}% chance) expected${rainDays ? ` on ${rainDays}` : ''}. HALT all field installs immediately.`;
                         weatherRisk = "critical";
                     } else if (maxRain > 60) {
-                        weatherContext = `⚠️ CAUTION: Moderate rain risk (${maxRain}%)${rainDays ? ` on ${rainDays}` : ''}. Plan indoor work or backup dates.`;
+                        weatherContext = `⚠️ CAUTION: Moderate rain risk (${maxRain}%)${rainDays ? ` on ${rainDays}` : ''}. Reschedule outdoor work.`;
                         weatherRisk = "warning";
                     } else if (maxRain > 30) {
-                        weatherContext = `☁️ WATCH: Some rain possible (${maxRain}%). Monitor conditions.`;
+                        weatherContext = `☁️ WATCH: Some rain possible (${maxRain}%). Monitor hourly forecasts.`;
                         weatherRisk = "watch";
                     } else {
-                        weatherContext = `✅ CLEAR: Favorable conditions (${avgTemp}°F, ${maxRain}% rain chance). Full operations OK.`;
+                        weatherContext = `✅ CLEAR: Favorable conditions (${avgTemp}°F, ${maxRain}% rain). Full operations approved.`;
                         weatherRisk = "good";
                     }
                 } catch (e) {
@@ -5752,201 +5752,302 @@
                     const diffDays = (hDate - today) / (1000 * 60 * 60 * 24);
                     return diffDays >= 0 && diffDays <= 14;
                 });
-                
-                const holidayContext = nextHoliday 
-                    ? `📅 ALERT: '${nextHoliday.name}' (${nextHoliday.type}) in <14 days. Crew availability may be reduced.` 
-                    : "✅ No immediate holiday constraints.";
 
-                // --- 3. CALCULATE THIS WEEK'S METRICS (MAIN FOCUS) ---
+                const holidayContext = nextHoliday
+                    ? `📅 STAFFING ALERT: '${nextHoliday.name}' (${nextHoliday.type}) approaching. Expect reduced crew availability.`
+                    : "✅ No holiday staffing constraints.";
+
+                // --- 3. CALCULATE COMPREHENSIVE METRICS ---
                 const now = new Date();
                 now.setHours(0, 0, 0, 0);
-                
+
                 // Calculate week bounds (Monday to Sunday)
                 const dayOfWeek = now.getDay();
                 const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
                 const thisMonday = new Date(now); thisMonday.setDate(now.getDate() + diffToMonday); thisMonday.setHours(0,0,0,0);
                 const thisSunday = new Date(thisMonday); thisSunday.setDate(thisMonday.getDate() + 6); thisSunday.setHours(23,59,59,999);
-                
-                // Also calculate Sunday-start week for "Installed This Week" logic
-                const startOfFormulaWeek = new Date(now);
-                startOfFormulaWeek.setDate(now.getDate() - now.getDay());
-                startOfFormulaWeek.setHours(0,0,0,0);
-                
-                // For removals this week
-                const nextWeekEnd = new Date(thisSunday); nextWeekEnd.setDate(thisSunday.getDate() + 7);
 
-                const metrics = {
-                    // THIS WEEK FOCUS
-                    thisWeekInstalls: { total: 0, done: 0, inProgress: 0, notStarted: 0, campaigns: [] },
-                    thisWeekRemovals: { total: 0, qty: 0, campaigns: [] },
-                    
-                    // HOLDS
-                    holds: { count: 0, qty: 0, campaigns: [] },
-                    
-                    // BACKLOG (past due)
-                    backlog: { count: 0, qty: 0, campaigns: [] },
-                    
-                    // INCOMING (Material Ready)
-                    incoming: { count: 0, qty: 0 },
-                    
-                    // Stage breakdown
-                    byStage: {}
-                };
+                // Determine active filters for context
+                const activeFilterContext = [];
+                if (marketFilters.length > 0) activeFilterContext.push(`Markets: ${marketFilters.join(', ')}`);
+                if (productFilters.length > 0) activeFilterContext.push(`Products: ${productFilters.join(', ')}`);
+                if (productionFilter !== 'ALL') activeFilterContext.push(`Production: ${productionFilter}`);
+                const filterNote = activeFilterContext.length > 0
+                    ? `⚠️ FILTERED VIEW: ${activeFilterContext.join(' | ')}`
+                    : '📊 FULL PORTFOLIO VIEW (no filters applied)';
 
                 const safeCampaigns = allCampaigns || [];
-                const completedStages = ['Installed', 'Photos Taken', 'POP Completed'];
-                const inProgressStages = ['Material Ready For Install'];
-                const holdStages = ['Pending Hold', 'On Hold'];
+                const totalCampaigns = safeCampaigns.length;
+
+                // --- COMPREHENSIVE INSTALL TRACKING ---
+                const installMetrics = {
+                    // Unit-level tracking
+                    totalUnitsOrdered: 0,
+                    totalUnitsInstalled: 0,
+                    totalUnitsPending: 0,
+
+                    // Campaign-level tracking
+                    fullyInstalled: [],      // 100% complete
+                    partiallyInstalled: [],  // Some progress, not done
+                    notStarted: [],          // 0 installed
+
+                    // Risk categories
+                    stalledCampaigns: [],    // Started but no recent progress
+                    atRiskCampaigns: [],     // Past start date, low completion
+                    criticalCampaigns: [],   // High priority issues
+                };
+
+                const holdMetrics = {
+                    count: 0,
+                    totalQty: 0,
+                    campaigns: [],
+                    byReason: {}
+                };
+
+                const removalMetrics = {
+                    thisWeek: { count: 0, qty: 0, campaigns: [] },
+                    overdue: { count: 0, qty: 0, campaigns: [] }
+                };
+
+                const pipelineMetrics = {
+                    rfp: { count: 0, qty: 0 },
+                    proposal: { count: 0, qty: 0 },
+                    contracted: { count: 0, qty: 0 },
+                    proofsApproved: { count: 0, qty: 0 },
+                    materialReady: { count: 0, qty: 0 },
+                    installed: { count: 0, qty: 0 },
+                    popComplete: { count: 0, qty: 0 }
+                };
+
+                const completedStages = ['installed', 'photos taken', 'pop completed', 'takedown complete'];
+                const holdStages = ['pending hold', 'on hold'];
+                const activeInstallStages = ['material ready for install', 'installed'];
 
                 safeCampaigns.forEach(c => {
                     const stage = (c.stage || '').trim();
                     const stageLower = stage.toLowerCase();
                     const qty = parseFloat(c.quantity) || parseFloat(c.totalQty) || 0;
-                    
+                    const installed = parseFloat(c.totalInstalled) || parseFloat(c.installed) || 0;
+                    const pending = parseFloat(c.pending) || (qty - installed);
+                    const completionPct = qty > 0 ? Math.round((installed / qty) * 100) : 0;
+
                     let startDate = c.dateObj;
                     if (!startDate && c.date) startDate = new Date(c.date);
-                    
+
                     let endDate = c.endDateObj;
                     if (!endDate && c.endDate) endDate = new Date(c.endDate);
 
-                    // Track by stage
-                    if (!metrics.byStage[stage]) metrics.byStage[stage] = { qty: 0, count: 0 };
-                    metrics.byStage[stage].qty += qty;
-                    metrics.byStage[stage].count++;
+                    const daysSinceStart = startDate ? Math.floor((now - startDate) / (1000 * 60 * 60 * 24)) : null;
+                    const daysUntilEnd = endDate ? Math.floor((endDate - now) / (1000 * 60 * 60 * 24)) : null;
 
-                    // --- THIS WEEK INSTALLS ---
-                    // Campaigns scheduled to start this week OR in progress this week
-                    if (startDate && startDate >= thisMonday && startDate <= thisSunday) {
-                        metrics.thisWeekInstalls.total++;
-                        metrics.thisWeekInstalls.campaigns.push({ 
-                            advertiser: c.advertiser, 
-                            stage: stage,
-                            qty: qty,
-                            market: c.market
-                        });
-                        
-                        if (completedStages.includes(stage)) {
-                            metrics.thisWeekInstalls.done++;
-                        } else if (inProgressStages.includes(stage) || stageLower.includes('material ready')) {
-                            metrics.thisWeekInstalls.inProgress++;
-                        } else {
-                            metrics.thisWeekInstalls.notStarted++;
-                        }
-                    }
-                    
-                    // Also count campaigns installed this week (Sunday-start week, stage = Installed)
-                    if (stageLower === 'installed' && startDate && startDate >= startOfFormulaWeek) {
-                        // Already counted above if within Mon-Sun, but capture any Sunday installs
-                        if (startDate < thisMonday) {
-                            metrics.thisWeekInstalls.done++;
-                        }
-                    }
+                    // --- UNIT-LEVEL INSTALL TRACKING ---
+                    if (activeInstallStages.includes(stageLower) || stageLower.includes('material ready')) {
+                        installMetrics.totalUnitsOrdered += qty;
+                        installMetrics.totalUnitsInstalled += installed;
+                        installMetrics.totalUnitsPending += pending;
 
-                    // --- REMOVALS THIS WEEK (end dates) ---
-                    if (endDate && endDate >= thisMonday && endDate <= thisSunday) {
-                        metrics.thisWeekRemovals.total++;
-                        metrics.thisWeekRemovals.qty += qty;
-                        metrics.thisWeekRemovals.campaigns.push({
-                            advertiser: c.advertiser,
-                            endDate: c.endDate,
-                            qty: qty
-                        });
-                    }
-
-                    // --- HOLDS ---
-                    if (holdStages.includes(stage)) {
-                        metrics.holds.count++;
-                        metrics.holds.qty += qty;
-                        metrics.holds.campaigns.push({
+                        const campaignInfo = {
                             advertiser: c.advertiser,
                             market: c.market,
-                            qty: qty
-                        });
+                            qty: qty,
+                            installed: installed,
+                            pending: pending,
+                            completionPct: completionPct,
+                            stage: stage,
+                            daysSinceStart: daysSinceStart,
+                            daysUntilEnd: daysUntilEnd,
+                            owner: c.owner
+                        };
+
+                        if (completionPct >= 100 || pending === 0) {
+                            installMetrics.fullyInstalled.push(campaignInfo);
+                        } else if (installed > 0) {
+                            installMetrics.partiallyInstalled.push(campaignInfo);
+
+                            // Check for stalled campaigns (started >7 days ago, <50% complete)
+                            if (daysSinceStart > 7 && completionPct < 50) {
+                                installMetrics.stalledCampaigns.push(campaignInfo);
+                            }
+                        } else {
+                            installMetrics.notStarted.push(campaignInfo);
+
+                            // Check for at-risk (past start date, 0% progress)
+                            if (daysSinceStart > 0) {
+                                installMetrics.atRiskCampaigns.push(campaignInfo);
+                            }
+                        }
+
+                        // Critical: Past start date, ending soon, low completion
+                        if (daysSinceStart > 3 && daysUntilEnd !== null && daysUntilEnd < 7 && completionPct < 50) {
+                            installMetrics.criticalCampaigns.push(campaignInfo);
+                        }
                     }
 
-                    // --- BACKLOG (Past Due) ---
-                    if (startDate && startDate < now && !completedStages.includes(stage) && !holdStages.includes(stage) && stage !== 'Canceled' && stage !== 'Lost Opportunity') {
-                        if (stageLower.includes('material ready') || stageLower.includes('proofs') || stageLower.includes('artwork') || stageLower.includes('contracted')) {
-                            metrics.backlog.count++;
-                            metrics.backlog.qty += qty;
-                            metrics.backlog.campaigns.push({
+                    // --- HOLD TRACKING ---
+                    if (holdStages.includes(stageLower)) {
+                        holdMetrics.count++;
+                        holdMetrics.totalQty += qty;
+                        const holdReason = c.holdReason || 'Unspecified';
+                        holdMetrics.campaigns.push({
+                            advertiser: c.advertiser,
+                            market: c.market,
+                            qty: qty,
+                            reason: holdReason,
+                            owner: c.owner
+                        });
+                        holdMetrics.byReason[holdReason] = (holdMetrics.byReason[holdReason] || 0) + 1;
+                    }
+
+                    // --- REMOVAL TRACKING ---
+                    if (endDate && stageLower !== 'takedown complete') {
+                        if (endDate >= thisMonday && endDate <= thisSunday) {
+                            removalMetrics.thisWeek.count++;
+                            removalMetrics.thisWeek.qty += qty;
+                            removalMetrics.thisWeek.campaigns.push({
                                 advertiser: c.advertiser,
-                                stage: stage,
-                                date: c.date,
+                                endDate: c.endDate,
                                 qty: qty
+                            });
+                        } else if (endDate < now) {
+                            removalMetrics.overdue.count++;
+                            removalMetrics.overdue.qty += qty;
+                            removalMetrics.overdue.campaigns.push({
+                                advertiser: c.advertiser,
+                                endDate: c.endDate,
+                                qty: qty,
+                                daysOverdue: Math.floor((now - endDate) / (1000 * 60 * 60 * 24))
                             });
                         }
                     }
 
-                    // --- INCOMING (Material Ready for Install) ---
-                    if (stageLower === 'material ready for install') {
-                        metrics.incoming.count++;
-                        metrics.incoming.qty += qty;
-                    }
+                    // --- PIPELINE STAGE TRACKING ---
+                    if (stageLower.includes('rfp')) pipelineMetrics.rfp.count++, pipelineMetrics.rfp.qty += qty;
+                    else if (stageLower.includes('proposal')) pipelineMetrics.proposal.count++, pipelineMetrics.proposal.qty += qty;
+                    else if (stageLower.includes('contracted')) pipelineMetrics.contracted.count++, pipelineMetrics.contracted.qty += qty;
+                    else if (stageLower.includes('proofs approved')) pipelineMetrics.proofsApproved.count++, pipelineMetrics.proofsApproved.qty += qty;
+                    else if (stageLower.includes('material ready')) pipelineMetrics.materialReady.count++, pipelineMetrics.materialReady.qty += qty;
+                    else if (stageLower === 'installed') pipelineMetrics.installed.count++, pipelineMetrics.installed.qty += qty;
+                    else if (stageLower.includes('pop')) pipelineMetrics.popComplete.count++, pipelineMetrics.popComplete.qty += qty;
                 });
 
-                // Calculate completion rate for this week
-                const completionRate = metrics.thisWeekInstalls.total > 0 
-                    ? Math.round((metrics.thisWeekInstalls.done / metrics.thisWeekInstalls.total) * 100) 
+                // Calculate overall completion rate
+                const overallCompletionRate = installMetrics.totalUnitsOrdered > 0
+                    ? Math.round((installMetrics.totalUnitsInstalled / installMetrics.totalUnitsOrdered) * 100)
                     : 0;
 
-                // Get top advertisers in backlog
-                const backlogSummary = metrics.backlog.campaigns.length > 0
-                    ? metrics.backlog.campaigns.slice(0, 3).map(c => `${c.advertiser} (${c.stage})`).join(', ')
-                    : 'None';
+                // Sort risk lists by severity
+                installMetrics.criticalCampaigns.sort((a, b) => a.daysUntilEnd - b.daysUntilEnd);
+                installMetrics.stalledCampaigns.sort((a, b) => a.completionPct - b.completionPct);
+                installMetrics.atRiskCampaigns.sort((a, b) => b.daysSinceStart - a.daysSinceStart);
 
-                // --- 4. EXECUTIVE PROMPT FOR THIS WEEK'S OPERATIONS ---
-                const prompt = `You are the Senior Director of Operations at Vector Media, an out-of-home advertising company. Generate a focused operational briefing for THIS WEEK's install activity.
+                // Format risk summaries
+                const criticalSummary = installMetrics.criticalCampaigns.slice(0, 5).map(c =>
+                    `${c.advertiser} (${c.completionPct}% done, ${c.daysUntilEnd}d left)`
+                ).join('; ') || 'None';
 
-═══════════════════════════════════════════════
-📅 THIS WEEK'S INSTALLS (${thisMonday.toLocaleDateString()} - ${thisSunday.toLocaleDateString()})
-═══════════════════════════════════════════════
+                const stalledSummary = installMetrics.stalledCampaigns.slice(0, 5).map(c =>
+                    `${c.advertiser} (${c.completionPct}%, stalled ${c.daysSinceStart}d)`
+                ).join('; ') || 'None';
 
-📊 INSTALL STATUS:
-• Total Scheduled: ${metrics.thisWeekInstalls.total} campaigns
-• ✅ Completed: ${metrics.thisWeekInstalls.done} campaigns (${completionRate}% done)
-• 🔄 In Progress (Material Ready): ${metrics.thisWeekInstalls.inProgress} campaigns
-• ⏳ Not Started: ${metrics.thisWeekInstalls.notStarted} campaigns
+                const atRiskSummary = installMetrics.atRiskCampaigns.slice(0, 5).map(c =>
+                    `${c.advertiser} (${c.daysSinceStart}d late, 0%)`
+                ).join('; ') || 'None';
 
-📦 INCOMING QUEUE:
-• Material Ready to Install: ${metrics.incoming.count} campaigns / ${metrics.incoming.qty} units
+                const holdSummary = holdMetrics.campaigns.slice(0, 5).map(c =>
+                    `${c.advertiser} (${c.qty} units - ${c.reason})`
+                ).join('; ') || 'None';
 
-🗑️ REMOVALS THIS WEEK:
-• Campaigns Ending: ${metrics.thisWeekRemovals.total} campaigns / ${metrics.thisWeekRemovals.qty} units
+                const overdueRemovalSummary = removalMetrics.overdue.campaigns.slice(0, 3).map(c =>
+                    `${c.advertiser} (${c.daysOverdue}d overdue)`
+                ).join('; ') || 'None';
 
-⏸️ ON HOLD:
-• ${metrics.holds.count} campaigns / ${metrics.holds.qty} units currently on hold
-${metrics.holds.count > 0 ? '• Top holds: ' + metrics.holds.campaigns.slice(0, 3).map(c => c.advertiser).join(', ') : ''}
+                // --- 4. RISK-FOCUSED EXECUTIVE PROMPT ---
+                const prompt = `You are the Senior Director of Operations at Vector Media, a national out-of-home advertising company. You are known for your sharp risk assessment skills and zero tolerance for operational failures. Your job is to identify disasters before they happen.
 
-═══════════════════════════════════════════════
-⚠️ EXTERNAL RISK FACTORS
-═══════════════════════════════════════════════
+═══════════════════════════════════════════════════════════════════════════════
+🎯 OPERATIONAL RISK ASSESSMENT - ${now.toLocaleDateString()}
+═══════════════════════════════════════════════════════════════════════════════
+
+${filterNote}
+Total Campaigns in View: ${totalCampaigns}
+
+═══════════════════════════════════════════════════════════════════════════════
+📊 INSTALL EXECUTION SCORECARD
+═══════════════════════════════════════════════════════════════════════════════
+
+UNIT-LEVEL TRACKING:
+• Total Units Ordered: ${installMetrics.totalUnitsOrdered.toLocaleString()}
+• Units Installed: ${installMetrics.totalUnitsInstalled.toLocaleString()} (${overallCompletionRate}%)
+• Units Pending: ${installMetrics.totalUnitsPending.toLocaleString()}
+
+CAMPAIGN STATUS:
+• ✅ Fully Installed: ${installMetrics.fullyInstalled.length} campaigns
+• 🔄 Partially Installed: ${installMetrics.partiallyInstalled.length} campaigns
+• ⏳ Not Started: ${installMetrics.notStarted.length} campaigns
+
+═══════════════════════════════════════════════════════════════════════════════
+🚨 RISK RADAR - IMMEDIATE ATTENTION REQUIRED
+═══════════════════════════════════════════════════════════════════════════════
+
+CRITICAL (Ending Soon + Low Completion): ${installMetrics.criticalCampaigns.length} campaigns
+${installMetrics.criticalCampaigns.length > 0 ? `→ ${criticalSummary}` : '→ None - Good'}
+
+STALLED (Started >7d ago, <50% complete): ${installMetrics.stalledCampaigns.length} campaigns
+${installMetrics.stalledCampaigns.length > 0 ? `→ ${stalledSummary}` : '→ None - Good'}
+
+AT RISK (Past start date, 0% installed): ${installMetrics.atRiskCampaigns.length} campaigns
+${installMetrics.atRiskCampaigns.length > 0 ? `→ ${atRiskSummary}` : '→ None - Good'}
+
+═══════════════════════════════════════════════════════════════════════════════
+⏸️ HOLDS BLOCKING REVENUE
+═══════════════════════════════════════════════════════════════════════════════
+• Campaigns on Hold: ${holdMetrics.count}
+• Units Blocked: ${holdMetrics.totalQty.toLocaleString()}
+${holdMetrics.count > 0 ? `→ ${holdSummary}` : '→ No holds - pipeline flowing'}
+
+═══════════════════════════════════════════════════════════════════════════════
+🗑️ REMOVAL OPERATIONS
+═══════════════════════════════════════════════════════════════════════════════
+• Removals Due This Week: ${removalMetrics.thisWeek.count} campaigns / ${removalMetrics.thisWeek.qty.toLocaleString()} units
+• OVERDUE Removals: ${removalMetrics.overdue.count} campaigns / ${removalMetrics.overdue.qty.toLocaleString()} units
+${removalMetrics.overdue.count > 0 ? `→ OVERDUE: ${overdueRemovalSummary}` : '→ Removal schedule on track'}
+
+═══════════════════════════════════════════════════════════════════════════════
+🌦️ EXTERNAL RISK FACTORS
+═══════════════════════════════════════════════════════════════════════════════
 ${weatherContext}
 ${holidayContext}
 
-═══════════════════════════════════════════════
-📋 BACKLOG CHECK (Past Due - Review for Accuracy)
-═══════════════════════════════════════════════
-• ${metrics.backlog.count} campaigns with past start dates still not installed
-${metrics.backlog.count > 0 ? '• Examples: ' + backlogSummary : '• ✅ No concerning backlog'}
-Note: Some may be data sync issues - recommend spot-checking these records.
+═══════════════════════════════════════════════════════════════════════════════
+📈 PIPELINE HEALTH
+═══════════════════════════════════════════════════════════════════════════════
+• RFP: ${pipelineMetrics.rfp.count} campaigns
+• Proposal: ${pipelineMetrics.proposal.count} campaigns
+• Contracted: ${pipelineMetrics.contracted.count} campaigns
+• Material Ready: ${pipelineMetrics.materialReady.count} campaigns (${pipelineMetrics.materialReady.qty} units)
+• Installed: ${pipelineMetrics.installed.count} campaigns
+• POP Complete: ${pipelineMetrics.popComplete.count} campaigns
 
-═══════════════════════════════════════════════
-📋 GENERATE OPERATIONAL BRIEFING
-═══════════════════════════════════════════════
+═══════════════════════════════════════════════════════════════════════════════
+📋 YOUR DIRECTIVE
+═══════════════════════════════════════════════════════════════════════════════
 
-As the Senior Director, provide a concise 4-6 sentence operational briefing covering:
+As Senior Director of Operations, provide a SHARP, NO-BS operational briefing (5-8 sentences max). You must:
 
-1. **This Week's Progress** - How are we tracking? (${completionRate}% complete, ${metrics.thisWeekInstalls.total - metrics.thisWeekInstalls.done} remaining)
-2. **Weather/Holiday Impact** - ${weatherRisk === 'critical' || weatherRisk === 'warning' ? 'IMPORTANT: Address the weather risk!' : 'Any scheduling concerns?'}
-3. **Flow Balance** - ${metrics.incoming.count} incoming vs ${metrics.thisWeekRemovals.total} removals - what does this mean for crew capacity?
-4. **Holds Status** - ${metrics.holds.count > 0 ? 'We have ' + metrics.holds.count + ' campaigns on hold. Any action needed?' : 'No holds - good.'}
-5. **Backlog Note** - ${metrics.backlog.count > 3 ? 'Flag the backlog items that may need data cleanup' : 'Backlog looks manageable'}
+1. **HEADLINE THE BIGGEST RISK** - What's the #1 thing that could blow up this week? Be specific with campaign names and numbers.
 
-Be direct, use the specific numbers provided, and focus on actionable insights for THIS WEEK. No fluff.`;
+2. **INSTALL VELOCITY CHECK** - We're at ${overallCompletionRate}% installed (${installMetrics.totalUnitsInstalled}/${installMetrics.totalUnitsOrdered} units). ${overallCompletionRate < 50 ? 'This is CONCERNING.' : overallCompletionRate < 75 ? 'We need to accelerate.' : 'Solid progress.'} What's the path to completion?
+
+3. **CALL OUT STALLED WORK** - ${installMetrics.stalledCampaigns.length > 0 ? `We have ${installMetrics.stalledCampaigns.length} stalled campaigns. NAME THEM and demand action.` : 'No stalled campaigns - acknowledge this.'}
+
+4. **HOLDS IMPACT** - ${holdMetrics.count > 0 ? `${holdMetrics.count} campaigns (${holdMetrics.totalQty} units) are held up. What's the revenue impact and who needs to unblock?` : 'Pipeline is clear of holds.'}
+
+5. **WEATHER/STAFFING** - ${weatherRisk === 'critical' || weatherRisk === 'warning' ? 'CRITICAL: Factor weather into your directive!' : 'Weather is favorable.'} ${nextHoliday ? 'Holiday staffing risk is real.' : ''}
+
+Be DIRECT. Use SPECIFIC NUMBERS. Call out SPECIFIC ADVERTISERS at risk. No corporate fluff. Act like millions of dollars are on the line - because they are.`;
 
                 try {
-                    const text = await callGroq(prompt, 1500);
+                    const text = await callGroq(prompt, 2000);
                     setPipelineInsight(text);
                 } catch (e) {
                     setPipelineInsight("Analysis unavailable. Please check API configuration.");
