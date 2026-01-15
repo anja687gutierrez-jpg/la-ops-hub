@@ -357,6 +357,20 @@
                 ]
             },
             {
+                icon: '📧',
+                iconBg: 'from-violet-500 to-purple-600',
+                title: 'Email Communication',
+                subtitle: 'Daily Digest & Campaign Templates',
+                description: 'Stay connected with your team using automated daily digest emails and pre-built campaign email templates.',
+                features: [
+                    { icon: '📋', label: 'Daily Digest', desc: 'Summary email with all flight statuses' },
+                    { icon: '✉️', label: 'Email Templates', desc: 'Status updates, delays, and completions' },
+                    { icon: '🌤️', label: 'Weather Integration', desc: '7-day forecast in digest emails' },
+                    { icon: '🏠', label: 'Production Tracking', desc: 'In-house vs client production breakdown' }
+                ],
+                tip: 'Click "Daily Digest" in the Dashboard header to generate and send reports'
+            },
+            {
                 icon: '🚀',
                 iconBg: 'from-pink-500 to-rose-600',
                 title: 'Ready to Explore?',
@@ -786,6 +800,98 @@
                     }
                 ],
                 celebration: '🗺️ Impressions Expert!'
+            },
+            digestEmail: {
+                icon: '📧',
+                title: 'Daily Digest Email',
+                color: 'from-violet-500 to-purple-500',
+                navigateTo: 'dashboard',
+                openModal: 'digest',
+                steps: [
+                    {
+                        text: 'Open the Digest Email modal',
+                        action: 'open_modal',
+                        actionData: 'digest',
+                        hint: 'Click "Daily Digest" button in the Dashboard header',
+                        type: 'action'
+                    },
+                    {
+                        text: 'Customize visible sections',
+                        action: null,
+                        hint: 'Toggle Summary, Production Breakdown, Delayed, In-Progress, etc.',
+                        type: 'observe'
+                    },
+                    {
+                        text: 'Filter by Market or Product',
+                        action: 'click_filter',
+                        hint: 'Use the dropdowns to focus on specific regions or media types',
+                        type: 'action'
+                    },
+                    {
+                        text: 'Enable weather forecast',
+                        action: null,
+                        hint: 'Toggle "Show Weather" to include 7-day forecast in email',
+                        type: 'observe'
+                    },
+                    {
+                        text: 'Preview and copy the HTML email',
+                        action: null,
+                        hint: 'Click "Copy HTML" to paste into Outlook or Gmail',
+                        type: 'observe'
+                    },
+                    {
+                        text: 'Send via email client',
+                        action: null,
+                        hint: 'Click "Open in Mail" to compose with pre-filled subject',
+                        type: 'observe'
+                    }
+                ],
+                celebration: '📧 Email Pro!'
+            },
+            emailTemplates: {
+                icon: '✉️',
+                title: 'Email Templates',
+                color: 'from-blue-500 to-indigo-500',
+                navigateTo: 'dashboard',
+                steps: [
+                    {
+                        text: 'Open campaign detail modal',
+                        action: 'click_row',
+                        hint: 'Click any campaign row in the Dashboard',
+                        type: 'action'
+                    },
+                    {
+                        text: 'Select an email template',
+                        action: null,
+                        hint: 'Choose: Status Update, Delay Notice, Completion, or Missing Info',
+                        type: 'observe'
+                    },
+                    {
+                        text: 'Templates auto-fill campaign data',
+                        action: null,
+                        hint: 'Advertiser, dates, quantities, and stage are pre-populated',
+                        type: 'observe'
+                    },
+                    {
+                        text: 'Customize subject line and body',
+                        action: null,
+                        hint: 'Edit the generated text to add personal notes',
+                        type: 'observe'
+                    },
+                    {
+                        text: 'Copy or send the email',
+                        action: null,
+                        hint: 'Use copy buttons for subject and body separately',
+                        type: 'observe'
+                    },
+                    {
+                        text: 'Track sent emails in history',
+                        action: null,
+                        hint: 'Email log shows what was sent and when',
+                        type: 'observe'
+                    }
+                ],
+                celebration: '✉️ Template Master!'
             }
         };
 
@@ -1118,7 +1224,7 @@
 
                             return React.createElement('button', {
                                 key: key,
-                                onClick: () => onNavigate?.(key),
+                                onClick: () => onNavigate?.(g.navigateTo || key, g.openModal),
                                 className: `flex-shrink-0 px-2 py-1.5 rounded-lg text-center transition-all ${
                                     isCurrent
                                         ? 'bg-indigo-100 border border-indigo-300'

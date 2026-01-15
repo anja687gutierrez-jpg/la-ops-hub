@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SF to Master Tracker Converter</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .drop-zone { transition: all 0.2s; }
+        .drop-zone.dragover { background: #dbeafe; border-color: #3b82f6; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen p-8">
+    <div class="max-w-7xl mx-auto">
+        <h1 class="text-2xl font-bold text-gray-800 mb-2">SF to Master Tracker Converter</h1>
+        <p class="text-gray-600 mb-6">Converts SF National Snapshot to LASTAP_MASTER_TRACKER format with proper grouping</p>
+
+        <!-- Upload Zone -->
+        <div id="dropZone" class="drop-zone border-2 border-dashed border-gray-300 rounded-xl p-8 text-center bg-white mb-6 cursor-pointer hover:border-blue-400">
+            <div class="text-4xl mb-2">📁</div>
+            <p class="text-gray-600">Drop your Salesforce CSV here or <span class="text-blue-600 underline">click to browse</span></p>
+            <input type="file" id="fileInput" accept=".csv" class="hidden">
+        </div>
+
+        <!-- Stats -->
+        <div id="stats" class="hidden grid grid-cols-6 gap-4 mb-6">
+            <div class="bg-white rounded-lg p-4 shadow-sm">
+                <div class="text-2xl font-bold text-gray-400" id="statOriginal">0</div>
+                <div class="text-sm text-gray-500">Original Rows</div>
+            </div>
+            <div class="bg-white rounded-lg p-4 shadow-sm">
+                <div class="text-2xl font-bold text-gray-800" id="statOutput">0</div>
+                <div class="text-sm text-gray-500">Output Rows</div>
+            </div>
+            <div class="bg-white rounded-lg p-4 shadow-sm">
+                <div class="text-2xl font-bold text-amber-600" id="statHolds">0</div>
+                <div class="text-sm text-gray-500">Pending Holds</div>
+            </div>
+            <div class="bg-white rounded-lg p-4 shadow-sm">
+                <div class="text-2xl font-bold text-blue-600" id="statCampaigns">0</div>
+                <div class="text-sm text-gray-500">Unique Campaigns</div>
+            </div>
+            <div class="bg-white rounded-lg p-4 shadow-sm">
+                <div class="text-2xl font-bold text-green-600" id="statUnits">0</div>
+                <div class="text-sm text-gray-500">Total Units</div>
+            </div>
+            <div class="bg-white rounded-lg p-4 shadow-sm">
+                <div class="text-2xl font-bold text-purple-600" id="statPending">0</div>
+                <div class="text-sm text-gray-500">Pending Install</div>
+            </div>
+        </div>
+
+        <!-- Grouping Logic Info -->
+        <div id="logicInfo" class="hidden bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+            <h3 class="font-semibold text-amber-800 mb-2">Grouping Logic Applied:</h3>
+            <div class="text-sm text-amber-700 space-y-1">
+                <div><strong>Group Key:</strong> Campaign ID + Start Date + Product + Market</div>
+                <div><strong>Quantity:</strong> Summed across matching rows</div>
+                <div><strong>Installed:</strong> Summed across matching rows</div>
+                <div><strong>First Install Date:</strong> Earliest date found in group</div>
+                <div><strong>Completion Date:</strong> Latest date found in group</div>
+                <div><strong>Missing Dates:</strong> Kept empty (portal will skip rows without start date)</div>
+                <div><strong>Row Skip:</strong> Only if Campaign ID exists but Product is empty</div>
+            </div>
+        </div>
+
+        <!-- Sort Controls -->
+        <div id="sortControls" class="hidden bg-white rounded-lg p-4 shadow-sm mb-6 flex items-center gap-4">
+            <span class="text-sm font-medium text-gray-700">Sort by:</span>
+            <select id="sortSelect" onchange="sortAndDisplay()" class="px-3 py-1.5 border rounded-lg text-sm">
+                <option value="first-occurrence">First Occurrence (Original)</option>
+                <option value="start-date-desc">Start Date (Newest First)</option>
+                <option value="start-date-asc">Start Date (Oldest First)</option>
+                <option value="campaign-id">Campaign ID</option>
+                <option value="advertiser">Advertiser</option>
+                <option value="quantity-desc">Quantity (High to Low)</option>
+            </select>
+            <span class="text-xs text-gray-400">|</span>
+            <label class="flex items-center gap-2 text-sm">
+                <input type="checkbox" id="holdsOnly" onchange="sortAndDisplay()" class="rounded">
+                <span>Show Holds Only</span>
+            </label>
+        </div>
+
+        <!-- Results Table -->
+        <div id="results" class="hidden bg-white rounded-xl shadow-sm overflow-hidden mb-6">
+            <div class="p-4 border-b flex justify-between items-center">
+                <h2 class="font-semibold text-gray-800">Master Tracker Format Preview</h2>
+                <div class="flex gap-2">
+                    <button onclick="downloadCSV()" class="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
+                        Download CSV
+                    </button>
+                    <button onclick="copyToClipboard()" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
+                        Copy to Clipboard
+                    </button>
+                </div>
+            </div>
+            <div class="overflow-x-auto max-h-[500px] overflow-y-auto">
+                <table class="w-full text-xs">
+                    <thead class="bg-gray-50 sticky top-0">
+                        <tr id="tableHead"></tr>
+                    </thead>
+                    <tbody id="tableBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Skipped Rows Info -->
+        <div id="skippedInfo" class="hidden bg-red-50 border border-red-200 rounded-lg p-4">
+            <h3 class="font-semibold text-red-800 mb-2">Skipped Rows:</h3>
+            <div class="text-sm text-red-700" id="skippedDetails"></div>
+        </div>
+    </div>
+
+    <script>
+        let convertedData = [];
+        let originalData = [];
+        let skippedRows = [];
+        let originalRowCount = 0;
+
+        const MASTER_COLUMNS = [
+            'Product Start Date',
+            'Product End Date',
+            'Program End Date',
+            'Market',
+            'Campaign Number',
+            'Opportunity Owner',
+            'Advertiser',
+            'Campaign',
+            'Product',
+            'Inventory Opportunity Stage',
+            'Progress',
+            'Quantity',
+            'Installed',
+            'Pending',
+            'First Install Date',
+            'Completion Date',
+            'Production Proof'
+        ];
+
+        // Drop zone handlers
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file) processFile(file);
+        });
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files[0]) processFile(e.target.files[0]);
+        });
+
+        function processFile(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const text = e.target.result;
+                convertToMasterFormat(text);
+            };
+            reader.readAsText(file);
+        }
+
+        function parseCSVLine(line) {
+            const result = [];
+            let current = '';
+            let inQuotes = false;
+
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                if (char === '"') {
+                    if (inQuotes && line[i + 1] === '"') {
+                        current += '"';
+                        i++;
+                    } else {
+                        inQuotes = !inQuotes;
+                    }
+                } else if (char === ',' && !inQuotes) {
+                    result.push(current);
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            result.push(current);
+            return result.map(s => s.replace(/^"|"$/g, '').trim());
+        }
+
+        function parseCSV(text) {
+            const lines = text.split('\n').filter(l => l.trim());
+            const headers = parseCSVLine(lines[0]);
+            const rows = [];
+
+            for (let i = 1; i < lines.length; i++) {
+                const values = parseCSVLine(lines[i]);
+                const row = {};
+                headers.forEach((h, idx) => {
+                    row[h] = values[idx] || '';
+                });
+                row._originalLine = i + 1;
+                rows.push(row);
+            }
+            return { headers, rows };
+        }
+
+        function formatDate(dateStr) {
+            // Keep original format - DON'T convert to TBD (portal skips unparseable dates)
+            if (!dateStr || dateStr.trim() === '') return '';
+
+            const parts = dateStr.split('/');
+            if (parts.length === 3) {
+                const month = parseInt(parts[0]);
+                const day = parseInt(parts[1]);
+                let year = parseInt(parts[2]);
+                if (year < 100) year += 2000;
+                return `${month}/${day}/${year}`;
+            }
+            return dateStr || '';
+        }
+
+        function parseDate(dateStr) {
+            if (!dateStr || dateStr === 'TBD' || dateStr.trim() === '') return null;
+            const parts = dateStr.split('/');
+            if (parts.length === 3) {
+                let year = parseInt(parts[2]);
+                if (year < 100) year += 2000;
+                return new Date(year, parseInt(parts[0]) - 1, parseInt(parts[1]));
+            }
+            return new Date(dateStr);
+        }
+
+        function extractAdvertiser(opportunityName) {
+            if (!opportunityName) return '';
+            const parts = opportunityName.split('|').map(p => p.trim());
+            if (parts.length >= 2) {
+                return parts[1];
+            }
+            return parts[0] || opportunityName;
+        }
+
+        function createGroupKey(row) {
+            // Group Key: Campaign ID + Start Date + Product + Market
+            const campaignId = (row['Campaign Number'] || '').trim();
+            const startDate = formatDate(row['Product Start Date']);
+            const product = (row['Product'] || '').trim();
+            const market = (row['Market'] || '').trim();
+
+            return `${campaignId}|||${startDate}|||${product}|||${market}`;
+        }
+
+        function convertToMasterFormat(csvText) {
+            const { rows } = parseCSV(csvText);
+            originalRowCount = rows.length;
+            skippedRows = [];
+
+            // Group rows by composite key
+            const groups = new Map();
+
+            rows.forEach((row, idx) => {
+                const campaignId = (row['Campaign Number'] || '').trim();
+                const product = (row['Product'] || '').trim();
+
+                // Skip logic: only skip if Campaign ID exists but Product is missing
+                if (campaignId && !product) {
+                    skippedRows.push({
+                        line: row._originalLine,
+                        reason: 'Campaign ID exists but Product is empty',
+                        campaignId: campaignId
+                    });
+                    return;
+                }
+
+                // Skip if no campaign ID at all
+                if (!campaignId) {
+                    skippedRows.push({
+                        line: row._originalLine,
+                        reason: 'No Campaign ID',
+                        campaignId: '(empty)'
+                    });
+                    return;
+                }
+
+                const groupKey = createGroupKey(row);
+
+                if (!groups.has(groupKey)) {
+                    // First occurrence - create new group
+                    const qty = parseInt(row['Quantity']) || 0;
+                    const installed = parseInt(row['Installed']) || 0;
+
+                    groups.set(groupKey, {
+                        'Product Start Date': formatDate(row['Product Start Date']),
+                        'Product End Date': formatDate(row['Product End Date']),
+                        'Program End Date': formatDate(row['Program End Date']),
+                        'Market': row['Market'] || '',
+                        'Campaign Number': campaignId,
+                        'Opportunity Owner': row['Opportunity Owner'] || '',
+                        'Advertiser': extractAdvertiser(row['Opportunity Name']),
+                        'Campaign': row['Opportunity Name'] || '',
+                        'Product': product,
+                        'Inventory Opportunity Stage': row['Inventory Opportunity Stage'] || '',
+                        'Quantity': qty,
+                        'Installed': installed,
+                        'Pending': qty - installed,
+                        'First Install Date': '',
+                        'Completion Date': '',
+                        'Production Proof': '',
+                        '_startDateObj': parseDate(row['Product Start Date']),
+                        '_endDateObj': parseDate(row['Product End Date']),
+                        '_firstInstallDateObj': null,
+                        '_completionDateObj': null,
+                        '_mergeCount': 1,
+                        '_order': groups.size // Track first occurrence order
+                    });
+                } else {
+                    // Merge into existing group
+                    const existing = groups.get(groupKey);
+                    const qty = parseInt(row['Quantity']) || 0;
+                    const installed = parseInt(row['Installed']) || 0;
+
+                    // Sum quantities
+                    existing['Quantity'] += qty;
+                    existing['Installed'] += installed;
+                    existing['Pending'] = existing['Quantity'] - existing['Installed'];
+
+                    // Track earliest/latest dates
+                    const endDate = parseDate(row['Product End Date']);
+                    if (endDate && (!existing._endDateObj || endDate > existing._endDateObj)) {
+                        existing._endDateObj = endDate;
+                        existing['Product End Date'] = formatDate(row['Product End Date']);
+                    }
+
+                    // Update stage if current row has one and existing doesn't
+                    if (row['Inventory Opportunity Stage'] && !existing['Inventory Opportunity Stage']) {
+                        existing['Inventory Opportunity Stage'] = row['Inventory Opportunity Stage'];
+                    }
+
+                    existing._mergeCount++;
+                }
+            });
+
+            // Convert to array and add Progress column
+            convertedData = Array.from(groups.values()).map(row => {
+                row['Progress'] = ` ${row['Installed']} / ${row['Quantity']}`;
+                return row;
+            });
+
+            // Store original for sorting
+            originalData = [...convertedData];
+
+            sortAndDisplay();
+        }
+
+        function sortAndDisplay() {
+            const sortBy = document.getElementById('sortSelect')?.value || 'first-occurrence';
+            const holdsOnly = document.getElementById('holdsOnly')?.checked || false;
+
+            // Start with original data
+            let data = [...originalData];
+
+            // Filter holds only
+            if (holdsOnly) {
+                data = data.filter(row => {
+                    const stage = (row['Inventory Opportunity Stage'] || '').toLowerCase();
+                    return stage.includes('hold') || stage.includes('pending');
+                });
+            }
+
+            // Sort
+            switch (sortBy) {
+                case 'start-date-desc':
+                    data.sort((a, b) => {
+                        if (!a._startDateObj && !b._startDateObj) return 0;
+                        if (!a._startDateObj) return 1;
+                        if (!b._startDateObj) return -1;
+                        return b._startDateObj - a._startDateObj;
+                    });
+                    break;
+                case 'start-date-asc':
+                    data.sort((a, b) => {
+                        if (!a._startDateObj && !b._startDateObj) return 0;
+                        if (!a._startDateObj) return 1;
+                        if (!b._startDateObj) return -1;
+                        return a._startDateObj - b._startDateObj;
+                    });
+                    break;
+                case 'campaign-id':
+                    data.sort((a, b) => (a['Campaign Number'] || '').localeCompare(b['Campaign Number'] || ''));
+                    break;
+                case 'advertiser':
+                    data.sort((a, b) => (a['Advertiser'] || '').localeCompare(b['Advertiser'] || ''));
+                    break;
+                case 'quantity-desc':
+                    data.sort((a, b) => (b['Quantity'] || 0) - (a['Quantity'] || 0));
+                    break;
+                case 'first-occurrence':
+                default:
+                    data.sort((a, b) => (a._order || 0) - (b._order || 0));
+                    break;
+            }
+
+            convertedData = data;
+            displayResults();
+        }
+
+        function displayResults() {
+            document.getElementById('stats').classList.remove('hidden');
+            document.getElementById('results').classList.remove('hidden');
+            document.getElementById('logicInfo').classList.remove('hidden');
+            document.getElementById('sortControls').classList.remove('hidden');
+
+            // Update stats
+            document.getElementById('statOriginal').textContent = originalRowCount;
+            document.getElementById('statOutput').textContent = originalData.length;
+
+            const holdsCount = originalData.filter(c => {
+                const stage = (c['Inventory Opportunity Stage'] || '').toLowerCase();
+                return stage.includes('hold') || stage.includes('pending');
+            }).length;
+            document.getElementById('statHolds').textContent = holdsCount;
+
+            const uniqueCampaigns = new Set(originalData.map(c => c['Campaign Number'])).size;
+            document.getElementById('statCampaigns').textContent = uniqueCampaigns;
+
+            const totalUnits = originalData.reduce((sum, c) => sum + (c['Quantity'] || 0), 0);
+            document.getElementById('statUnits').textContent = totalUnits.toLocaleString();
+
+            const totalPending = originalData.reduce((sum, c) => sum + (c['Pending'] || 0), 0);
+            document.getElementById('statPending').textContent = totalPending.toLocaleString();
+
+            // Build table
+            const displayCols = MASTER_COLUMNS.filter(c => !c.startsWith('_'));
+            const thead = document.getElementById('tableHead');
+            thead.innerHTML = displayCols.map(h =>
+                `<th class="px-2 py-2 text-left text-[10px] font-medium text-gray-500 uppercase whitespace-nowrap">${h}</th>`
+            ).join('');
+
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = convertedData.map((row, idx) => {
+                const stage = row['Inventory Opportunity Stage'] || '';
+                const isHold = stage.toLowerCase().includes('hold') || stage.toLowerCase().includes('pending');
+                const isInstalled = stage.toLowerCase().includes('installed');
+                const isLost = stage.toLowerCase().includes('lost');
+                const isMerged = row._mergeCount > 1;
+
+                let rowClass = idx % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+                if (isHold) rowClass = 'bg-amber-50';
+                else if (isInstalled) rowClass = 'bg-green-50';
+                else if (isLost) rowClass = 'bg-red-50';
+
+                return `<tr class="${rowClass} hover:bg-blue-50 ${isMerged ? 'border-l-4 border-l-blue-400' : ''}">
+                    ${displayCols.map(col => {
+                        let val = row[col] ?? '';
+                        let cellClass = 'px-2 py-1.5 text-gray-700 whitespace-nowrap';
+
+                        if (col === 'Inventory Opportunity Stage') {
+                            if (isHold) cellClass += ' font-semibold text-amber-700';
+                            else if (isInstalled) cellClass += ' font-semibold text-green-700';
+                            else if (isLost) cellClass += ' text-red-600';
+                        }
+                        if (col === 'Pending' && val > 0) cellClass += ' font-semibold text-orange-600';
+                        if (col === 'Advertiser') cellClass += ' font-medium text-blue-700';
+                        if (col === 'Product Start Date' && !val) cellClass += ' text-gray-400 italic';
+                        if (col === 'Market') val = val.length > 25 ? val.substring(0, 25) + '...' : val;
+                        if (col === 'Campaign') val = val.length > 40 ? val.substring(0, 40) + '...' : val;
+
+                        // Show merge indicator
+                        let mergeIndicator = '';
+                        if (col === 'Campaign Number' && isMerged) {
+                            mergeIndicator = ` <span class="text-[9px] bg-blue-100 text-blue-600 px-1 rounded">${row._mergeCount} merged</span>`;
+                        }
+
+                        return `<td class="${cellClass}" title="${row[col] || ''}">${val}${mergeIndicator}</td>`;
+                    }).join('')}
+                </tr>`;
+            }).join('');
+
+            // Show skipped rows info
+            if (skippedRows.length > 0) {
+                document.getElementById('skippedInfo').classList.remove('hidden');
+                document.getElementById('skippedDetails').innerHTML = `
+                    <p class="mb-2">${skippedRows.length} rows skipped:</p>
+                    <ul class="list-disc list-inside max-h-32 overflow-y-auto text-xs">
+                        ${skippedRows.slice(0, 20).map(s => `<li>Line ${s.line}: ${s.reason} (${s.campaignId})</li>`).join('')}
+                        ${skippedRows.length > 20 ? `<li class="text-gray-500">...and ${skippedRows.length - 20} more</li>` : ''}
+                    </ul>
+                `;
+            } else {
+                document.getElementById('skippedInfo').classList.add('hidden');
+            }
+        }
+
+        function downloadCSV() {
+            const outputCols = MASTER_COLUMNS;
+            const csvContent = [
+                outputCols.join(','),
+                ...convertedData.map(row =>
+                    outputCols.map(col => {
+                        let val = (row[col] ?? '').toString();
+                        if (val.includes(',') || val.includes('"') || val.includes('\n')) {
+                            val = '"' + val.replace(/"/g, '""') + '"';
+                        }
+                        return val;
+                    }).join(',')
+                )
+            ].join('\n');
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const today = new Date().toISOString().split('T')[0];
+            a.download = `LASTAP_MASTER_TRACKER_${today}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function copyToClipboard() {
+            const outputCols = MASTER_COLUMNS;
+            const tsvContent = [
+                outputCols.join('\t'),
+                ...convertedData.map(row =>
+                    outputCols.map(col => row[col] ?? '').join('\t')
+                )
+            ].join('\n');
+
+            navigator.clipboard.writeText(tsvContent).then(() => {
+                alert('Copied to clipboard! Paste directly into Google Sheets.');
+            });
+        }
+    </script>
+</body>
+</html>
