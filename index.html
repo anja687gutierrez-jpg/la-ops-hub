@@ -4191,8 +4191,6 @@
         // COLLAPSED MINI-BAR with Waterfall Cascade
         // ═══════════════════════════════════════════════════════════════════════════
         const CollapsedMiniBar = ({ view, setView, onLogout }) => {
-            const [pipelineExpanded, setPipelineExpanded] = useState(false);
-            const [historyExpanded, setHistoryExpanded] = useState(false);
             
             const moduleItems = [
                 { id: 'dashboard', icon: 'LayoutDashboard' },
@@ -4279,84 +4277,42 @@
                         <Icon name="Globe" size={16} className="text-emerald-400" />
                     </button>
 
-                    {/* Pipeline Section - Collapsible waterfall */}
+                    {/* Pipeline Section */}
                     <div className="w-10 border-t border-slate-700 my-2" />
-                    <div 
-                        className="text-purple-400 text-[9px] font-bold mb-2 cursor-pointer hover:text-purple-300 flex items-center gap-0.5 tracking-wider"
-                        onMouseEnter={() => setPipelineExpanded(true)}
-                        onMouseLeave={() => setPipelineExpanded(false)}
-                    >
-                        PIPE
-                        <Icon name={pipelineExpanded ? 'ChevronUp' : 'ChevronDown'} size={9} />
+                    <div className="text-purple-400 text-[9px] font-bold mb-2 tracking-wider">PIPE</div>
+                    
+                    <div className="flex flex-col items-center">
+                        {pipelineItems.map((item, i) => (
+                            <IconButton
+                                key={item.id}
+                                item={item}
+                                colorClass="text-purple-400"
+                                bgClass="bg-purple-500/20"
+                                borderClass="border border-purple-400"
+                                hoverBorderClass="border-purple-600"
+                                index={i}
+                                isVisible={true}
+                            />
+                        ))}
                     </div>
                     
-                    <div 
-                        className="flex flex-col items-center"
-                        onMouseEnter={() => setPipelineExpanded(true)}
-                        onMouseLeave={() => setPipelineExpanded(false)}
-                    >
-                        {pipelineItems.map((item, i) => {
-                            const showByDefault = i < 3;
-                            const isVisible = showByDefault || pipelineExpanded;
-                            
-                            if (!showByDefault && !pipelineExpanded) return null;
-                            
-                            return (
-                                <IconButton 
-                                    key={item.id} 
-                                    item={item} 
-                                    colorClass="text-purple-400"
-                                    bgClass="bg-purple-500/20"
-                                    borderClass="border border-purple-400"
-                                    hoverBorderClass="border-purple-600"
-                                    index={i - 3}
-                                    isVisible={isVisible}
-                                />
-                            );
-                        })}
-                        {!pipelineExpanded && (
-                            <div className="text-slate-600 text-[8px] mt-1">+{pipelineItems.length - 3}</div>
-                        )}
-                    </div>
-                    
-                    {/* History Section - Collapsible waterfall */}
+                    {/* History Section */}
                     <div className="w-10 border-t border-slate-700 my-2" />
-                    <div 
-                        className="text-amber-400 text-[9px] font-bold mb-2 cursor-pointer hover:text-amber-300 flex items-center gap-0.5 tracking-wider"
-                        onMouseEnter={() => setHistoryExpanded(true)}
-                        onMouseLeave={() => setHistoryExpanded(false)}
-                    >
-                        HIST
-                        <Icon name={historyExpanded ? 'ChevronUp' : 'ChevronDown'} size={9} />
-                    </div>
+                    <div className="text-amber-400 text-[9px] font-bold mb-2 tracking-wider">HIST</div>
                     
-                    <div 
-                        className="flex flex-col items-center"
-                        onMouseEnter={() => setHistoryExpanded(true)}
-                        onMouseLeave={() => setHistoryExpanded(false)}
-                    >
-                        {historyItems.map((item, i) => {
-                            const showByDefault = i < 3;
-                            const isVisible = showByDefault || historyExpanded;
-                            
-                            if (!showByDefault && !historyExpanded) return null;
-                            
-                            return (
-                                <IconButton 
-                                    key={item.id} 
-                                    item={item} 
-                                    colorClass="text-amber-400"
-                                    bgClass="bg-amber-500/20"
-                                    borderClass="border border-amber-400"
-                                    hoverBorderClass="border-amber-600"
-                                    index={i - 3}
-                                    isVisible={isVisible}
-                                />
-                            );
-                        })}
-                        {!historyExpanded && (
-                            <div className="text-slate-600 text-[8px] mt-1">+{historyItems.length - 3}</div>
-                        )}
+                    <div className="flex flex-col items-center">
+                        {historyItems.map((item, i) => (
+                            <IconButton
+                                key={item.id}
+                                item={item}
+                                colorClass="text-amber-400"
+                                bgClass="bg-amber-500/20"
+                                borderClass="border border-amber-400"
+                                hoverBorderClass="border-amber-600"
+                                index={i}
+                                isVisible={true}
+                            />
+                        ))}
                     </div>
                     
                     <div className="flex-1" />
