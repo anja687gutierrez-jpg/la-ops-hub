@@ -3022,15 +3022,21 @@
                             {visibleCols.completion && <td className={`${cellPad} ${fontSize} font-mono text-gray-600 whitespace-nowrap`}>{row.completion || '-'}</td>}
                             {visibleCols.status && <td className={`${cellPad} text-right`}>
                                 <div className="flex items-center justify-end gap-1">
-                                    {row.isComplete ? (
-                                        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${compactMode ? 'text-[10px]' : 'text-xs'} bg-green-100 text-green-700 font-medium`}>
-                                            <Icon name="CheckCircle" size={compactMode ? 10 : 12} /> Done
-                                        </span>
-                                    ) : (
-                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded ${compactMode ? 'text-[10px]' : 'text-xs'} bg-gray-100 text-gray-600`}>
-                                            Active
-                                        </span>
-                                    )}
+                                    {(() => {
+                                        // Check both isComplete flag AND stage hierarchy for Done status
+                                        const completedStages = ['installed', 'photos taken', 'pop completed', 'takedown complete'];
+                                        const stageLower = (row.stage || '').toLowerCase();
+                                        const isDone = row.isComplete || completedStages.includes(stageLower);
+                                        return isDone ? (
+                                            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${compactMode ? 'text-[10px]' : 'text-xs'} bg-green-100 text-green-700 font-medium`}>
+                                                <Icon name="CheckCircle" size={compactMode ? 10 : 12} /> Done
+                                            </span>
+                                        ) : (
+                                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded ${compactMode ? 'text-[10px]' : 'text-xs'} bg-gray-100 text-gray-600`}>
+                                                Active
+                                            </span>
+                                        );
+                                    })()}
                                     {/* Production Proof Icon - only show if set */}
                                     {row.productionProof && (
                                         <ProductionIcon type={row.productionProof} size={12} compact />
@@ -5415,8 +5421,10 @@
              * @param {Object} additionalUpdates - Optional fields: { productionProof, installed, pending, notes, photosLink, receiverLink, materialBreakdown }
              */
             const handleUpdateStage = (campaignKey, newStage, additionalUpdates = {}) => {
+                console.log('🔧 handleUpdateStage called:', { campaignKey, newStage, additionalUpdates });
                 const updates = { stage: newStage, ...additionalUpdates };
                 updateManualOverride(campaignKey, updates);
+                console.log('✅ Override saved for:', campaignKey, '→', newStage);
 
                 // If material data is provided, also store it for Material Receiver sync
                 if (additionalUpdates.materialBreakdown || additionalUpdates.photosLink || additionalUpdates.receiverLink) {
@@ -6170,7 +6178,7 @@ Be DIRECT. Use SPECIFIC NUMBERS. Call out SPECIFIC ADVERTISERS at risk. No corpo
                             categories.ghostBookings.push(newItem);
                             if (!includeGhosts) return; // Skip from specialty view if excluding
                         }
-                        
+
                         // MODIFIED: Check composite key for extended overrides
                         const uniqueKey = `${newItem.id}_${newItem.date}`;
                         const override = manualOverrides[uniqueKey];
@@ -6178,6 +6186,11 @@ Be DIRECT. Use SPECIFIC NUMBERS. Call out SPECIFIC ADVERTISERS at risk. No corpo
                             if (override.stage) {
                                 newItem.stage = override.stage;
                                 newItem.isOverridden = true;
+                                // Recalculate isComplete based on stage hierarchy
+                                const completedStages = ['installed', 'photos taken', 'pop completed', 'takedown complete'];
+                                if (completedStages.includes(override.stage.toLowerCase())) {
+                                    newItem.isComplete = true;
+                                }
                             }
                             if (override.previousStage) {
                                 newItem.previousStage = override.previousStage;
@@ -6227,7 +6240,7 @@ Be DIRECT. Use SPECIFIC NUMBERS. Call out SPECIFIC ADVERTISERS at risk. No corpo
                         if (newItem.isGhost) {
                             categories.ghostBookings.push(newItem);
                         }
-                        
+
                         // MODIFIED: Check composite key for extended overrides
                         const uniqueKey = `${newItem.id}_${newItem.date}`;
                         const override = manualOverrides[uniqueKey];
@@ -6235,6 +6248,11 @@ Be DIRECT. Use SPECIFIC NUMBERS. Call out SPECIFIC ADVERTISERS at risk. No corpo
                             if (override.stage) {
                                 newItem.stage = override.stage;
                                 newItem.isOverridden = true;
+                                // Recalculate isComplete based on stage hierarchy
+                                const completedStages = ['installed', 'photos taken', 'pop completed', 'takedown complete'];
+                                if (completedStages.includes(override.stage.toLowerCase())) {
+                                    newItem.isComplete = true;
+                                }
                             }
                             if (override.previousStage) {
                                 newItem.previousStage = override.previousStage;
@@ -6317,10 +6335,17 @@ Be DIRECT. Use SPECIFIC NUMBERS. Call out SPECIFIC ADVERTISERS at risk. No corpo
                         const uniqueKey = `${item.id}_${item.date}`;
                         const override = manualOverrides[uniqueKey];
                         if (override) {
+                            console.log('📋 Applying override for:', uniqueKey, override);
                             // Apply stage override
                             if (override.stage) {
+                                console.log('  → Stage override:', item.stage, '→', override.stage);
                                 item.stage = override.stage;
                                 item.isOverridden = true;
+                                // Recalculate isComplete based on stage hierarchy
+                                const completedStages = ['installed', 'photos taken', 'pop completed', 'takedown complete'];
+                                if (completedStages.includes(override.stage.toLowerCase())) {
+                                    item.isComplete = true;
+                                }
                             }
                             // Store previous stage for auto-stage reversal
                             if (override.previousStage) {
@@ -6625,6 +6650,38 @@ Be DIRECT. Use SPECIFIC NUMBERS. Call out SPECIFIC ADVERTISERS at risk. No corpo
                             if (!newItem.dateObj && newItem.date) {
                                 newItem.dateObj = new Date(newItem.date);
                             }
+
+                            // APPLY MANUAL OVERRIDES (stage, installed count, etc.)
+                            const uniqueKey = `${newItem.id}_${newItem.date}`;
+                            const override = manualOverrides[uniqueKey];
+                            if (override) {
+                                if (override.stage) {
+                                    newItem.stage = override.stage;
+                                    newItem.isOverridden = true;
+                                    // Recalculate isComplete based on stage hierarchy
+                                    const completedStages = ['installed', 'photos taken', 'pop completed', 'takedown complete'];
+                                    if (completedStages.includes(override.stage.toLowerCase())) {
+                                        newItem.isComplete = true;
+                                    }
+                                }
+                                if (override.adjustedQty && override.adjustedQty > 0) {
+                                    newItem.adjustedQty = override.adjustedQty;
+                                    newItem.hasQtyAdjustment = true;
+                                    newItem.isOverridden = true;
+                                }
+                                if (override.installed !== undefined) {
+                                    newItem.totalInstalled = override.installed;
+                                    newItem.installed = override.installed;
+                                    const targetQty = newItem.adjustedQty || newItem.totalQty || newItem.quantity || 0;
+                                    newItem.pending = Math.max(0, targetQty - override.installed);
+                                    newItem.isOverridden = true;
+                                }
+                                if (override.productionProof) {
+                                    newItem.productionProof = override.productionProof;
+                                    newItem.isOverridden = true;
+                                }
+                            }
+
                             return newItem;
                         })
                         .filter(i => {

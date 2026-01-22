@@ -563,8 +563,9 @@
                 mediaType: customDesigns || null,
                 totalQty: customQty || null
             };
-            onSave(uniqueKey, item.stage, saveData);
-            alert('✅ Data saved! Material info synced to Material Receiver & POP Gallery.');
+            // Use newStage (from dropdown) instead of item.stage (original)
+            onSave(uniqueKey, newStage, saveData);
+            alert('✅ Data saved! Stage and material info synced.');
         };
 
         if (!item) return null;
