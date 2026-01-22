@@ -945,7 +945,7 @@
             
             try {
                 const response = await fetch(
-                    `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lon}&daily=temperature_2m_max,precipitation_probability_max,weathercode&timezone=auto&forecast_days=7`
+                    `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lon}&daily=temperature_2m_max,precipitation_probability_max,weathercode&timezone=auto&forecast_days=7&temperature_unit=fahrenheit`
                 );
                 
                 if (!response.ok) throw new Error('Weather API failed');

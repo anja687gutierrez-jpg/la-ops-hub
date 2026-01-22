@@ -46,6 +46,10 @@
             lastTime: performance.now(),
             // Date/time updates
             currentTime: new Date(),
+            // Live weather data
+            weatherTemp: null,
+            weatherCondition: null,
+            weatherLoaded: false,
         });
 
         // Titanium Theme
@@ -233,6 +237,24 @@
         useEffect(() => {
             const canvas = canvasRef.current;
             if (!canvas) return;
+
+            // Fetch live weather data on mount
+            const loadWeather = async () => {
+                try {
+                    const location = (window.STAP_getWeatherLocation && window.STAP_getWeatherLocation()) || 'Los Angeles, CA';
+                    if (window.STAP_fetchLiveWeather) {
+                        const data = await window.STAP_fetchLiveWeather(location);
+                        if (data && data.length > 0) {
+                            stateRef.current.weatherTemp = data[0].temp;
+                            stateRef.current.weatherCondition = data[0].condition;
+                            stateRef.current.weatherLoaded = true;
+                        }
+                    }
+                } catch (e) {
+                    console.error('Sidebar weather fetch failed:', e);
+                }
+            };
+            loadWeather();
 
             const ctx = canvas.getContext('2d');
             const sidebarWidth = 320;
@@ -840,9 +862,16 @@
                 ctx.font = '300 10px Montserrat, Inter, sans-serif';
                 // Get temperature unit and location from settings
                 const tempUnit = (window.STAP_getTempUnit && window.STAP_getTempUnit()) || 'F';
-                const temp = tempUnit === 'C' ? '22°C' : '72°F';
                 const location = (window.STAP_getWeatherLocation && window.STAP_getWeatherLocation()) || 'Los Angeles, CA';
                 const cityName = location.split(',')[0];
+                // Use live weather if loaded, otherwise show loading indicator
+                let temp = '--°F';
+                if (stateRef.current.weatherLoaded && stateRef.current.weatherTemp !== null) {
+                    const tempValue = tempUnit === 'C'
+                        ? Math.round((stateRef.current.weatherTemp - 32) * 5/9)
+                        : stateRef.current.weatherTemp;
+                    temp = tempValue + '°' + tempUnit;
+                }
                 ctx.fillText(dateStr + '  •  ' + cityName + '  •  ' + temp, sidebarWidth / 2, footerStartY + 16);
 
                 // Daily Digest Button
