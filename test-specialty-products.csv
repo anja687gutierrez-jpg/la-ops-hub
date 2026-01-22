@@ -1,0 +1,33 @@
+Campaign ID,Advertiser,Campaign Name,Product Start Date,Product End Date,Market,Product,Stage,Sales Owner,Quantity,Installed,Pending
+# ============ SPECIALTY PRODUCTS TEST ============
+SP-001,Nike,Air Max Domination,01/15/2026,02/15/2026,Los Angeles,Transit Shelters-Domination,Installed,Sarah Chen,25,25,0
+SP-002,Adidas,Stadium Takeover,01/20/2026,02/20/2026,New York,Station Takeover-Full,Material Ready For Install,Mike Rodriguez,8,0,8
+SP-003,Apple,iPhone Launch Wrap,02/01/2026,03/01/2026,San Francisco,Transit Shelters-Full Wrap,Contracted,Jennifer Park,15,0,15
+SP-004,Samsung,Galaxy Spectacular,01/25/2026,02/25/2026,Chicago,Digital Spectacular,Proofs Approved,David Kim,5,0,5
+SP-005,Google,Pixel Wallscape,02/05/2026,03/05/2026,Los Angeles,Wallscape-Premium,Installed,Amanda Torres,3,3,0
+SP-006,Meta,Quest Embellishment,01/18/2026,02/18/2026,Miami,Transit Shelters-Panel-Network + Embellishment,Material Ready For Install,Chris Johnson,50,20,30
+SP-007,Netflix,Stranger Things Mural,02/10/2026,03/10/2026,Los Angeles,Building Mural,Photos Taken,Sarah Chen,2,2,0
+SP-008,Disney,Marvel Vinyl Wrap,01/22/2026,02/22/2026,Orlando,Bus Vinyl Wrap,Installed,Mike Rodriguez,12,12,0
+SP-009,Amazon,Prime Day Custom,02/15/2026,03/15/2026,Seattle,Custom Transit Display,RFP,Jennifer Park,20,0,20
+SP-010,Coca-Cola,Summer Premium,01/28/2026,02/28/2026,Dallas,Transit Shelters-Premium,Contracted,David Kim,30,0,30
+SP-011,Pepsi,Super Bowl Takeover,02/01/2026,02/15/2026,Las Vegas,Full Station Takeover,Material Ready For Install,Amanda Torres,1,0,1
+SP-012,BMW,i8 Launch Spectacular,02/20/2026,03/20/2026,Los Angeles,Highway Spectacular,Proofs Approved,Chris Johnson,4,0,4
+SP-013,Mercedes,EQS Wallscape Downtown,01/30/2026,03/01/2026,New York,Wallscape-Times Square,Installed,Sarah Chen,1,1,0
+SP-014,Tesla,Cybertruck Wrap Campaign,02/08/2026,03/08/2026,San Francisco,Transit Buses-Full Wrap,Material Ready For Install,Mike Rodriguez,10,0,10
+SP-015,Spotify,Wrapped Domination,12/01/2025,01/15/2026,Chicago,Transit Shelters-Domination,POP Completed,Jennifer Park,40,40,0
+SP-016,HBO,House Dragon Mural,01/10/2026,02/10/2026,Los Angeles,Building Mural-Sunset Blvd,Photos Taken,David Kim,1,1,0
+SP-017,Warner Bros,Batman Vinyl,02/25/2026,03/25/2026,New York,Kiosk Vinyl Wrap,Contracted,Amanda Torres,25,0,25
+SP-018,Universal,Jurassic Custom Build,03/01/2026,04/01/2026,Orlando,Custom 3D Display,RFP,Chris Johnson,6,0,6
+SP-019,Paramount,Top Gun Premium,01/15/2026,02/15/2026,Los Angeles,Transit Shelters-Premium,Installed,Sarah Chen,35,32,3
+SP-020,Lionsgate,John Wick Takeover,02/12/2026,03/12/2026,New York,Subway Station Takeover,Material Ready For Install,Mike Rodriguez,3,0,3
+# ============ TRANSIT SHELTERS-PANEL-ICON ============
+SP-021,Gucci,Fashion Week Icon,02/05/2026,02/20/2026,New York,Transit Shelters-Panel-Icon,Installed,Jennifer Park,20,20,0
+SP-022,Louis Vuitton,LV Icon Display,01/25/2026,02/25/2026,Los Angeles,Transit Shelters-Panel-Icon,Material Ready For Install,David Kim,15,0,15
+SP-023,Chanel,Spring Icon Campaign,03/01/2026,04/01/2026,Miami,Transit Shelters-Panel-Icon,Contracted,Amanda Torres,10,0,10
+# ============ MIXED REGULAR + SPECIALTY ============
+SP-030,Target,Back to School Network,01/20/2026,02/20/2026,Los Angeles,Transit Shelters-Panel-Network,Installed,Chris Johnson,100,95,5
+SP-031,Walmart,Holiday Targeted,12/01/2025,01/01/2026,Dallas,Transit Shelters-Panel-Targeted,POP Completed,Sarah Chen,75,75,0
+SP-032,Best Buy,Tech Sale Bench,01/15/2026,02/15/2026,Chicago,Bus Bench,Material Ready For Install,Mike Rodriguez,50,25,25
+SP-033,Home Depot,Spring Urban,02/01/2026,03/01/2026,Miami,Urban Panel,Contracted,Jennifer Park,40,0,40
+SP-034,Lowes,Garden Kiosk,03/01/2026,04/01/2026,Seattle,Digital Kiosk,RFP,David Kim,30,0,30
+SP-035,Costco,Membership Interior,01/10/2026,02/10/2026,San Francisco,Interior Card,Installed,Amanda Torres,200,200,0
