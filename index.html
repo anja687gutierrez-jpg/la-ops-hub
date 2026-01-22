@@ -6417,8 +6417,8 @@ Be DIRECT. Use SPECIFIC NUMBERS. Call out SPECIFIC ADVERTISERS at risk. No corpo
                             if (!includeGhosts) return; // Skip from specialty view if excluding
                         }
 
-                        // MODIFIED: Check composite key for extended overrides
-                        const uniqueKey = `${newItem.id}_${newItem.date}`;
+                        // MODIFIED: Check composite key for extended overrides (includes product for uniqueness)
+                        const uniqueKey = `${newItem.id}_${newItem.date}_${newItem.product || newItem.media}`;
                         const override = manualOverrides[uniqueKey];
                         if (override) {
                             if (override.stage) {
@@ -6479,8 +6479,8 @@ Be DIRECT. Use SPECIFIC NUMBERS. Call out SPECIFIC ADVERTISERS at risk. No corpo
                             categories.ghostBookings.push(newItem);
                         }
 
-                        // MODIFIED: Check composite key for extended overrides
-                        const uniqueKey = `${newItem.id}_${newItem.date}`;
+                        // MODIFIED: Check composite key for extended overrides (includes product for uniqueness)
+                        const uniqueKey = `${newItem.id}_${newItem.date}_${newItem.product || newItem.media}`;
                         const override = manualOverrides[uniqueKey];
                         if (override) {
                             if (override.stage) {
@@ -6568,9 +6568,9 @@ Be DIRECT. Use SPECIFIC NUMBERS. Call out SPECIFIC ADVERTISERS at risk. No corpo
                             categories.ghostBookings.push(item);
                             if (!includeGhosts) return; // Skip from other categories
                         }
-                        
-                        // MODIFIED: Check composite key for extended manual overrides
-                        const uniqueKey = `${item.id}_${item.date}`;
+
+                        // MODIFIED: Check composite key for extended manual overrides (includes product for uniqueness)
+                        const uniqueKey = `${item.id}_${item.date}_${item.product || item.media}`;
                         const override = manualOverrides[uniqueKey];
                         if (override) {
                             console.log('📋 Applying override for:', uniqueKey, override);
@@ -6894,8 +6894,8 @@ Be DIRECT. Use SPECIFIC NUMBERS. Call out SPECIFIC ADVERTISERS at risk. No corpo
                                 newItem.dateObj = new Date(newItem.date);
                             }
 
-                            // APPLY MANUAL OVERRIDES (stage, installed count, etc.)
-                            const uniqueKey = `${newItem.id}_${newItem.date}`;
+                            // APPLY MANUAL OVERRIDES (stage, installed count, etc.) - includes product for uniqueness
+                            const uniqueKey = `${newItem.id}_${newItem.date}_${newItem.product || newItem.media}`;
                             const override = manualOverrides[uniqueKey];
                             if (override) {
                                 if (override.stage) {
