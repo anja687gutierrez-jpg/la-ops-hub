@@ -288,13 +288,27 @@
             if (!product) return '-';
             const p = product.toLowerCase();
 
-            // Transit Shelters variants
+            // DIGITAL PRODUCTS - check first to separate from statics
+            if (p.includes('digital')) {
+                if (p.includes('network') && p.includes('spot')) return 'Digi-Net-Spot';
+                if (p.includes('network') && p.includes('quarter')) return 'Digi-Net-Qtr';
+                if (p.includes('network')) return 'Digi-Network';
+                if (p.includes('panel') && p.includes('spot')) return 'Digi-Panel';
+                if (p.includes('domination')) return 'Digi-Dom';
+                if (p.includes('billboard')) return 'Digi-BB';
+                if (p.includes('kiosk')) return 'Digi-Kiosk';
+                if (p.includes('spectacular')) return 'Digi-Spec';
+                if (p.includes('playlist')) return 'Digi-Playlist';
+                return 'Digital';
+            }
+
+            // Transit Shelters variants (STATIC)
             if (p.includes('transit shelter') || p.includes('shelter')) {
-                if (p.includes('network')) return 'T-Shelter-Net';
-                if (p.includes('targeted')) return 'T-Shelter-TGT';
                 if (p.includes('domination')) return 'T-Shelter-Dom';
                 if (p.includes('full wrap')) return 'T-Shelter-FW';
                 if (p.includes('icon')) return 'T-Shelter-Icon';
+                if (p.includes('targeted')) return 'T-Shelter-TGT';
+                if (p.includes('network')) return 'T-Shelter-Net';
                 if (p.includes('panel')) return 'T-Shelter-Panel';
                 return 'T-Shelter';
             }
@@ -313,8 +327,6 @@
             if (p.includes('bus king')) return 'Bus-King';
             if (p.includes('bus queen')) return 'Bus-Queen';
             if (p.includes('urban panel')) return 'Urban';
-            if (p.includes('digital billboard')) return 'Digital-BB';
-            if (p.includes('digital kiosk')) return 'Digital-KI';
             if (p.includes('kiosk')) return 'Kiosk';
             if (p.includes('interior card')) return 'Interior';
             if (p.includes('wallscape')) return 'Wallscape';
@@ -1502,6 +1514,7 @@
         window.STAP_ALL_STAGES = ALL_STAGES;
 
         const SPECIALTY_KEYWORDS = [
+            'digital',
             'embellishment',
             'domination',
             'full wrap',
