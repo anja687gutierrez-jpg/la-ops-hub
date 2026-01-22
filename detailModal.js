@@ -100,7 +100,7 @@
                 setEditingAdjustedQty(false);
 
                 // Load saved material data
-                const uniqueKey = `${item.id}_${item.date}`;
+                const uniqueKey = `${item.id}_${item.date}_${item.product || item.media}`;
                 const savedMaterialData = JSON.parse(localStorage.getItem('stap_material_data') || '{}');
                 const savedData = savedMaterialData[uniqueKey];
 
@@ -427,7 +427,7 @@
                 const data = [new ClipboardItem({ ["text/html"]: blobHtml, ["text/plain"]: blobText })];
                 await navigator.clipboard.write(data);
 
-                if(onLogEmail) onLogEmail(`${item.id}_${item.date}`);
+                if(onLogEmail) onLogEmail(`${item.id}_${item.date}_${item.product || item.media}`);
                 setCopyFeedback("✅ Copied!");
                 setTimeout(() => setCopyFeedback(""), 2000);
             } catch (err) {
@@ -441,7 +441,7 @@
                     document.execCommand("copy");
                     document.removeEventListener("copy", listener);
 
-                    if(onLogEmail) onLogEmail(`${item.id}_${item.date}`);
+                    if(onLogEmail) onLogEmail(`${item.id}_${item.date}_${item.product || item.media}`);
                     setCopyFeedback("✅ Copied!");
                     setTimeout(() => setCopyFeedback(""), 2000);
                 } catch (e) {
@@ -451,7 +451,7 @@
         };
 
         const handleSave = () => {
-            const uniqueKey = `${item.id}_${item.date}`;
+            const uniqueKey = `${item.id}_${item.date}_${item.product || item.media}`;
             const saveData = {
                 installed: newInstalledCount,
                 materialBreakdown: materialBreakdown.filter(row => row.code || row.qty),
@@ -466,7 +466,7 @@
         };
 
         const handleSaveInstallCount = () => {
-            const uniqueKey = `${item.id}_${item.date}`;
+            const uniqueKey = `${item.id}_${item.date}_${item.product || item.media}`;
             // Calculate pending using adjustedQty if set, otherwise original qty
             const targetQty = parseInt(adjustedQty) || item.adjustedQty || originalQty || 0;
             const newPending = Math.max(0, targetQty - newInstalledCount);
@@ -496,7 +496,7 @@
 
         // Save adjusted quantity override
         const handleSaveAdjustedQty = () => {
-            const uniqueKey = `${item.id}_${item.date}`;
+            const uniqueKey = `${item.id}_${item.date}_${item.product || item.media}`;
             const adjQty = parseInt(adjustedQty) || null;
             // Validate: adjusted qty must be >= installed count
             const installed = newInstalledCount || 0;
@@ -532,7 +532,7 @@
 
         // Clear adjusted quantity override
         const handleClearAdjustedQty = () => {
-            const uniqueKey = `${item.id}_${item.date}`;
+            const uniqueKey = `${item.id}_${item.date}_${item.product || item.media}`;
             // When clearing, recalculate pending with original qty
             const installed = newInstalledCount || 0;
             const newPending = Math.max(0, originalQty - installed);
@@ -554,7 +554,7 @@
         };
 
         const handleSaveAllData = () => {
-            const uniqueKey = `${item.id}_${item.date}`;
+            const uniqueKey = `${item.id}_${item.date}_${item.product || item.media}`;
             const saveData = {
                 installed: newInstalledCount,
                 materialBreakdown: materialBreakdown.filter(row => row.code || row.qty),
@@ -746,7 +746,7 @@
                                 <div className="flex gap-2">
                                     <button
                                         onClick={() => {
-                                            const uniqueKey = `${item.id}_${item.date}`;
+                                            const uniqueKey = `${item.id}_${item.date}_${item.product || item.media}`;
                                             onSave(uniqueKey, item.stage, { productionProof: 'in-house' });
                                         }}
                                         className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1 ${
@@ -759,7 +759,7 @@
                                     </button>
                                     <button
                                         onClick={() => {
-                                            const uniqueKey = `${item.id}_${item.date}`;
+                                            const uniqueKey = `${item.id}_${item.date}_${item.product || item.media}`;
                                             onSave(uniqueKey, item.stage, { productionProof: 'client' });
                                         }}
                                         className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1 ${
@@ -772,7 +772,7 @@
                                     </button>
                                     <button
                                         onClick={() => {
-                                            const uniqueKey = `${item.id}_${item.date}`;
+                                            const uniqueKey = `${item.id}_${item.date}_${item.product || item.media}`;
                                             onSave(uniqueKey, item.stage, { productionProof: 'mixed' });
                                         }}
                                         className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1 ${
