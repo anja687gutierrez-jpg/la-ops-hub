@@ -7106,30 +7106,65 @@ Be DIRECT. Use SPECIFIC NUMBERS. Call out SPECIFIC ADVERTISERS at risk. No corpo
                 // Use view-specific data - filters are already applied via filteredStats
                 let activeSet = [];
                 if (view === 'master') { activeSet = filteredStats.masterTracking; } 
-                else if (view === 'dashboard') { 
-                    // Show recent activity: recent installs + this week + upcoming, sorted by date desc
+                else if (view === 'dashboard') {
+                    // HYBRID APPROACH: Smart priority sorting for Ops Coordinators
+                    // Goal: Surface bottlenecks and at-risk campaigns that need attention
                     const recentInstalls = filteredStats.recentInstalls || [];
                     const thisWeek = filteredStats.thisWeek || [];
-                    const upcoming = filteredStats.upcoming || [];
                     const inProgress = filteredStats.inProgressFlights || [];
-                    
-                    // Combine and deduplicate by unique key (id + date)
+                    const delayed = filteredStats.delayedFlights || [];
+
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+
+                    // Combine and deduplicate by unique key (id + date + product)
                     const seen = new Set();
                     const combined = [];
-                    [...recentInstalls, ...inProgress, ...thisWeek, ...upcoming].forEach(item => {
-                        const key = `${item.id}_${item.date}`;
+                    [...delayed, ...inProgress, ...thisWeek, ...recentInstalls].forEach(item => {
+                        const key = `${item.id}_${item.date}_${item.product || item.media}`;
                         if (!seen.has(key)) {
                             seen.add(key);
                             combined.push(item);
                         }
                     });
-                    
-                    // Sort by date descending (most recent first)
-                    activeSet = combined.sort((a, b) => {
-                        const dateA = a.dateObj || new Date(a.date);
-                        const dateB = b.dateObj || new Date(b.date);
-                        return dateB - dateA;
-                    }).slice(0, 100); // Limit to 100 most recent
+
+                    // Filter to only flights that have STARTED (past or today start date)
+                    // and are NOT fully complete
+                    const completedStages = ['installed', 'photos taken', 'pop completed', 'takedown complete', 'canceled', 'lost opportunity'];
+                    const startedFlights = combined.filter(item => {
+                        const startDate = item.dateObj || new Date(item.date);
+                        const hasStarted = startDate <= today;
+                        const stageLower = (item.stage || '').toLowerCase();
+                        const isCompleteStage = completedStages.includes(stageLower);
+                        const totalQty = item.adjustedQty || item.quantity || item.totalQty || 0;
+                        const installedQty = item.installed || item.totalInstalled || 0;
+                        const isFullyInstalled = totalQty > 0 && installedQty >= totalQty;
+
+                        // Include if: started AND not in a completed stage AND not 100% installed
+                        return hasStarted && !isCompleteStage && !isFullyInstalled;
+                    });
+
+                    // Calculate RISK SCORE for each flight
+                    // Higher score = needs more attention
+                    const withRiskScore = startedFlights.map(item => {
+                        const startDate = item.dateObj || new Date(item.date);
+                        const daysSinceStart = Math.max(0, Math.floor((today - startDate) / (1000 * 60 * 60 * 24)));
+                        const totalQty = item.adjustedQty || item.quantity || item.totalQty || 0;
+                        const installedQty = item.installed || item.totalInstalled || 0;
+                        const pendingQty = Math.max(0, totalQty - installedQty);
+                        const completionPct = totalQty > 0 ? Math.round((installedQty / totalQty) * 100) : 0;
+
+                        // Risk Score Formula:
+                        // - Days since start × 3 (older unfinished = more urgent)
+                        // - (100 - completion%) × 1 (lower progress = higher risk)
+                        // - Pending qty ÷ 5 (more pending work = more attention needed)
+                        const riskScore = (daysSinceStart * 3) + (100 - completionPct) + (pendingQty / 5);
+
+                        return { ...item, riskScore, daysSinceStart, completionPct, pendingQty };
+                    });
+
+                    // Sort by risk score descending (highest risk first)
+                    activeSet = withRiskScore.sort((a, b) => b.riskScore - a.riskScore).slice(0, 100);
                 } 
                 else if (view === 'pipelineSummary') { return filteredStats.pipelineSummary; } 
                 else if (view === 'history') { activeSet = filteredStats.sixMonthHistory; }
