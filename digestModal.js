@@ -56,6 +56,8 @@
         const [digestSettings, setDigestSettings] = useState({
             mainTitle: "Daily Operations Digest",
             showWeather: true,
+            tempUnit: (window.STAP_getTempUnit && window.STAP_getTempUnit()) || 'F',
+            weatherLocation: (window.STAP_getWeatherLocation && window.STAP_getWeatherLocation()) || 'Los Angeles, CA',
             showProductColumn: true,
             showMarketColumn: true,
             showOwnerColumn: true,
@@ -576,6 +578,52 @@
                                             />
                                             Show Weather Widget {isLoadingWeather && <span className="text-xs text-blue-500">(Loading...)</span>}
                                         </label>
+                                        <div className="flex items-center gap-2 text-sm text-gray-700 ml-6">
+                                            <span>Temperature:</span>
+                                            <button
+                                                onClick={() => {
+                                                    const newUnit = digestSettings.tempUnit === 'F' ? 'C' : 'F';
+                                                    setDigestSettings(prev => ({ ...prev, tempUnit: newUnit }));
+                                                    if (window.STAP_setTempUnit) window.STAP_setTempUnit(newUnit);
+                                                }}
+                                                className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                                                    digestSettings.tempUnit === 'F'
+                                                        ? 'bg-blue-100 text-blue-700'
+                                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                                }`}
+                                            >
+                                                °F
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    const newUnit = digestSettings.tempUnit === 'C' ? 'F' : 'C';
+                                                    setDigestSettings(prev => ({ ...prev, tempUnit: newUnit }));
+                                                    if (window.STAP_setTempUnit) window.STAP_setTempUnit(newUnit);
+                                                }}
+                                                className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                                                    digestSettings.tempUnit === 'C'
+                                                        ? 'bg-blue-100 text-blue-700'
+                                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                                }`}
+                                            >
+                                                °C
+                                            </button>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-sm text-gray-700 ml-6">
+                                            <span>Location:</span>
+                                            <select
+                                                value={digestSettings.weatherLocation}
+                                                onChange={e => {
+                                                    setDigestSettings(prev => ({ ...prev, weatherLocation: e.target.value }));
+                                                    if (window.STAP_setWeatherLocation) window.STAP_setWeatherLocation(e.target.value);
+                                                }}
+                                                className="px-2 py-1 rounded text-xs border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none"
+                                            >
+                                                {Object.keys(window.STAP_MARKET_COORDINATES || {}).sort().map(city => (
+                                                    <option key={city} value={city}>{city}</option>
+                                                ))}
+                                            </select>
+                                        </div>
                                     </div>
                                 </div>
 

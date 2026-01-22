@@ -994,6 +994,29 @@
         // Export for external components
         window.STAP_fetchLiveWeather = fetchLiveWeather;
 
+        // Temperature unit conversion utilities
+        const getTempUnit = () => localStorage.getItem('STAP_TEMP_UNIT') || 'F';
+        const setTempUnit = (unit) => localStorage.setItem('STAP_TEMP_UNIT', unit);
+        const convertTemp = (tempF, unit) => {
+            if (unit === 'C') {
+                return Math.round((tempF - 32) * 5 / 9);
+            }
+            return Math.round(tempF);
+        };
+        const formatTemp = (tempF, unit) => `${convertTemp(tempF, unit || getTempUnit())}°${unit || getTempUnit()}`;
+
+        window.STAP_getTempUnit = getTempUnit;
+        window.STAP_setTempUnit = setTempUnit;
+        window.STAP_convertTemp = convertTemp;
+        window.STAP_formatTemp = formatTemp;
+
+        // Weather location utilities
+        const getWeatherLocation = () => localStorage.getItem('STAP_WEATHER_LOCATION') || 'Los Angeles, CA';
+        const setWeatherLocation = (location) => localStorage.setItem('STAP_WEATHER_LOCATION', location);
+
+        window.STAP_getWeatherLocation = getWeatherLocation;
+        window.STAP_setWeatherLocation = setWeatherLocation;
+
         // Legacy wrapper for backward compatibility
         const callGemini = async (prompt) => {
             return await callGroq(prompt);
@@ -1069,16 +1092,18 @@
             // --- Helper: Weather HTML (UPDATED FOR COLOR) ---
             const getWeatherHtml = () => {
                 const days = weatherForecast.slice(0, 4); // First 4 days
+                const tempUnit = settings.tempUnit || getTempUnit();
                 let html = '<table border="0" cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse;"><tbody><tr>';
                 days.forEach((day, i) => {
                     const dayName = i === 0 ? "Today" : day.day;
                     const iconEmoji = day.icon === 'Sun' ? '&#9728;' : day.icon === 'Cloud' ? '&#9729;' : '&#127783;';
+                    const displayTemp = convertTemp(day.temp, tempUnit);
                     html += `
                         <td style="width: 25%; text-align: center; padding: 0 2px; vertical-align: top;">
                             <h4 style="margin: 0; font-size: 10px; color: #ffffff; font-family: sans-serif; font-weight: bold; padding-bottom: 2px;">${dayName}</h4>
                             <p style="font-size: 20px; line-height: 1; margin: 0; display: block; padding-bottom: 2px; font-family: 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif;">${iconEmoji}</p>
                             <p style="margin: 0; font-size: 9px; font-family: sans-serif; color: #ffffff; line-height: 1.2;">
-                                <span style="font-weight: bold;">${day.temp}°</span>
+                                <span style="font-weight: bold;">${displayTemp}°${tempUnit}</span>
                             </p>
                         </td>
                     `;
@@ -2061,6 +2086,11 @@
             const [groqKeyVisible, setGroqKeyVisible] = useState(false);
             const [groqSaveStatus, setGroqSaveStatus] = useState(null); // null, 'saved', 'error', 'invalid'
 
+            // Weather settings
+            const [weatherTempUnit, setWeatherTempUnit] = useState('F');
+            const [weatherLocation, setWeatherLocationState] = useState('Los Angeles, CA');
+            const availableCities = Object.keys(MARKET_COORDINATES).sort();
+
             useEffect(() => {
                 if (isOpen) {
                     // Load saved URL from localStorage
@@ -2069,6 +2099,9 @@
                     // Load saved Groq API key
                     const savedKey = localStorage.getItem('stap_groq_api_key');
                     if (savedKey) setGroqApiKey(savedKey);
+                    // Load weather settings
+                    setWeatherTempUnit(getTempUnit());
+                    setWeatherLocationState(getWeatherLocation());
                     // Reset save status
                     setGroqSaveStatus(null);
                 }
@@ -2490,6 +2523,9 @@
                                                     proofWebhook: localStorage.getItem('stap_proof_webhook') || '',
                                                     // AI Features
                                                     groqApiKey: localStorage.getItem('stap_groq_api_key') || '',
+                                                    // Weather Settings
+                                                    tempUnit: localStorage.getItem('STAP_TEMP_UNIT') || 'F',
+                                                    weatherLocation: localStorage.getItem('STAP_WEATHER_LOCATION') || 'Los Angeles, CA',
                                                 }
                                             };
                                             
@@ -2543,6 +2579,9 @@
                                                         if (s.mobileSheetUrl) localStorage.setItem('stap_mobile_sheet_url', s.mobileSheetUrl);
                                                         if (s.proofWebhook) localStorage.setItem('stap_proof_webhook', s.proofWebhook);
                                                         if (s.groqApiKey) localStorage.setItem('stap_groq_api_key', s.groqApiKey);
+                                                        // Weather settings
+                                                        if (s.tempUnit) localStorage.setItem('STAP_TEMP_UNIT', s.tempUnit);
+                                                        if (s.weatherLocation) localStorage.setItem('STAP_WEATHER_LOCATION', s.weatherLocation);
 
                                                         // Update current modal's sheet URL
                                                         if (s.googleSheetUrl) setSheetUrl(s.googleSheetUrl);
@@ -2559,11 +2598,74 @@
                                     </label>
                                 </div>
                                 <p className="text-xs text-slate-500 mt-2">
-                                    📁 Settings saved: Sheets, Webhooks, Groq API Key
+                                    📁 Settings saved: Sheets, Webhooks, Groq API Key, Weather
                                 </p>
                             </div>
+
+                            {/* Weather Settings */}
+                            <div className="bg-gradient-to-r from-sky-500/10 to-cyan-500/10 rounded-xl p-4 border border-sky-500/30">
+                                <h3 className="font-bold text-sky-400 mb-3 flex items-center gap-2">
+                                    <span>🌤️</span> Weather Display Settings
+                                </h3>
+                                <p className="text-xs text-slate-400 mb-4">
+                                    Configure the temperature unit and default location for weather widgets and email digest.
+                                </p>
+                                <div className="space-y-4">
+                                    {/* Temperature Unit */}
+                                    <div>
+                                        <label className="block text-xs font-medium text-slate-400 mb-2">Temperature Unit</label>
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => {
+                                                    setWeatherTempUnit('F');
+                                                    setTempUnit('F');
+                                                }}
+                                                className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
+                                                    weatherTempUnit === 'F'
+                                                        ? 'bg-sky-600 text-white'
+                                                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                                                }`}
+                                            >
+                                                °F Fahrenheit
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    setWeatherTempUnit('C');
+                                                    setTempUnit('C');
+                                                }}
+                                                className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
+                                                    weatherTempUnit === 'C'
+                                                        ? 'bg-sky-600 text-white'
+                                                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                                                }`}
+                                            >
+                                                °C Celsius
+                                            </button>
+                                        </div>
+                                    </div>
+                                    {/* Weather Location */}
+                                    <div>
+                                        <label className="block text-xs font-medium text-slate-400 mb-2">Default Location</label>
+                                        <select
+                                            value={weatherLocation}
+                                            onChange={(e) => {
+                                                setWeatherLocationState(e.target.value);
+                                                setWeatherLocation(e.target.value);
+                                            }}
+                                            className="w-full px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none"
+                                        >
+                                            {availableCities.map(city => (
+                                                <option key={city} value={city}>{city}</option>
+                                            ))}
+                                        </select>
+                                        <p className="text-xs text-slate-500 mt-1">
+                                            This location will be used for the weather widget and email digest.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        
+
                         {/* Footer */}
                         <div className="px-6 py-4 border-t border-slate-700 bg-slate-800 flex justify-between items-center">
                             <p className="text-xs text-slate-500">
@@ -2597,8 +2699,25 @@
         const WeatherWidget = () => {
             const [weatherData, setWeatherData] = useState([]);
             const [isLoading, setIsLoading] = useState(true);
-            const [selectedCity, setSelectedCity] = useState('Los Angeles, CA');
+            const [selectedCity, setSelectedCity] = useState(getWeatherLocation());
             const [currentCondition, setCurrentCondition] = useState({ temp: 72, condition: 'Clear', icon: 'Sun' });
+            const [tempUnit, setTempUnitState] = useState(getTempUnit());
+            const [showCityDropdown, setShowCityDropdown] = useState(false);
+
+            // Available cities from MARKET_COORDINATES
+            const availableCities = Object.keys(MARKET_COORDINATES).sort();
+
+            const toggleTempUnit = () => {
+                const newUnit = tempUnit === 'F' ? 'C' : 'F';
+                setTempUnit(newUnit);
+                setTempUnitState(newUnit);
+            };
+
+            const handleCityChange = (city) => {
+                setSelectedCity(city);
+                setWeatherLocation(city);
+                setShowCityDropdown(false);
+            };
 
             useEffect(() => {
                 const loadWeather = async () => {
@@ -2631,16 +2750,43 @@
                 <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-xl overflow-hidden text-white h-full">
                     <div className="p-6">
                         <div className="flex justify-between items-center mb-6">
-                            <div>
-                                <h2 className="text-2xl font-bold flex items-center gap-2">
-                                    <Icon name={currentCondition.icon} size={24} className={currentCondition.icon === 'Sun' ? 'text-yellow-300' : 'text-gray-200'} /> 
+                            <div className="relative">
+                                <button
+                                    onClick={() => setShowCityDropdown(!showCityDropdown)}
+                                    className="text-2xl font-bold flex items-center gap-2 hover:text-blue-100 transition-colors cursor-pointer"
+                                >
+                                    <Icon name={currentCondition.icon} size={24} className={currentCondition.icon === 'Sun' ? 'text-yellow-300' : 'text-gray-200'} />
                                     {cityName}
-                                </h2>
+                                    <Icon name="ChevronDown" size={18} className={`transition-transform ${showCityDropdown ? 'rotate-180' : ''}`} />
+                                </button>
                                 <p className="text-blue-100 text-sm">7-Day Forecast {isLoading && <span className="animate-pulse">• Loading...</span>}</p>
+
+                                {showCityDropdown && (
+                                    <div className="absolute top-full left-0 mt-2 bg-white rounded-lg shadow-xl z-50 min-w-[200px] max-h-[300px] overflow-y-auto">
+                                        {availableCities.map(city => (
+                                            <button
+                                                key={city}
+                                                onClick={() => handleCityChange(city)}
+                                                className={`w-full text-left px-4 py-2 text-sm hover:bg-blue-50 transition-colors ${
+                                                    selectedCity === city ? 'bg-blue-100 text-blue-700 font-medium' : 'text-gray-700'
+                                                }`}
+                                            >
+                                                {city}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                             <div className="text-right">
                                 <div className="flex items-center gap-2 justify-end">
-                                    <span className="text-3xl font-bold">{currentCondition.temp}°</span>
+                                    <span className="text-3xl font-bold">{convertTemp(currentCondition.temp, tempUnit)}°</span>
+                                    <button
+                                        onClick={toggleTempUnit}
+                                        className="text-sm font-medium bg-white/20 hover:bg-white/30 px-2 py-1 rounded cursor-pointer transition-colors"
+                                        title="Click to toggle °F/°C"
+                                    >
+                                        °{tempUnit}
+                                    </button>
                                     <span className="text-sm font-medium bg-white/20 px-2 py-1 rounded">{currentCondition.condition}</span>
                                 </div>
                                 <span className="block text-sm text-blue-100 mt-1">Today</span>
@@ -2652,7 +2798,7 @@
                                     <span className="text-xs font-medium text-blue-100 mb-2">{day.day}</span>
                                     <Icon name={day.icon || 'Cloud'} size={24} className={`mb-2 ${day.icon === 'Sun' ? 'text-yellow-300' : day.icon === 'CloudRain' ? 'text-blue-200' : 'text-gray-200'}`} />
                                     <div className="flex items-center gap-1 mb-1">
-                                        <span className="font-bold text-lg">{day.temp}°</span>
+                                        <span className="font-bold text-lg">{convertTemp(day.temp, tempUnit)}°</span>
                                     </div>
                                     <span className="text-[10px] text-blue-100 text-center leading-tight mb-1" title={day.condition || day.status}>{(day.condition || day.status || '').split(' ')[0]}</span>
                                     <div className="flex items-center gap-0.5 text-xs text-blue-200" title="Chance of Rain">

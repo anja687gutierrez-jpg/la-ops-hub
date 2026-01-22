@@ -838,7 +838,12 @@
 
                 ctx.fillStyle = T.textSub;
                 ctx.font = '300 10px Montserrat, Inter, sans-serif';
-                ctx.fillText(dateStr + '  •  Los Angeles  •  72°F', sidebarWidth / 2, footerStartY + 16);
+                // Get temperature unit and location from settings
+                const tempUnit = (window.STAP_getTempUnit && window.STAP_getTempUnit()) || 'F';
+                const temp = tempUnit === 'C' ? '22°C' : '72°F';
+                const location = (window.STAP_getWeatherLocation && window.STAP_getWeatherLocation()) || 'Los Angeles, CA';
+                const cityName = location.split(',')[0];
+                ctx.fillText(dateStr + '  •  ' + cityName + '  •  ' + temp, sidebarWidth / 2, footerStartY + 16);
 
                 // Daily Digest Button
                 const digestY = footerStartY + 35;
