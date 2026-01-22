@@ -6723,13 +6723,18 @@ Be DIRECT. Use SPECIFIC NUMBERS. Call out SPECIFIC ADVERTISERS at risk. No corpo
                         
                         const isCompletedStage = ['installed', 'photos taken', 'pop completed', 'takedown complete', 'canceled', 'lost opportunity'].includes(stageLower);
                         const isPastStartDate = item.dateObj < today;
-                        
+
+                        // 7-day grace period - only consider delayed if 7+ days past start date
+                        const gracePeriodDate = new Date(today);
+                        gracePeriodDate.setDate(today.getDate() - 7);
+                        const isPastGracePeriod = item.dateObj < gracePeriodDate;
+
                         // Lookback: 3 weeks (21 days) for delayed flights
                         const delayedLookback = new Date(today);
                         delayedLookback.setDate(today.getDate() - 21);
                         const isWithinDelayedWindow = item.dateObj >= delayedLookback;
-                        
-                        if (!isExcludedDelay && !isCompletedStage && isPastStartDate && isWithinDelayedWindow) {
+
+                        if (!isExcludedDelay && !isCompletedStage && isPastGracePeriod && isWithinDelayedWindow) {
                             categories.delayedFlights.push(item);
                         }
 
