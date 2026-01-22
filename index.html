@@ -1622,8 +1622,12 @@
             today.setHours(0,0,0,0);
             if (!stage || stage === '') return "bg-gray-200 text-gray-500 border-gray-300 italic";
             if (!date) return "bg-gray-100 text-gray-800";
-            const isPastDue = date < today && !['Installed', 'Photos Taken', 'POP Completed', 'Takedown Complete', 'Canceled', 'Lost Opportunity'].includes(stage);
-            
+
+            // 7-day grace period - only mark as past due if 7+ days past start date
+            const gracePeriodDate = new Date(today);
+            gracePeriodDate.setDate(today.getDate() - 7);
+            const isPastDue = date < gracePeriodDate && !['Installed', 'Photos Taken', 'POP Completed', 'Takedown Complete', 'Canceled', 'Lost Opportunity'].includes(stage);
+
             if (stage === 'Lost Opportunity') return "bg-gray-200 text-gray-500 border-gray-300";
             if (stage === 'Takedown Complete') return "bg-slate-200 text-slate-600 border-slate-300";
             if (isPastDue) return "bg-red-100 text-red-800 border-red-200 font-bold";
