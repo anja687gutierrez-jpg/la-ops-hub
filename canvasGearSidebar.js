@@ -238,21 +238,21 @@
             const sidebarWidth = 320;
 
             // MAIN GEAR config (Modules)
-            const mainOrbitRadius = 105;
-            const mainNodeRadius = 20;
-            const mainGearSize = 62;
+            const mainOrbitRadius = 90;
+            const mainNodeRadius = 16;
+            const mainGearSize = 55;
             const mainGearTeeth = 18;
 
             // PIPELINE GEAR config (smaller, interlocking)
-            const pipelineOrbitRadius = 82;
-            const pipelineNodeRadius = 17;
-            const pipelineGearSize = 48;
+            const pipelineOrbitRadius = 72;
+            const pipelineNodeRadius = 14;
+            const pipelineGearSize = 42;
             const pipelineGearTeeth = 14;
 
             // HISTORY GEAR config (smallest)
-            const historyOrbitRadius = 62;
-            const historyNodeRadius = 14;
-            const historyGearSize = 38;
+            const historyOrbitRadius = 55;
+            const historyNodeRadius = 12;
+            const historyGearSize = 32;
             const historyGearTeeth = 11;
 
             const render = () => {
@@ -454,7 +454,7 @@
                 }
 
                 ctx.beginPath();
-                ctx.arc(mainCenterX, mainCenterY, 46, 0, Math.PI * 2);
+                ctx.arc(mainCenterX, mainCenterY, 40, 0, Math.PI * 2);
                 ctx.fillStyle = T.bgDark;
                 ctx.globalAlpha = 0.95;
                 ctx.fill();
@@ -462,7 +462,7 @@
                 ctx.shadowBlur = 0;
 
                 ctx.beginPath();
-                ctx.arc(mainCenterX, mainCenterY, 42, 0, Math.PI * 2);
+                ctx.arc(mainCenterX, mainCenterY, 36, 0, Math.PI * 2);
                 ctx.strokeStyle = mainHubHovered ? T.accent : T.metalDim;
                 ctx.lineWidth = mainHubHovered ? 2 : 1;
                 ctx.stroke();
@@ -569,7 +569,7 @@
                 }
 
                 ctx.beginPath();
-                ctx.arc(pipelineCenterX, pipelineCenterY, 36, 0, Math.PI * 2);
+                ctx.arc(pipelineCenterX, pipelineCenterY, 30, 0, Math.PI * 2);
                 ctx.fillStyle = T.bgDark;
                 ctx.globalAlpha = 0.95;
                 ctx.fill();
@@ -577,7 +577,7 @@
                 ctx.shadowBlur = 0;
 
                 ctx.beginPath();
-                ctx.arc(pipelineCenterX, pipelineCenterY, 32, 0, Math.PI * 2);
+                ctx.arc(pipelineCenterX, pipelineCenterY, 26, 0, Math.PI * 2);
                 ctx.strokeStyle = pipelineHubHovered ? T.accentAlt : T.metalDim;
                 ctx.lineWidth = pipelineHubHovered ? 2 : 1;
                 ctx.stroke();
@@ -638,7 +638,7 @@
                         }
 
                         const iconColor = isActive ? T.accent : (isHovered ? T.accent : T.metalMid);
-                        const iconSize = 18;
+                        const iconSize = 14;
                         drawIcon(ctx, icons[node.id], nx - iconSize/2, ny - iconSize/2, iconSize, iconColor);
 
                         ctx.globalAlpha = 1;
@@ -690,7 +690,7 @@
                         }
 
                         const iconColor = isActive ? T.accentAlt : (isHovered ? T.accentAlt : T.metalMid);
-                        const iconSize = 16;
+                        const iconSize = 12;
                         drawIcon(ctx, icons[node.id], nx - iconSize/2, ny - iconSize/2, iconSize, iconColor);
 
                         ctx.globalAlpha = 1;
@@ -746,7 +746,7 @@
                 }
 
                 ctx.beginPath();
-                ctx.arc(historyCenterX, historyCenterY, 28, 0, Math.PI * 2);
+                ctx.arc(historyCenterX, historyCenterY, 24, 0, Math.PI * 2);
                 ctx.fillStyle = T.bgDark;
                 ctx.globalAlpha = 0.95;
                 ctx.fill();
@@ -754,7 +754,7 @@
                 ctx.shadowBlur = 0;
 
                 ctx.beginPath();
-                ctx.arc(historyCenterX, historyCenterY, 24, 0, Math.PI * 2);
+                ctx.arc(historyCenterX, historyCenterY, 20, 0, Math.PI * 2);
                 ctx.strokeStyle = historyHubHovered ? historyAccent : T.metalDim;
                 ctx.lineWidth = historyHubHovered ? 2 : 1;
                 ctx.stroke();
@@ -815,7 +815,7 @@
                         }
 
                         const iconColor = isActive ? historyAccent : (isHovered ? historyAccent : T.metalMid);
-                        const iconSize = 14;
+                        const iconSize = 11;
                         drawIcon(ctx, icons[node.id], nx - iconSize/2, ny - iconSize/2, iconSize, iconColor);
 
                         ctx.globalAlpha = 1;
