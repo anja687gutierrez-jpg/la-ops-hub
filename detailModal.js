@@ -602,60 +602,14 @@
                     {/* Body */}
                     <div className="p-8 overflow-y-auto">
                         {/* Standard Data Grid */}
-                        <div className="grid grid-cols-2 gap-6 mb-8">
+                        <div className="grid grid-cols-2 gap-6 mb-4">
                             <div className="bg-gray-50 p-4 rounded border">
                                 <h4 className="font-bold text-xs text-gray-500 mb-2">SCHEDULE</h4>
                                 <p className="text-sm"><strong>Start:</strong> {item.date}</p>
                                 <p className="text-sm"><strong>End:</strong> {item.endDate}</p>
                             </div>
-                            <div className={`p-4 rounded border ${(adjustedQty || item.adjustedQty) ? 'bg-blue-50 border-blue-200' : 'bg-gray-50'}`}>
-                                <h4 className="font-bold text-xs text-gray-500 mb-2 flex items-center gap-2">
-                                    INSTALL PROGRESS
-                                    {(adjustedQty || item.adjustedQty) && (
-                                        <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-[10px] rounded font-medium">QTY ADJUSTED</span>
-                                    )}
-                                </h4>
-                                {/* Qty Row - editable like installed */}
-                                <div className="flex items-center gap-2 mb-2">
-                                    <span className="text-sm"><strong>Qty:</strong></span>
-                                    {editingAdjustedQty ? (
-                                        <div className="flex items-center gap-1">
-                                            <input
-                                                type="number"
-                                                value={adjustedQty || ''}
-                                                onChange={(e) => setAdjustedQty(e.target.value)}
-                                                className="w-16 px-2 py-1 border rounded text-sm"
-                                                min="0"
-                                            />
-                                            <button onClick={handleSaveAdjustedQty} className="text-green-600 hover:text-green-700" title="Save">
-                                                <Icon name="Check" size={16} />
-                                            </button>
-                                            <button onClick={() => { setEditingAdjustedQty(false); setAdjustedQty(item.adjustedQty || null); }} className="text-gray-400 hover:text-gray-600" title="Cancel">
-                                                <Icon name="X" size={16} />
-                                            </button>
-                                        </div>
-                                    ) : (
-                                        <span
-                                            onClick={() => { setAdjustedQty(adjustedQty || item.adjustedQty || originalQty); setEditingAdjustedQty(true); }}
-                                            className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded cursor-pointer hover:bg-blue-200 transition-colors text-sm font-medium"
-                                            title="Click to edit quantity"
-                                        >
-                                            {adjustedQty || item.adjustedQty || originalQty} <Icon name="Edit" size={10} className="inline ml-1 opacity-50"/>
-                                        </span>
-                                    )}
-                                    {(adjustedQty || item.adjustedQty) && !editingAdjustedQty && (
-                                        <span className="text-xs text-gray-400">(was {originalQty})</span>
-                                    )}
-                                    {(adjustedQty || item.adjustedQty) && !editingAdjustedQty && (
-                                        <button
-                                            onClick={handleClearAdjustedQty}
-                                            className="text-xs text-gray-400 hover:text-red-500"
-                                            title="Reset to original"
-                                        >
-                                            <Icon name="RotateCcw" size={12} />
-                                        </button>
-                                    )}
-                                </div>
+                            <div className="bg-gray-50 p-4 rounded border">
+                                <h4 className="font-bold text-xs text-gray-500 mb-2">INSTALL PROGRESS</h4>
                                 {/* Installed Row */}
                                 <div className="flex items-center gap-2 mb-2">
                                     <span className="text-sm"><strong>Installed:</strong></span>
@@ -712,6 +666,71 @@
                                 )}
                             </div>
                         </div>
+
+                        {/* Quantity Reconciliation One-Liner */}
+                        {(() => {
+                            const booked = originalQty || 0;
+                            const charted = parseInt(adjustedQty) || item.adjustedQty || null;
+                            const statusConfig = charted === null
+                                ? { bg: 'bg-gray-50 border-gray-200', badge: 'bg-gray-100 text-gray-600', icon: 'CircleDashed', text: 'Not Verified' }
+                                : charted === booked
+                                    ? { bg: 'bg-green-50 border-green-200', badge: 'bg-green-100 text-green-700', icon: 'CheckCircle', text: 'Matched' }
+                                    : charted < booked
+                                        ? { bg: 'bg-amber-50 border-amber-200', badge: 'bg-amber-100 text-amber-700', icon: 'AlertTriangle', text: `${booked - charted} Unlinked` }
+                                        : { bg: 'bg-blue-50 border-blue-200', badge: 'bg-blue-100 text-blue-700', icon: 'TrendingUp', text: `+${charted - booked} Over` };
+                            return (
+                                <div className={`mb-6 p-3 rounded-lg border ${statusConfig.bg} flex items-center justify-between`}>
+                                    <div className="flex items-center gap-4">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs text-gray-500 font-medium">Booked (SF):</span>
+                                            <span className="px-2 py-0.5 bg-gray-200 text-gray-700 rounded text-sm font-mono font-bold">{booked}</span>
+                                        </div>
+                                        <div className="text-gray-300">|</div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs text-gray-500 font-medium">Charted:</span>
+                                            {editingAdjustedQty ? (
+                                                <div className="flex items-center gap-1">
+                                                    <input
+                                                        type="number"
+                                                        value={adjustedQty || ''}
+                                                        onChange={(e) => setAdjustedQty(e.target.value)}
+                                                        className="w-16 px-2 py-0.5 border rounded text-sm"
+                                                        min="0"
+                                                        placeholder={booked}
+                                                        autoFocus
+                                                    />
+                                                    <button onClick={handleSaveAdjustedQty} className="text-green-600 hover:text-green-700" title="Save">
+                                                        <Icon name="Check" size={14} />
+                                                    </button>
+                                                    <button onClick={() => { setEditingAdjustedQty(false); setAdjustedQty(item.adjustedQty || null); }} className="text-gray-400 hover:text-gray-600" title="Cancel">
+                                                        <Icon name="X" size={14} />
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <span
+                                                    onClick={() => { setAdjustedQty(adjustedQty || item.adjustedQty || booked); setEditingAdjustedQty(true); }}
+                                                    className={`px-2 py-0.5 rounded cursor-pointer hover:opacity-80 transition-colors text-sm font-mono font-bold ${
+                                                        charted !== null ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400 border border-dashed border-gray-300'
+                                                    }`}
+                                                    title="Click to verify charted units"
+                                                >
+                                                    {charted !== null ? charted : '--'}
+                                                    <Icon name="Edit" size={10} className="inline ml-1 opacity-50"/>
+                                                </span>
+                                            )}
+                                            {charted !== null && !editingAdjustedQty && (
+                                                <button onClick={handleClearAdjustedQty} className="text-gray-400 hover:text-red-500" title="Clear">
+                                                    <Icon name="X" size={12} />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <span className={`px-2 py-1 rounded text-xs font-medium flex items-center gap-1 ${statusConfig.badge}`}>
+                                        <Icon name={statusConfig.icon} size={12} /> {statusConfig.text}
+                                    </span>
+                                </div>
+                            );
+                        })()}
 
                         {/* Production Proof Selector */}
                         <div className="mb-6 p-4 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg">
