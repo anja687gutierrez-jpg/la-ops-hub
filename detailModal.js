@@ -67,6 +67,15 @@
         // Material breakdown for inventory
         const [materialBreakdown, setMaterialBreakdown] = useState([{ code: '', qty: '', link: '' }]);
 
+        // Removal tracking state
+        const [removalQty, setRemovalQty] = useState(0);
+        const [removedCount, setRemovedCount] = useState(0);
+        const [removalStatus, setRemovalStatus] = useState('scheduled');
+        const [removalAssignee, setRemovalAssignee] = useState('');
+        const [removalPhotosLink, setRemovalPhotosLink] = useState('');
+        const [hasReplacement, setHasReplacement] = useState(false);
+        const [editingRemoval, setEditingRemoval] = useState(false);
+
         // Helper: Calculate inventory status
         const getInventoryStatus = () => {
             const required = parseFloat(customQty) || 0;
@@ -86,8 +95,30 @@
             setMaterialBreakdown(newRows);
         };
 
+        // Track the current item key to avoid re-initializing state when the same item is updated (e.g., after save)
+        const currentItemKeyRef = React.useRef(null);
+
         useEffect(() => {
+            // Reset ref when modal closes so re-opening loads fresh data
+            if (!item) {
+                currentItemKeyRef.current = null;
+                return;
+            }
+
             if (item) {
+                const uniqueKey = `${item.id}_${item.date}_${item.product || item.media}`;
+
+                // Only fully re-initialize state when opening a DIFFERENT item
+                // Skip re-initialization if this is the same item (e.g., after a save)
+                if (currentItemKeyRef.current === uniqueKey) {
+                    // Same item - only update stage if it changed (for auto-stage updates)
+                    if (item.stage) setNewStage(item.stage);
+                    return;
+                }
+
+                // Different item - do full initialization
+                currentItemKeyRef.current = uniqueKey;
+
                 setNewStage(item.stage);
                 setNewInstalledCount(item.totalInstalled || item.installed || 0);
                 setEditingInstallCount(false);
@@ -100,7 +131,6 @@
                 setEditingAdjustedQty(false);
 
                 // Load saved material data
-                const uniqueKey = `${item.id}_${item.date}_${item.product || item.media}`;
                 const savedMaterialData = JSON.parse(localStorage.getItem('stap_material_data') || '{}');
                 const savedData = savedMaterialData[uniqueKey];
 
@@ -128,6 +158,17 @@
                 setNewEta('');
                 setSelectedTemplate('auto');
                 setShowInstallControls(true);
+
+                // Load removal tracking data from item (populated from manualOverrides)
+                // Use same fallback chain as pending removals list: totalInstalled → quantity
+                const effectiveQty = item.totalInstalled || item.quantity || item.totalQty || 0;
+                setRemovalQty(item.removalQty || effectiveQty);
+                setRemovedCount(item.removedCount || 0);
+                setRemovalStatus(item.removalStatus || 'scheduled');
+                setRemovalAssignee(item.removalAssignee || '');
+                setRemovalPhotosLink(item.removalPhotosLink || '');
+                setHasReplacement(item.hasReplacement || false);
+                setEditingRemoval(false);
             }
         }, [item]);
 
@@ -140,6 +181,49 @@
         useEffect(() => {
             setEmailInstalledQty(newInstalledCount.toString());
         }, [newInstalledCount]);
+
+        // Auto-update removal status based on progress
+        // "scheduled" and "blocked" are manual - user controls these
+        // "in_progress" and "complete" are auto-calculated from numbers
+        useEffect(() => {
+            // Don't override manual statuses when removedCount is 0
+            if (removedCount === 0) return;
+
+            if (removalQty > 0 && removedCount >= removalQty) {
+                setRemovalStatus('complete');
+            } else if (removedCount > 0 && removedCount < removalQty) {
+                setRemovalStatus('in_progress');
+            }
+        }, [removedCount, removalQty]);
+
+
+        // Track if there are unsaved changes
+        const hasUnsavedChanges = React.useMemo(() => {
+            if (!item) return false;
+
+            // Check stage change
+            if (newStage !== item.stage) return true;
+
+            // Check adjusted qty change
+            const itemAdjQty = item.adjustedQty || null;
+            const currentAdjQty = adjustedQty !== null && adjustedQty !== '' ? parseInt(adjustedQty) : null;
+            if (currentAdjQty !== itemAdjQty) return true;
+
+            // Check install count change
+            const itemInstalled = item.totalInstalled || item.installed || 0;
+            if (newInstalledCount !== itemInstalled) return true;
+
+            // Check removal tracking changes
+            const itemRemovalQty = item.removalQty || item.totalInstalled || item.quantity || item.totalQty || 0;
+            if (removalQty !== itemRemovalQty) return true;
+            if (removedCount !== (item.removedCount || 0)) return true;
+            if (removalStatus !== (item.removalStatus || 'scheduled')) return true;
+            if (removalAssignee !== (item.removalAssignee || '')) return true;
+            if (removalPhotosLink !== (item.removalPhotosLink || '')) return true;
+            if (hasReplacement !== (item.hasReplacement || false)) return true;
+
+            return false;
+        }, [item, newStage, adjustedQty, newInstalledCount, removalQty, removedCount, removalStatus, removalAssignee, removalPhotosLink, hasReplacement]);
 
         // Helper functions for templates
         const formatMediaType = (media) => {
@@ -553,28 +637,119 @@
             setEditingAdjustedQty(false);
         };
 
-        const handleSaveAllData = () => {
+        // UNIFIED SAVE - saves all data at once
+        const handleUnifiedSave = () => {
             const uniqueKey = `${item.id}_${item.date}_${item.product || item.media}`;
+
+            // Calculate derived values - be explicit about the charted qty
+            // If user entered a value (adjustedQty is set), use it. Otherwise use item's saved value.
+            let adjQty = null;
+            if (adjustedQty !== null && adjustedQty !== '' && adjustedQty !== undefined) {
+                adjQty = parseInt(adjustedQty);
+                if (isNaN(adjQty)) adjQty = null;
+            } else if (item.adjustedQty) {
+                adjQty = item.adjustedQty;
+            }
+
+            console.log('Saving charted qty:', { adjustedQty, parsed: adjQty, itemAdjustedQty: item.adjustedQty });
+
+            const targetQty = adjQty || originalQty || 0;
+            const installed = newInstalledCount || 0;
+            const pending = Math.max(0, targetQty - installed);
+            const isRemovalComplete = removedCount >= removalQty && removalQty > 0;
+
+            // Determine final stage (with auto-stage logic)
+            let finalStage = newStage;
+
+            // Auto-stage to Installed when pending = 0
+            if (pending === 0 && installed > 0 && newStage !== 'Installed' && newStage !== 'Takedown Complete') {
+                finalStage = 'Installed';
+                setNewStage('Installed');
+            }
+
+            // Auto-stage to Takedown Complete when removal is done
+            if (isRemovalComplete && finalStage !== 'Takedown Complete') {
+                finalStage = 'Takedown Complete';
+                setNewStage('Takedown Complete');
+            }
+
+            // Track what changed for history
+            const changes = [];
+            if (finalStage !== item.stage) changes.push(`Stage: ${item.stage} → ${finalStage}`);
+            if (adjQty !== (item.adjustedQty || null)) changes.push(`Charted: ${item.adjustedQty || 'none'} → ${adjQty || 'none'}`);
+            if (installed !== (item.totalInstalled || item.installed || 0)) changes.push(`Installed: ${item.totalInstalled || item.installed || 0} → ${installed}`);
+            if (removalQty !== (item.removalQty || 0)) changes.push(`Removal Qty: ${item.removalQty || 0} → ${removalQty}`);
+            if (removedCount !== (item.removedCount || 0)) changes.push(`Removed: ${item.removedCount || 0} → ${removedCount}`);
+            const effectiveRemovalStatus = isRemovalComplete ? 'complete' : removalStatus;
+            if (effectiveRemovalStatus !== (item.removalStatus || 'scheduled')) changes.push(`Removal Status: ${item.removalStatus || 'scheduled'} → ${effectiveRemovalStatus}`);
+            if (removalAssignee !== (item.removalAssignee || '')) changes.push(`Assignee: ${item.removalAssignee || 'none'} → ${removalAssignee || 'none'}`);
+
+            // Build history entry if there were changes
+            const existingHistory = item.history || [];
+            const newHistory = changes.length > 0 ? [
+                ...existingHistory,
+                {
+                    timestamp: new Date().toISOString(),
+                    changes: changes
+                }
+            ] : existingHistory;
+
+            // Collect ALL save data
             const saveData = {
-                installed: newInstalledCount,
+                // Quantity tracking
+                adjustedQty: adjQty,
+                installed: installed,
+                pending: pending,
+                // Material info
                 materialBreakdown: materialBreakdown.filter(row => row.code || row.qty),
                 photosLink: customPhotosLink || null,
                 receiverLink: customReceiverLink || null,
                 mediaType: customDesigns || null,
-                totalQty: customQty || null
+                totalQty: customQty || null,
+                // Removal tracking
+                removalQty: removalQty,
+                removedCount: removedCount,
+                removalStatus: isRemovalComplete ? 'complete' : removalStatus,
+                removalAssignee: removalAssignee || null,
+                removalPhotosLink: removalPhotosLink || null,
+                hasReplacement: hasReplacement,
+                // History
+                history: newHistory
             };
-            // Use newStage (from dropdown) instead of item.stage (original)
-            onSave(uniqueKey, newStage, saveData);
-            alert('✅ Data saved! Stage and material info synced.');
+
+            onSave(uniqueKey, finalStage, saveData);
+
+            // Close all edit modes
+            setEditingAdjustedQty(false);
+            setEditingInstallCount(false);
+            setEditingRemoval(false);
+            setEditMode(false);
+
+            alert('✅ All changes saved!');
         };
+
+        // Legacy individual saves (keeping for backwards compatibility but simplified)
+        const handleSaveAllData = () => handleUnifiedSave();
+        const handleSaveRemoval = () => handleUnifiedSave();
 
         if (!item) return null;
 
         // Get current dependencies
         initDependencies();
 
+        // Handle close with unsaved changes warning
+        const handleClose = () => {
+            if (hasUnsavedChanges) {
+                if (window.confirm('You have unsaved changes. Are you sure you want to close without saving?')) {
+                    onClose();
+                }
+            } else {
+                onClose();
+            }
+        };
+
         return (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm animate-fade-in" onClick={onClose}>
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm animate-fade-in" onClick={handleClose}>
                 <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
                     {/* Header */}
                     <div className="px-8 py-6 border-b bg-gray-50 flex justify-between items-start">
@@ -582,10 +757,9 @@
                             <div className="flex items-center gap-3 mb-2">
                                 {editMode ? (
                                     <div className="flex items-center gap-2">
-                                        <select value={newStage} onChange={(e) => setNewStage(e.target.value)} className="border rounded px-2">
+                                        <select value={newStage} onChange={(e) => setNewStage(e.target.value)} className="border rounded px-2 py-1 text-sm">
                                             {ALL_STAGES.map(s => <option key={s}>{s}</option>)}
                                         </select>
-                                        <button onClick={handleSave} className="text-green-600"><Icon name="Save" size={18}/></button>
                                     </div>
                                 ) : (
                                     <span onClick={() => setEditMode(true)} className={`px-3 py-1 rounded-full text-xs font-bold border cursor-pointer ${getStatusColor(item.stage, item.dateObj)}`}>
@@ -597,141 +771,271 @@
                             <h2 className="text-2xl font-bold">{item.advertiser}</h2>
                             <h3 className="text-lg text-gray-600">{item.name}</h3>
                         </div>
-                        <button onClick={onClose}><Icon name="X" size={24} /></button>
+                        <div className="flex items-center gap-2">
+                            {/* Unified Save Button - only shows when there are unsaved changes */}
+                            {hasUnsavedChanges && (
+                                <button
+                                    onClick={handleUnifiedSave}
+                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                    title="Save all changes"
+                                >
+                                    <Icon name="Save" size={20} />
+                                </button>
+                            )}
+                            <button onClick={handleClose} className="p-2 hover:bg-gray-200 rounded-lg transition-colors">
+                                <Icon name="X" size={20} />
+                            </button>
+                        </div>
                     </div>
 
                     {/* Body */}
                     <div className="p-8 overflow-y-auto">
-                        {/* Standard Data Grid */}
-                        <div className="grid grid-cols-2 gap-6 mb-4">
+                        {/* Standard Data Grid - Always 3 columns for consistent layout */}
+                        <div className="grid gap-4 mb-4 grid-cols-3">
                             <div className="bg-gray-50 p-4 rounded border">
                                 <h4 className="font-bold text-xs text-gray-500 mb-2">SCHEDULE</h4>
                                 <p className="text-sm"><strong>Start:</strong> {item.date}</p>
-                                <p className="text-sm"><strong>End:</strong> {item.endDate}</p>
+                                <p className="text-sm mb-3"><strong>End:</strong> {item.endDate}</p>
+
+                                {/* Quantity Reconciliation */}
+                                {(() => {
+                                    const booked = originalQty || 0;
+                                    // Calculate charted - prefer local state if set, then item value
+                                    let charted = null;
+                                    if (adjustedQty !== null && adjustedQty !== '' && adjustedQty !== undefined) {
+                                        const parsed = parseInt(adjustedQty);
+                                        if (!isNaN(parsed)) charted = parsed;
+                                    } else if (item.adjustedQty) {
+                                        charted = item.adjustedQty;
+                                    }
+                                    const statusConfig = charted === null
+                                        ? { color: 'text-gray-400', icon: '○', text: 'Not Verified' }
+                                        : charted === booked
+                                            ? { color: 'text-green-600', icon: '✓', text: 'Matched' }
+                                            : charted < booked
+                                                ? { color: 'text-amber-600', icon: '⚠', text: `${booked - charted} Unlinked` }
+                                                : { color: 'text-blue-600', icon: '↑', text: `+${charted - booked} Over` };
+                                    return (
+                                        <div className="pt-2 border-t border-gray-200">
+                                            <div className="flex items-center justify-between text-sm mb-1">
+                                                <span className="text-gray-500">Booked:</span>
+                                                <span className="font-mono font-bold">{booked}</span>
+                                            </div>
+                                            <div className="flex items-center justify-between text-sm">
+                                                <span className="text-gray-500">Charted:</span>
+                                                {editingAdjustedQty ? (
+                                                    <div className="flex items-center gap-1">
+                                                        <input
+                                                            type="number"
+                                                            value={adjustedQty || ''}
+                                                            onChange={(e) => setAdjustedQty(e.target.value)}
+                                                            className="w-14 px-1.5 py-0.5 border border-blue-300 rounded text-xs bg-blue-50 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                                            min="0"
+                                                            placeholder={booked}
+                                                            autoFocus
+                                                        />
+                                                        <button onClick={() => setEditingAdjustedQty(false)} className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded" title="Done editing">
+                                                            <Icon name="Check" size={12} />
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <span
+                                                        onClick={() => {
+                                                            // Keep current value if set, otherwise use item value or booked as starting point
+                                                            const startVal = adjustedQty !== null && adjustedQty !== '' ? adjustedQty : (item.adjustedQty || booked);
+                                                            setAdjustedQty(startVal);
+                                                            setEditingAdjustedQty(true);
+                                                        }}
+                                                        className={`font-mono font-bold cursor-pointer hover:opacity-70 ${charted !== null ? 'text-blue-700' : 'text-gray-400'}`}
+                                                        title="Click to edit"
+                                                    >
+                                                        {charted !== null ? charted : '--'} <Icon name="Edit" size={8} className="inline opacity-50"/>
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className={`text-[10px] mt-1 ${statusConfig.color} font-medium`}>
+                                                {statusConfig.icon} {statusConfig.text}
+                                                {charted !== null && !editingAdjustedQty && (
+                                                    <button onClick={handleClearAdjustedQty} className="ml-1 text-gray-400 hover:text-red-500" title="Clear">
+                                                        <Icon name="X" size={10} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
                             </div>
                             <div className="bg-gray-50 p-4 rounded border">
                                 <h4 className="font-bold text-xs text-gray-500 mb-2">INSTALL PROGRESS</h4>
-                                {/* Installed Row */}
-                                <div className="flex items-center gap-2 mb-2">
-                                    <span className="text-sm"><strong>Installed:</strong></span>
-                                    {editingInstallCount ? (
-                                        <div className="flex items-center gap-1">
-                                            <input
-                                                type="number"
-                                                value={newInstalledCount}
-                                                onChange={(e) => setNewInstalledCount(parseInt(e.target.value) || 0)}
-                                                className="w-16 px-2 py-1 border rounded text-sm"
-                                                min="0"
-                                                max={adjustedQty || item.adjustedQty || originalQty || 999}
-                                            />
-                                            <button onClick={handleSaveInstallCount} className="text-green-600 hover:text-green-700" title="Save">
-                                                <Icon name="Check" size={16} />
-                                            </button>
-                                            <button onClick={() => { setEditingInstallCount(false); setNewInstalledCount(item.totalInstalled || item.installed || 0); }} className="text-gray-400 hover:text-gray-600" title="Cancel">
-                                                <Icon name="X" size={16} />
-                                            </button>
-                                        </div>
-                                    ) : (
-                                        <span
-                                            onClick={() => setEditingInstallCount(true)}
-                                            className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded cursor-pointer hover:bg-blue-200 transition-colors text-sm font-medium"
-                                            title="Click to edit installed count"
-                                        >
-                                            {newInstalledCount} <Icon name="Edit" size={10} className="inline ml-1 opacity-50"/>
-                                        </span>
-                                    )}
-                                </div>
-                                {/* Pending Row - calculated locally from qty and installed */}
+                                {/* Progress Bar and Stats */}
                                 {(() => {
                                     const targetQty = parseInt(adjustedQty) || item.adjustedQty || originalQty || 0;
                                     const installed = newInstalledCount || 0;
                                     const pending = Math.max(0, targetQty - installed);
+                                    const pct = targetQty > 0 ? Math.round((installed / targetQty) * 100) : 0;
                                     return (
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-sm">
-                                                <strong>Pending:</strong>{' '}
-                                                <span className={pending > 0 ? 'text-orange-600 font-bold' : 'text-green-600 font-bold'}>
+                                        <>
+                                            {/* Progress bar */}
+                                            <div className="mb-2">
+                                                <div className="flex justify-between items-center mb-1">
+                                                    <span className="text-[10px] text-gray-600">{installed}/{targetQty}</span>
+                                                    <span className={`text-[10px] font-bold ${pct >= 100 ? 'text-green-600' : pct >= 50 ? 'text-amber-600' : 'text-red-500'}`}>
+                                                        {pct}%
+                                                    </span>
+                                                </div>
+                                                <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                                    <div className={`h-1.5 rounded-full transition-all ${
+                                                        pct >= 100 ? 'bg-green-500' : pct >= 50 ? 'bg-amber-500' : 'bg-red-400'
+                                                    }`} style={{ width: `${Math.min(100, pct)}%` }} />
+                                                </div>
+                                            </div>
+                                            {/* Installed Row */}
+                                            <div className="flex items-center justify-between text-sm mb-1">
+                                                <span className="text-gray-500">Installed:</span>
+                                                {editingInstallCount ? (
+                                                    <div className="flex items-center gap-1">
+                                                        <input
+                                                            type="number"
+                                                            value={newInstalledCount}
+                                                            onChange={(e) => setNewInstalledCount(parseInt(e.target.value) || 0)}
+                                                            className="w-14 px-1.5 py-0.5 border border-blue-300 rounded text-xs bg-blue-50 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                                            min="0"
+                                                            max={targetQty || 999}
+                                                            autoFocus
+                                                        />
+                                                        <button onClick={() => setEditingInstallCount(false)} className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded" title="Done editing">
+                                                            <Icon name="Check" size={12} />
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <span
+                                                        onClick={() => setEditingInstallCount(true)}
+                                                        className="font-mono font-bold text-blue-700 cursor-pointer hover:opacity-70"
+                                                        title="Click to edit"
+                                                    >
+                                                        {installed} <Icon name="Edit" size={8} className="inline opacity-50"/>
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {/* Pending Row */}
+                                            <div className="flex items-center justify-between text-sm">
+                                                <span className="text-gray-500">Pending:</span>
+                                                <span className={`font-mono font-bold ${pending > 0 ? 'text-orange-600' : 'text-green-600'}`}>
                                                     {pending}
                                                 </span>
-                                                {pending === 0 && installed > 0 && (
-                                                    <span className="ml-2 text-green-600 text-xs">Complete!</span>
-                                                )}
-                                            </span>
-                                        </div>
+                                            </div>
+                                            {pending === 0 && installed > 0 && (
+                                                <div className="text-[10px] text-green-600 font-medium mt-1">✓ Complete</div>
+                                            )}
+                                        </>
                                     );
                                 })()}
-                                {item.isOverridden && (
-                                    <div className="mt-2 text-xs text-purple-600 flex items-center gap-1">
-                                        <Icon name="Edit" size={10} /> Manual override active
-                                    </div>
-                                )}
                             </div>
-                        </div>
 
-                        {/* Quantity Reconciliation One-Liner */}
-                        {(() => {
-                            const booked = originalQty || 0;
-                            const charted = parseInt(adjustedQty) || item.adjustedQty || null;
-                            const statusConfig = charted === null
-                                ? { bg: 'bg-gray-50 border-gray-200', badge: 'bg-gray-100 text-gray-600', icon: 'CircleDashed', text: 'Not Verified' }
-                                : charted === booked
-                                    ? { bg: 'bg-green-50 border-green-200', badge: 'bg-green-100 text-green-700', icon: 'CheckCircle', text: 'Matched' }
-                                    : charted < booked
-                                        ? { bg: 'bg-amber-50 border-amber-200', badge: 'bg-amber-100 text-amber-700', icon: 'AlertTriangle', text: `${booked - charted} Unlinked` }
-                                        : { bg: 'bg-blue-50 border-blue-200', badge: 'bg-blue-100 text-blue-700', icon: 'TrendingUp', text: `+${charted - booked} Over` };
-                            return (
-                                <div className={`mb-6 p-3 rounded-lg border ${statusConfig.bg} flex items-center justify-between`}>
-                                    <div className="flex items-center gap-4">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs text-gray-500 font-medium">Booked (SF):</span>
-                                            <span className="px-2 py-0.5 bg-gray-200 text-gray-700 rounded text-sm font-mono font-bold">{booked}</span>
-                                        </div>
-                                        <div className="text-gray-300">|</div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs text-gray-500 font-medium">Charted:</span>
-                                            {editingAdjustedQty ? (
-                                                <div className="flex items-center gap-1">
-                                                    <input
-                                                        type="number"
-                                                        value={adjustedQty || ''}
-                                                        onChange={(e) => setAdjustedQty(e.target.value)}
-                                                        className="w-16 px-2 py-0.5 border rounded text-sm"
-                                                        min="0"
-                                                        placeholder={booked}
-                                                        autoFocus
-                                                    />
-                                                    <button onClick={handleSaveAdjustedQty} className="text-green-600 hover:text-green-700" title="Save">
-                                                        <Icon name="Check" size={14} />
-                                                    </button>
-                                                    <button onClick={() => { setEditingAdjustedQty(false); setAdjustedQty(item.adjustedQty || null); }} className="text-gray-400 hover:text-gray-600" title="Cancel">
-                                                        <Icon name="X" size={14} />
-                                                    </button>
-                                                </div>
-                                            ) : (
-                                                <span
-                                                    onClick={() => { setAdjustedQty(adjustedQty || item.adjustedQty || booked); setEditingAdjustedQty(true); }}
-                                                    className={`px-2 py-0.5 rounded cursor-pointer hover:opacity-80 transition-colors text-sm font-mono font-bold ${
-                                                        charted !== null ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400 border border-dashed border-gray-300'
-                                                    }`}
-                                                    title="Click to verify charted units"
-                                                >
-                                                    {charted !== null ? charted : '--'}
-                                                    <Icon name="Edit" size={10} className="inline ml-1 opacity-50"/>
-                                                </span>
-                                            )}
-                                            {charted !== null && !editingAdjustedQty && (
-                                                <button onClick={handleClearAdjustedQty} className="text-gray-400 hover:text-red-500" title="Clear">
-                                                    <Icon name="X" size={12} />
-                                                </button>
-                                            )}
-                                        </div>
+                            {/* REMOVAL TRACKING BOX - Always shown for consistent layout */}
+                            <div className={`p-4 rounded border ${item.isAdCouncilTrigger ? 'bg-red-50 border-red-200' : 'bg-gray-50'}`}>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <h4 className="font-bold text-xs text-gray-500 flex items-center gap-1">
+                                            <Icon name="Trash2" size={12} /> REMOVAL
+                                        </h4>
+                                        {item.isAdCouncilTrigger && (
+                                            <span className="px-1 py-0.5 bg-red-600 text-white rounded text-[8px] font-bold">AC</span>
+                                        )}
                                     </div>
-                                    <span className={`px-2 py-1 rounded text-xs font-medium flex items-center gap-1 ${statusConfig.badge}`}>
-                                        <Icon name={statusConfig.icon} size={12} /> {statusConfig.text}
-                                    </span>
+
+                                    {editingRemoval ? (
+                                        <div className="space-y-2">
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-gray-500">Qty</label>
+                                                    <input type="number" value={removalQty || ''} onChange={(e) => setRemovalQty(parseInt(e.target.value) || 0)} className="w-full text-xs border rounded px-1.5 py-1" min="0" placeholder="0" />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-gray-500">Done</label>
+                                                    <input type="number" value={removedCount || ''} onChange={(e) => setRemovedCount(parseInt(e.target.value) || 0)} className="w-full text-xs border rounded px-1.5 py-1" min="0" max={removalQty} placeholder="0" />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] font-bold text-gray-500">Status</label>
+                                                {removedCount === 0 ? (
+                                                    <select value={removalStatus} onChange={(e) => setRemovalStatus(e.target.value)} className="w-full text-xs border rounded px-1.5 py-1">
+                                                        <option value="scheduled">Scheduled</option>
+                                                        <option value="blocked">Blocked</option>
+                                                    </select>
+                                                ) : (
+                                                    <div className={`w-full text-xs border rounded px-1.5 py-1 bg-gray-100 ${
+                                                        removalStatus === 'complete' ? 'text-green-600' : 'text-blue-600'
+                                                    }`}>
+                                                        {removalStatus === 'complete' ? '✓ Complete' : '⏳ In Progress'} <span className="text-gray-400">(auto)</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] font-bold text-gray-500">Assignee</label>
+                                                <select value={removalAssignee} onChange={(e) => setRemovalAssignee(e.target.value)} className="w-full text-xs border rounded px-1.5 py-1">
+                                                    <option value="">-- Select --</option>
+                                                    <option value="Shelter Clean">Shelter Clean</option>
+                                                    <option value="In-House Ops">In-House Ops</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] font-bold text-gray-500">Photos Link</label>
+                                                <input type="text" value={removalPhotosLink} onChange={(e) => setRemovalPhotosLink(e.target.value)} className="w-full text-xs border rounded px-1.5 py-1" placeholder="URL..." />
+                                            </div>
+                                            <div className="flex items-center justify-between pt-1">
+                                                <div className="flex items-center gap-1">
+                                                    <input type="checkbox" id="hasReplacementCompact" checked={hasReplacement} onChange={(e) => setHasReplacement(e.target.checked)} className="rounded w-3 h-3" />
+                                                    <label htmlFor="hasReplacementCompact" className="text-[10px] text-gray-600">Has replacement</label>
+                                                </div>
+                                                <button onClick={() => setEditingRemoval(false)} className="text-[10px] text-gray-500 hover:text-gray-700">Done</button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div>
+                                            {/* Progress bar */}
+                                            <div className="mb-2">
+                                                <div className="flex justify-between items-center mb-1">
+                                                    <span className="text-[10px] text-gray-600">{removedCount}/{removalQty}</span>
+                                                    <span className={`text-[10px] font-bold ${
+                                                        removalStatus === 'complete' ? 'text-green-600' :
+                                                        removalStatus === 'in_progress' ? 'text-blue-600' :
+                                                        removalStatus === 'blocked' ? 'text-red-600' : 'text-gray-500'
+                                                    }`}>
+                                                        {removalStatus === 'complete' ? '✓' : removalStatus === 'in_progress' ? '⏳' : removalStatus === 'blocked' ? '⛔' : '📅'}
+                                                    </span>
+                                                </div>
+                                                <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                                    <div className={`h-1.5 rounded-full transition-all ${
+                                                        removedCount >= removalQty ? 'bg-green-500' : removedCount / removalQty >= 0.5 ? 'bg-amber-500' : 'bg-red-400'
+                                                    }`} style={{ width: `${removalQty > 0 ? Math.min(100, (removedCount / removalQty) * 100) : 0}%` }} />
+                                                </div>
+                                            </div>
+                                            {/* Status & Assignee */}
+                                            <div className="text-[10px] text-gray-600 mb-1">
+                                                <span className="capitalize">{(removalStatus || 'scheduled').replace('_', ' ')}</span>
+                                                {removalAssignee && <span className="ml-1">• {removalAssignee}</span>}
+                                            </div>
+                                            {/* Deadline */}
+                                            {item.daysUntilDeadline !== undefined && (
+                                                <div className={`text-[10px] font-bold ${
+                                                    item.daysUntilDeadline < 0 ? 'text-red-600' :
+                                                    item.daysUntilDeadline <= 7 ? 'text-orange-600' : 'text-green-600'
+                                                }`}>
+                                                    {item.daysUntilDeadline < 0 ? `${Math.abs(item.daysUntilDeadline)}d overdue` : `${item.daysUntilDeadline}d left`}
+                                                </div>
+                                            )}
+                                            {hasReplacement && (
+                                                <div className="text-[10px] text-green-600 flex items-center gap-1 mt-1">
+                                                    <Icon name="RefreshCw" size={10} /> Replacement
+                                                </div>
+                                            )}
+                                            <button onClick={() => setEditingRemoval(true)} className="w-full mt-2 px-2 py-1 bg-gray-100 text-gray-700 text-[10px] font-medium rounded hover:bg-gray-200 flex items-center justify-center gap-1">
+                                                <Icon name="Edit" size={10} /> Edit
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
-                            );
-                        })()}
+                        </div>
 
                         {/* Production Proof Selector */}
                         <div className="mb-6 p-4 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg">
@@ -909,7 +1213,6 @@
 
                                 <div className="flex gap-2">
                                     <button onClick={handleCopyToWebmail} className="flex-1 px-4 py-2 bg-blue-600 text-white font-bold rounded flex justify-center gap-2 hover:bg-blue-700"><Icon name="Copy" size={16}/> {copyFeedback || "Copy Email"}</button>
-                                    <button onClick={handleSaveAllData} className="px-4 py-2 bg-green-600 text-white font-bold rounded flex justify-center gap-2 hover:bg-green-700" title="Save to Material Receiver & POP Gallery"><Icon name="Save" size={16}/> Save</button>
                                 </div>
                             </div>
                         )}
@@ -919,6 +1222,28 @@
                             <div dangerouslySetInnerHTML={{ __html: emailDraft }} />
                         </div>
                     </div>
+
+                    {/* HISTORY FOOTER */}
+                    {item.history && item.history.length > 0 && (
+                        <div className="px-8 py-3 border-t bg-gray-50 max-h-32 overflow-y-auto">
+                            <h4 className="text-[10px] font-bold text-gray-500 mb-2 flex items-center gap-1">
+                                <Icon name="History" size={10} /> CHANGE HISTORY
+                            </h4>
+                            <div className="space-y-2">
+                                {[...item.history].reverse().map((entry, idx) => {
+                                    const date = new Date(entry.timestamp);
+                                    const timeStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
+                                                   date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+                                    return (
+                                        <div key={idx} className="text-[10px]">
+                                            <span className="text-gray-400">{timeStr}</span>
+                                            <span className="text-gray-600 ml-2">{entry.changes.join(' • ')}</span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         );

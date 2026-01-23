@@ -3356,6 +3356,7 @@
                             {view === 'rotations' && <Icon name="RefreshCw" size={16} className="text-purple-500" />}
                             {view === 'materialReadyFuture' && <Icon name="Package" size={16} className="text-teal-500" />}
                             {view === 'expiredFlights' && <Icon name="Lightbulb" size={16} className="text-amber-500" />}
+                            {view === 'pendingRemovals' && <Icon name="Trash2" size={16} className="text-red-500" />}
                             {view === 'pastDue' && <Icon name="AlertTriangle" size={16} className="text-orange-500" />}
                             {view?.startsWith('custom_') && <Icon name="Star" size={16} className="text-purple-500" />}
                             {(title || '').replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]/gu, '').trim()}
@@ -3480,6 +3481,197 @@
                                         <td className="px-2 py-2 text-right text-[10px] text-gray-500 font-mono whitespace-nowrap">{row.id}</td>
                                     </tr>
                                 ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            );
+        };
+
+        // 🗑️ REMOVALS TABLE - Dedicated table for tracking campaign removals/takedowns
+        const RemovalsTable = ({ data, completedData = [], onRowClick, onBack }) => {
+            const [showCompleted, setShowCompleted] = useState(false);
+
+            // Combine data based on toggle
+            const displayData = showCompleted ? [...data, ...completedData] : data;
+
+            const downloadCSV = () => {
+                const headers = ['Campaign #', 'Advertiser', 'Campaign', 'Product', 'Market', 'End Date', 'Days Expired', 'Days to Deadline', 'Removal Qty', 'Removed', 'Pending', 'Status', 'Assignee'];
+                const csvContent = [
+                    headers.join(','),
+                    ...displayData.map(row => [
+                        stripEmojis(row.id || ''),
+                        `"${stripEmojis((row.advertiser || '').replace(/"/g, '""'))}"`,
+                        `"${stripEmojis((row.name || '').replace(/"/g, '""'))}"`,
+                        `"${stripEmojis((row.product || '').replace(/"/g, '""'))}"`,
+                        `"${stripEmojis((row.market || '').replace(/"/g, '""'))}"`,
+                        stripEmojis(row.endDate || ''),
+                        row.daysSinceExpired || 0,
+                        row.daysUntilDeadline || 0,
+                        row.removalQty || 0,
+                        row.removedCount || 0,
+                        row.removalPending || 0,
+                        row.removalStatus || 'scheduled',
+                        `"${stripEmojis((row.removalAssignee || '').replace(/"/g, '""'))}"`
+                    ].join(','))
+                ].join('\n');
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.setAttribute('download', `${showCompleted ? 'all' : 'pending'}_removals_${new Date().toLocaleDateString().replace(/\//g,'-')}.csv`);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            };
+
+            if (displayData.length === 0) return (
+                <div className="bg-white rounded-xl p-8 text-center shadow-sm border border-gray-100 relative">
+                    {onBack && (
+                        <button onClick={onBack} className="absolute top-4 left-4 p-2 hover:bg-gray-100 rounded-full transition-colors" title="Back to Dashboard">
+                            <Icon name="ArrowLeft" size={18} />
+                        </button>
+                    )}
+                    {completedData.length > 0 && (
+                        <button
+                            onClick={() => setShowCompleted(true)}
+                            className="absolute top-4 right-4 px-3 py-1.5 bg-green-100 text-green-700 rounded-lg text-xs font-medium hover:bg-green-200 transition-colors flex items-center gap-1"
+                        >
+                            <Icon name="Eye" size={12} /> Show {completedData.length} Completed
+                        </button>
+                    )}
+                    <div className="text-gray-400 mb-2 inline-block"><Icon name="Trash2" size={40} /></div>
+                    <h3 className="text-lg font-medium text-gray-900">No Pending Removals</h3>
+                    <p className="text-gray-500 text-sm">All expired campaigns have been removed or are not yet due for removal.</p>
+                </div>
+            );
+
+            return (
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mt-6">
+                    <div className="px-6 py-3 border-b bg-gradient-to-r from-red-50 to-orange-50 flex justify-between items-center">
+                        <h3 className="font-semibold text-gray-800 flex items-center gap-2 text-sm">
+                            {onBack && (
+                                <button onClick={onBack} className="p-1 hover:bg-gray-200 rounded-full transition-colors mr-1" title="Back to Dashboard">
+                                    <Icon name="ArrowLeft" size={16} />
+                                </button>
+                            )}
+                            <Icon name="Trash2" size={16} className="text-red-500" />
+                            {showCompleted ? 'All Removals' : 'Pending Removals'}
+                            <span className="bg-red-100 text-red-700 text-[10px] py-0.5 px-2 rounded-full font-bold">{data.length} pending</span>
+                            {showCompleted && completedData.length > 0 && (
+                                <span className="bg-green-100 text-green-700 text-[10px] py-0.5 px-2 rounded-full font-bold">{completedData.length} done</span>
+                            )}
+                            <span className="text-[10px] text-gray-500 font-normal ml-2">45-day deadline from end date</span>
+                        </h3>
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={() => setShowCompleted(!showCompleted)}
+                                className={`px-2 py-1 rounded text-xs font-medium transition-colors flex items-center gap-1 ${
+                                    showCompleted
+                                        ? 'bg-green-600 text-white hover:bg-green-700'
+                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                }`}
+                            >
+                                <Icon name={showCompleted ? 'EyeOff' : 'Eye'} size={12} />
+                                {showCompleted ? 'Hide' : 'Show'} Completed ({completedData.length})
+                            </button>
+                            <button onClick={downloadCSV} className="text-blue-600 text-xs flex gap-1.5 font-medium hover:text-blue-800 transition-colors">
+                                <Icon name="Download" size={14}/> CSV
+                            </button>
+                        </div>
+                    </div>
+                    <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+                        <table className="w-full text-left border-collapse table-fixed min-w-[1200px]">
+                            <thead className="sticky top-0 z-10">
+                                <tr className="text-[10px] font-semibold text-gray-500 bg-gray-50 border-b border-gray-200 uppercase tracking-wider">
+                                    <th className="px-2 py-2 w-[180px]">Advertiser / Campaign</th>
+                                    <th className="px-2 py-2 w-[100px]">Product</th>
+                                    <th className="px-2 py-2 w-[100px]">Market</th>
+                                    <th className="px-2 py-2 w-[75px]">End Date</th>
+                                    <th className="px-2 py-2 w-[70px] text-center">Expired</th>
+                                    <th className="px-2 py-2 w-[85px] text-center">Deadline</th>
+                                    <th className="px-2 py-2 w-[140px]">Removal Progress</th>
+                                    <th className="px-2 py-2 w-[90px]">Status</th>
+                                    <th className="px-2 py-2 w-[90px]">Assignee</th>
+                                    <th className="px-2 py-2 w-[70px] text-right">ID</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {displayData.map((row, i) => {
+                                    const isCompleted = row.isRemovalComplete || row.removalStatus === 'complete';
+                                    const deadlineColor = isCompleted ? 'bg-green-100 text-green-700' :
+                                        row.isOverDeadline ? 'bg-red-100 text-red-700' :
+                                        row.daysUntilDeadline <= 7 ? 'bg-orange-100 text-orange-700' :
+                                        row.daysUntilDeadline <= 14 ? 'bg-amber-100 text-amber-700' :
+                                        'bg-green-100 text-green-700';
+                                    const progressColor = row.removalPct >= 75 ? 'bg-green-500' :
+                                        row.removalPct >= 50 ? 'bg-amber-500' : 'bg-red-400';
+                                    const statusColor = row.removalStatus === 'complete' ? 'bg-green-100 text-green-700' :
+                                        row.removalStatus === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                                        'bg-gray-100 text-gray-600';
+
+                                    return (
+                                        <tr key={i} onClick={() => onRowClick(row)}
+                                            className={`hover:bg-blue-50 cursor-pointer transition-colors ${
+                                                isCompleted ? 'bg-green-50/50 opacity-75' : row.isAdCouncilTrigger ? 'bg-red-50' : ''
+                                            }`}>
+                                            <td className="px-2 py-2">
+                                                <div className="flex items-center gap-1">
+                                                    {row.isAdCouncilTrigger && (
+                                                        <span className="px-1 py-0.5 bg-red-600 text-white rounded text-[8px] font-bold" title="Ad Council Trigger - Past 45-day deadline">⚠️ AC</span>
+                                                    )}
+                                                    <div>
+                                                        <div className="text-xs font-medium text-gray-900 truncate" title={row.advertiser}>{row.advertiser}</div>
+                                                        <div className="text-[10px] text-gray-500 truncate" title={row.name}>{row.name}</div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-2 py-2">
+                                                <span className="px-1.5 py-0.5 bg-purple-50 text-purple-700 rounded text-[10px] font-medium" title={row.product}>
+                                                    {abbreviateProduct(row.product)}
+                                                </span>
+                                            </td>
+                                            <td className="px-2 py-2">
+                                                <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] truncate block" title={row.market}>{row.market || '-'}</span>
+                                            </td>
+                                            <td className="px-2 py-2 text-xs text-gray-600">{row.endDate}</td>
+                                            <td className="px-2 py-2 text-center">
+                                                <span className="px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded text-[10px] font-medium">
+                                                    {row.daysSinceExpired}d ago
+                                                </span>
+                                            </td>
+                                            <td className="px-2 py-2 text-center">
+                                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${deadlineColor}`}>
+                                                    {isCompleted ? '✓ Done' : row.isOverDeadline ? `${Math.abs(row.daysUntilDeadline)}d OVER` : `${row.daysUntilDeadline}d left`}
+                                                </span>
+                                            </td>
+                                            <td className="px-2 py-2">
+                                                <div className="flex flex-col gap-0.5">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <div className="flex-1 bg-gray-200 rounded-full h-1.5 min-w-[60px]">
+                                                            <div className={`h-1.5 rounded-full ${progressColor}`} style={{ width: `${row.removalPct}%` }}></div>
+                                                        </div>
+                                                        <span className="text-[10px] font-medium text-gray-700 whitespace-nowrap">
+                                                            {row.removedCount}/{row.removalQty}
+                                                        </span>
+                                                    </div>
+                                                    <div className="text-[9px] text-gray-500">
+                                                        {row.removalPct}% • {row.removalPending} pending
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-2 py-2">
+                                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium capitalize ${statusColor}`}>
+                                                    {(row.removalStatus || 'scheduled').replace('_', ' ')}
+                                                </span>
+                                            </td>
+                                            <td className="px-2 py-2 text-[10px] text-gray-600 truncate" title={row.removalAssignee}>
+                                                {row.removalAssignee || <span className="text-gray-300">--</span>}
+                                            </td>
+                                            <td className="px-2 py-2 text-right text-[10px] text-gray-500 font-mono">{row.id}</td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>
@@ -5163,7 +5355,23 @@
 
 
         const AuthorizedDashboard = ({ onLogout }) => {
-            const [view, setView] = useState('upload');
+            // Initialize view from localStorage, defaulting to 'upload' or 'dashboard' if data exists
+            const [view, setView] = useState(() => {
+                try {
+                    const savedView = localStorage.getItem('stap_current_view');
+                    const savedData = localStorage.getItem('stap_csv_data');
+                    // If we have saved data, restore to saved view or default to dashboard
+                    if (savedData) {
+                        const parsed = JSON.parse(savedData);
+                        if ((parsed.holds?.length > 0) || (parsed.installs?.length > 0)) {
+                            return savedView || 'dashboard';
+                        }
+                    }
+                    return 'upload';
+                } catch (e) {
+                    return 'upload';
+                }
+            });
             const [files, setFiles] = useState({ holds: null, install: null });
             const [processing, setProcessing] = useState(false);
             
@@ -5392,7 +5600,19 @@
                     console.warn('Could not persist data source info:', e);
                 }
             }, [dataSource]);
-            
+
+            // Persist current view to localStorage whenever it changes
+            useEffect(() => {
+                try {
+                    // Don't persist 'upload' view - we want to go to dashboard if data exists
+                    if (view !== 'upload') {
+                        localStorage.setItem('stap_current_view', view);
+                    }
+                } catch (e) {
+                    console.warn('Could not persist view:', e);
+                }
+            }, [view]);
+
             // Note: We no longer auto-navigate to dashboard on login.
             // Instead, we show a "Resume Previous Session" card on the upload screen
             // This gives users explicit control over whether to use cached data.
@@ -5428,8 +5648,10 @@
                 try {
                     localStorage.removeItem('stap_csv_data');
                     localStorage.removeItem('stap_data_source');
+                    localStorage.removeItem('stap_current_view');
                     setBaseData({ holds: [], installs: [] });
                     setDataSource({ type: 'none', timestamp: null, error: null });
+                    setView('upload');
                     console.log('🗑️ Persisted data cleared');
                 } catch (e) {
                     console.warn('Could not clear persisted data:', e);
@@ -5716,16 +5938,32 @@
                 setSelectedItem(prev => {
                     if (!prev) return null;
                     const updated = { ...prev, stage: newStage, isOverridden: true };
+                    // Install tracking
                     if (additionalUpdates.installed !== undefined) {
                         updated.totalInstalled = additionalUpdates.installed;
                         updated.installed = additionalUpdates.installed;
-                        const totalQty = prev.totalQty || prev.quantity || 0;
+                        const totalQty = additionalUpdates.adjustedQty || prev.adjustedQty || prev.totalQty || prev.quantity || 0;
                         updated.pending = Math.max(0, totalQty - additionalUpdates.installed);
                     }
+                    if (additionalUpdates.adjustedQty !== undefined) {
+                        updated.adjustedQty = additionalUpdates.adjustedQty;
+                        updated.hasQtyAdjustment = additionalUpdates.adjustedQty !== null;
+                    }
+                    if (additionalUpdates.pending !== undefined) updated.pending = additionalUpdates.pending;
+                    // Material tracking
                     if (additionalUpdates.photosLink) updated.photosLink = additionalUpdates.photosLink;
                     if (additionalUpdates.receiverLink) updated.receiverLink = additionalUpdates.receiverLink;
                     if (additionalUpdates.materialBreakdown) updated.materialBreakdown = additionalUpdates.materialBreakdown;
                     if (additionalUpdates.productionProof) updated.productionProof = additionalUpdates.productionProof;
+                    // Removal tracking (consistent across all views)
+                    if (additionalUpdates.removalQty !== undefined) updated.removalQty = additionalUpdates.removalQty;
+                    if (additionalUpdates.removedCount !== undefined) updated.removedCount = additionalUpdates.removedCount;
+                    if (additionalUpdates.removalStatus !== undefined) updated.removalStatus = additionalUpdates.removalStatus;
+                    if (additionalUpdates.removalAssignee !== undefined) updated.removalAssignee = additionalUpdates.removalAssignee;
+                    if (additionalUpdates.removalPhotosLink !== undefined) updated.removalPhotosLink = additionalUpdates.removalPhotosLink;
+                    if (additionalUpdates.hasReplacement !== undefined) updated.hasReplacement = additionalUpdates.hasReplacement;
+                    // Change history
+                    if (additionalUpdates.history) updated.history = additionalUpdates.history;
                     return updated;
                 });
             };
@@ -6352,14 +6590,16 @@ Be DIRECT. Use SPECIFIC NUMBERS. Call out SPECIFIC ADVERTISERS at risk. No corpo
             const processedData = useMemo(() => {
                 // This logic runs whenever baseData OR manualOverrides changes
                 const categories = {
-                    pastDue: [], thisWeek: [], nextMonth: [], upcoming: [], recentInstalls: [], 
-                    pipelineSummary: [], activeInstalls: [], lostOpportunities: [], specialMedia: [], all: [], 
+                    pastDue: [], thisWeek: [], nextMonth: [], upcoming: [], recentInstalls: [],
+                    pipelineSummary: [], activeInstalls: [], lostOpportunities: [], specialMedia: [], all: [],
                     masterTracking: [], sixMonthHistory: [], inProgressFlights: [], delayedFlights: [],
                     fullyInstalledThisWeek: [], rotations: [], expiredFlights: [],
                     holdReport: [], // Simple pipeline view
                     ghostBookings: [], // Ghost bookings
                     materialReadyFuture: [], // Material Ready with future start dates
-                    onHoldCampaigns: [] // Campaigns specifically on hold (Pending Hold / On Hold stage)
+                    onHoldCampaigns: [], // Campaigns specifically on hold (Pending Hold / On Hold stage)
+                    pendingRemovals: [], // Campaigns past end date needing removal tracking
+                    completedRemovals: [] // Completed removal tracking history
                 };
                 const pipelineCounts = {}; 
                 
@@ -6659,6 +6899,29 @@ Be DIRECT. Use SPECIFIC NUMBERS. Call out SPECIFIC ADVERTISERS at risk. No corpo
                                 item.productionProof = override.productionProof;
                                 item.isOverridden = true;
                             }
+                            // Apply removal tracking overrides (consistent across all detail views)
+                            if (override.removalQty !== undefined) {
+                                item.removalQty = override.removalQty;
+                            }
+                            if (override.removedCount !== undefined) {
+                                item.removedCount = override.removedCount;
+                            }
+                            if (override.removalStatus) {
+                                item.removalStatus = override.removalStatus;
+                            }
+                            if (override.removalAssignee) {
+                                item.removalAssignee = override.removalAssignee;
+                            }
+                            if (override.removalPhotosLink) {
+                                item.removalPhotosLink = override.removalPhotosLink;
+                            }
+                            if (override.hasReplacement !== undefined) {
+                                item.hasReplacement = override.hasReplacement;
+                            }
+                            // Load change history
+                            if (override.history) {
+                                item.history = override.history;
+                            }
                         }
 
                         // INJECT EMAIL STATS
@@ -6793,9 +7056,9 @@ Be DIRECT. Use SPECIFIC NUMBERS. Call out SPECIFIC ADVERTISERS at risk. No corpo
 
                         // --- STRICT EXPIRED LOGIC + DEDUPLICATION (RESTORED) ---
                         // Only show INSTALLED campaigns - these are the ones that need physical removal
-                        // Filter: End Date in last 45 days AND stage is Installed/Photos Taken/POP Completed
-                        const isInstalledStage = ['installed', 'photos taken', 'pop completed'].includes(stageLower);
-                        
+                        // Filter: End Date in last 45 days AND stage is Installed/Photos Taken/POP Completed/Takedown Complete
+                        const isInstalledStage = ['installed', 'photos taken', 'pop completed', 'takedown complete'].includes(stageLower);
+
                         if (item.endDateObj && isInstalledStage) {
                             const compEndDate = new Date(item.endDateObj);
                             compEndDate.setHours(0,0,0,0);
@@ -6852,7 +7115,75 @@ Be DIRECT. Use SPECIFIC NUMBERS. Call out SPECIFIC ADVERTISERS at risk. No corpo
                     
                     // Finalize Expired List from Map (RESTORED)
                     categories.expiredFlights = Array.from(expiredMap.values());
-                    
+
+                    // === PENDING REMOVALS: Build from expired flights with removal tracking ===
+                    // 45-day deadline for removal, sorted by urgency
+                    const REMOVAL_DEADLINE_DAYS = 45;
+                    categories.pendingRemovals = Array.from(expiredMap.values()).map(item => {
+                        const endDate = item.endDateObj || new Date(item.endDate);
+                        const daysSinceExpired = Math.floor((today - endDate) / (1000 * 60 * 60 * 24));
+                        const daysUntilDeadline = REMOVAL_DEADLINE_DAYS - daysSinceExpired;
+
+                        // Check for removal overrides in manualOverrides
+                        const uniqueKey = `${item.id}_${item.date}_${item.product || item.media}`;
+                        const override = manualOverrides[uniqueKey] || {};
+
+                        // Apply stage override if exists (important for pending/completed filtering)
+                        const effectiveStage = override.stage || item.stage;
+
+                        // Removal tracking fields (from override or defaults)
+                        const removalQty = override.removalQty || item.totalInstalled || item.quantity || 0;
+                        const removedCount = override.removedCount || 0;
+                        const removalPending = Math.max(0, removalQty - removedCount);
+                        const removalPct = removalQty > 0 ? Math.round((removedCount / removalQty) * 100) : 0;
+                        const removalStatus = override.removalStatus || 'scheduled'; // scheduled, in_progress, complete
+                        const removalAssignee = override.removalAssignee || '';
+                        const removalPhotosLink = override.removalPhotosLink || '';
+                        const hasReplacement = override.hasReplacement || false;
+
+                        // Risk calculation for sorting
+                        // Higher score = more urgent
+                        const isOverDeadline = daysUntilDeadline < 0;
+                        const removalRiskScore = (isOverDeadline ? 1000 : 0) +
+                            (REMOVAL_DEADLINE_DAYS - daysUntilDeadline) * 2 +
+                            (100 - removalPct) +
+                            (removalPending / 5);
+
+                        return {
+                            ...item,
+                            stage: effectiveStage, // Use overridden stage for filtering
+                            daysSinceExpired,
+                            daysUntilDeadline,
+                            removalQty,
+                            removedCount,
+                            removalPending,
+                            removalPct,
+                            removalStatus,
+                            removalAssignee,
+                            removalPhotosLink,
+                            hasReplacement,
+                            history: override.history || item.history, // Preserve change history
+                            isOverDeadline,
+                            isAdCouncilTrigger: isOverDeadline && !hasReplacement,
+                            removalRiskScore,
+                            isRemovalComplete: false // Will be set below
+                        };
+                    });
+
+                    // Split into pending and completed removals
+                    const allRemovals = categories.pendingRemovals;
+                    categories.pendingRemovals = allRemovals.filter(item => {
+                        const stageLower = (item.stage || '').toLowerCase();
+                        const isComplete = stageLower === 'takedown complete' || item.removalStatus === 'complete';
+                        return !isComplete;
+                    }).sort((a, b) => b.removalRiskScore - a.removalRiskScore); // Highest risk first
+
+                    categories.completedRemovals = allRemovals.filter(item => {
+                        const stageLower = (item.stage || '').toLowerCase();
+                        return stageLower === 'takedown complete' || item.removalStatus === 'complete';
+                    }).map(item => ({ ...item, isRemovalComplete: true }))
+                    .sort((a, b) => b.removalRiskScore - a.removalRiskScore);
+
                     // Build Pipeline Summary from all counted stages
                     categories.pipelineSummary = Object.entries(pipelineCounts)
                         .map(([stage, count]) => ({ stage, count }))
@@ -7096,6 +7427,8 @@ Be DIRECT. Use SPECIFIC NUMBERS. Call out SPECIFIC ADVERTISERS at risk. No corpo
                     ghostBookings: filterArray(processedData.ghostBookings),
                     materialReadyFuture: filterArray(processedData.materialReadyFuture),
                     onHoldCampaigns: filterArray(processedData.onHoldCampaigns),
+                    pendingRemovals: filterArray(processedData.pendingRemovals),
+                    completedRemovals: filterArray(processedData.completedRemovals),
                     pipelineSummary: processedData.pipelineSummary // Keep pipeline summary as-is (it's aggregated)
                 };
             }, [processedData, marketFilters, productFilters, productionFilter]);
@@ -7178,6 +7511,7 @@ Be DIRECT. Use SPECIFIC NUMBERS. Call out SPECIFIC ADVERTISERS at risk. No corpo
                 else if (view === 'expiredFlights') { activeSet = filteredStats.expiredFlights; }
                 else if (view === 'holdReport') { activeSet = filteredStats.holdReport; }
                 else if (view === 'onHoldCampaigns') { activeSet = filteredStats.onHoldCampaigns; }
+                else if (view === 'pendingRemovals') { activeSet = filteredStats.pendingRemovals; }
                 else if (view === 'ghostBookings') { activeSet = filteredStats.ghostBookings; }
                 else if (view === 'materialReadyFuture') { activeSet = filteredStats.materialReadyFuture; }
                 else if (view === 'pastDue') { activeSet = filteredStats.pastDue; }
@@ -8138,6 +8472,8 @@ Be DIRECT. Use SPECIFIC NUMBERS. Call out SPECIFIC ADVERTISERS at risk. No corpo
                                         <PipelineSummaryTable data={filteredData} />
                                     ) : view === 'holdReport' ? (
                                         <HoldReportTable data={filteredData} onRowClick={setSelectedItem} onBack={() => setView('dashboard')} />
+                                    ) : view === 'pendingRemovals' ? (
+                                        <RemovalsTable data={filteredData} completedData={filteredStats.completedRemovals} onRowClick={setSelectedItem} onBack={() => setView('dashboard')} />
                                     ) : view === 'ghostBookings' ? (
                                         <GhostBookingsTable data={filteredData} onRowClick={setSelectedItem} onBack={() => setView('dashboard')} />
                                     ) : view === 'materialReceivers' ? (
