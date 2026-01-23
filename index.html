@@ -4666,11 +4666,11 @@
             ];
             
             const historyItems = [
-                { id: 'expiredFlights', icon: 'Lightbulb' },
-                { id: 'pastDue', icon: 'AlertTriangle' },
-                { id: 'recentInstalls', icon: 'CheckSquare' },
-                { id: 'history', icon: 'History' },
+                { id: 'pendingRemovals', icon: 'Trash2' },
+                { id: 'activeInstalls', icon: 'Hammer' },
+                { id: 'completedCampaigns', icon: 'CheckCircle' },
                 { id: 'lostOpportunities', icon: 'XCircle' },
+                { id: 'impressions', icon: 'MapPin' },
             ];
             
             const IconButton = ({ item, colorClass, bgClass, borderClass, hoverBorderClass, index = 0, isVisible = true }) => (
@@ -4711,19 +4711,6 @@
                             isVisible={true}
                         />
                     ))}
-
-                    {/* ZIP Impressions - Always visible, navigates to full dashboard */}
-                    <button
-                        onClick={() => setView('impressions')}
-                        className={`w-8 h-8 mb-0.5 rounded-lg flex items-center justify-center transition-all duration-300 ${
-                            view === 'impressions'
-                                ? 'bg-emerald-500/20 border border-emerald-400 shadow-lg'
-                                : 'border border-emerald-500/50 hover:border-emerald-400 hover:bg-emerald-500/20 bg-emerald-500/10'
-                        }`}
-                        title="ZIP Impressions Dashboard"
-                    >
-                        <Icon name="Globe" size={14} className="text-emerald-400" />
-                    </button>
 
                     {/* Pipeline Section */}
                     <div className="w-8 border-t border-slate-700 my-1.5" />
@@ -6599,7 +6586,8 @@ Be DIRECT. Use SPECIFIC NUMBERS. Call out SPECIFIC ADVERTISERS at risk. No corpo
                     materialReadyFuture: [], // Material Ready with future start dates
                     onHoldCampaigns: [], // Campaigns specifically on hold (Pending Hold / On Hold stage)
                     pendingRemovals: [], // Campaigns past end date needing removal tracking
-                    completedRemovals: [] // Completed removal tracking history
+                    completedRemovals: [], // Completed removal tracking history
+                    completedCampaigns: [] // Fully completed campaigns (Takedown Complete)
                 };
                 const pipelineCounts = {}; 
                 
@@ -6962,9 +6950,14 @@ Be DIRECT. Use SPECIFIC NUMBERS. Call out SPECIFIC ADVERTISERS at risk. No corpo
                         // Installed (partially done) or Material Ready (ready to install)
                         const isActiveWorkStage = ['installed', 'material ready for install'].includes(stageLower);
                         if (isActiveWorkStage && item.pending > 0) {
-                            categories.activeInstalls.push(item); 
+                            categories.activeInstalls.push(item);
                         }
-                        
+
+                        // ✅ COMPLETED CAMPAIGNS: Fully done (Takedown Complete)
+                        if (stageLower === 'takedown complete') {
+                            categories.completedCampaigns.push(item);
+                        }
+
                         // 📋 HOLD REPORT: All campaigns (simplified version of Install Report)
                         categories.holdReport.push(item);
                         
@@ -7203,6 +7196,7 @@ Be DIRECT. Use SPECIFIC NUMBERS. Call out SPECIFIC ADVERTISERS at risk. No corpo
                 categories.ghostBookings.sort((a,b) => a.dateObj - b.dateObj); // Sort ghosts by date
                 categories.materialReadyFuture.sort((a,b) => a.dateObj - b.dateObj); // Sort by Start Date ascending
                 categories.onHoldCampaigns.sort((a,b) => a.dateObj - b.dateObj); // Sort by Start Date ascending
+                categories.completedCampaigns.sort((a,b) => b.endDateObj - a.endDateObj); // Most recently completed first
 
                 // 🐛 DEBUG: Log stage values and installed filter results
                 if (categories.all && categories.all.length > 0) {
@@ -7429,6 +7423,7 @@ Be DIRECT. Use SPECIFIC NUMBERS. Call out SPECIFIC ADVERTISERS at risk. No corpo
                     onHoldCampaigns: filterArray(processedData.onHoldCampaigns),
                     pendingRemovals: filterArray(processedData.pendingRemovals),
                     completedRemovals: filterArray(processedData.completedRemovals),
+                    completedCampaigns: filterArray(processedData.completedCampaigns),
                     pipelineSummary: processedData.pipelineSummary // Keep pipeline summary as-is (it's aggregated)
                 };
             }, [processedData, marketFilters, productFilters, productionFilter]);
@@ -7517,6 +7512,7 @@ Be DIRECT. Use SPECIFIC NUMBERS. Call out SPECIFIC ADVERTISERS at risk. No corpo
                 else if (view === 'pastDue') { activeSet = filteredStats.pastDue; }
                 else if (view === 'recentInstalls') { activeSet = filteredStats.recentInstalls; }
                 else if (view === 'activeInstalls') { activeSet = filteredStats.activeInstalls; }
+                else if (view === 'completedCampaigns') { activeSet = filteredStats.completedCampaigns; }
                 else if (view === 'upcoming') { activeSet = filteredStats.upcoming; }
                 else if (view === 'thisWeek') { activeSet = filteredStats.thisWeek; }
                 else if (view === 'nextMonth') { activeSet = filteredStats.nextMonth; }
@@ -8501,7 +8497,8 @@ Be DIRECT. Use SPECIFIC NUMBERS. Call out SPECIFIC ADVERTISERS at risk. No corpo
                                                 view === 'nextMonth' ? 'Scheduled Next Month' :
                                                 view === 'upcoming' ? 'Upcoming (Next 7 Days)' :
                                                 view === 'recentInstalls' ? 'Installed (Last 30 Days)' :
-                                                view === 'activeInstalls' ? 'Active Installs (Last 30 Days)' :
+                                                view === 'activeInstalls' ? 'Active Installs (In Progress)' :
+                                                view === 'completedCampaigns' ? 'Completed Campaigns (Takedown Complete)' :
                                                 view === 'history' ? 'Install History (6 Months)' :
                                                 view === 'lostOpportunities' ? 'Lost Opportunities' :
                                                 view === 'specialMedia' ? 'Specialty Media Pipeline' :

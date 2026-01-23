@@ -96,14 +96,13 @@
             { id: 'pipelineSummary', label: 'SUMMARY', angle: 234 },
         ];
 
-        // HISTORY GEAR - Tertiary navigation (6 items)
+        // HISTORY GEAR - Tertiary navigation (5 items)
         const historyNodes = [
             { id: 'pendingRemovals', label: 'REMOVALS', angle: -90 },
-            { id: 'pastDue', label: 'PAST DUE', angle: -30 },
-            { id: 'recentInstalls', label: 'INSTALLED 30D', angle: 30 },
-            { id: 'history', label: '6-MONTH', angle: 90 },
-            { id: 'lostOpportunities', label: 'LOST', angle: 150 },
-            { id: 'impressions', label: 'ZIP IMPRESS', angle: 210 },
+            { id: 'activeInstalls', label: 'ACTIVE', angle: -18 },
+            { id: 'completedCampaigns', label: 'COMPLETED', angle: 54 },
+            { id: 'lostOpportunities', label: 'LOST', angle: 126 },
+            { id: 'impressions', label: 'IMPRESS', angle: 198 },
         ];
 
         const icons = {
@@ -133,7 +132,8 @@
             expiredFlights: 'M9 18h6 M10 22h4 M12 2a7 7 0 017 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 01-2 2h-4a2 2 0 01-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 017-7z',
             pastDue: 'M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z M12 9v4 M12 17h.01',
             recentInstalls: 'M9 11l3 3L22 4 M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11',
-            history: 'M12 8v4l3 3 M3 12a9 9 0 1018 0 9 9 0 00-18 0z',
+            activeInstalls: 'M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z',
+            completedCampaigns: 'M22 11.08V12a10 10 0 11-5.93-9.14 M22 4L12 14.01l-3-3',
             lostOpportunities: 'M12 12m-10 0a10 10 0 1020 0 10 10 0 10-20 0 M15 9l-6 6 M9 9l6 6',
             impressions: 'M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z M12 10m-3 0a3 3 0 106 0 3 3 0 10-6 0',
         };
