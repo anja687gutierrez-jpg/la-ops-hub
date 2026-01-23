@@ -17,6 +17,8 @@ LA STAP Operations Portal - A single-page React application for managing out-of-
 
 ### File Structure
 - `index.html` - Main desktop application (~1.3MB, self-contained)
+- `detailModal.js` - External detail modal component for campaign editing
+- `canvasGearSidebar.js` - Canvas-based gear menu sidebar navigation
 - `mobile.html` - Mobile-optimized field operations app
 - `demo.js` - Demo mode components and mock data generators
 
@@ -79,6 +81,32 @@ The `parseDate()` function handles multiple formats:
 ### Campaign Stages
 Campaigns flow through stages defined in `ALL_STAGES` array:
 `RFP` → `Initial Proposal` → `Contracted` → `Proofs Approved` → `Material Ready For Install` → `Installed` → `POP Completed` → `Takedown Complete`
+
+### Detail Modal (`detailModal.js`)
+Unified campaign detail view with 3-column layout:
+- **SCHEDULE** - Booked qty, charted qty (manual override), start/end dates
+- **INSTALL PROGRESS** - Installed count, pending count, progress bar
+- **REMOVAL** - Removal tracking with qty, done count, status, assignee
+
+**Key Features:**
+- Waterfall data flow: Charted qty → Install Progress → Removal
+- Smart removal status: auto-calculates `in_progress`/`complete` from numbers, manual `scheduled`/`blocked`
+- Change history tracking with timestamps (stored in `manualOverrides`)
+- Save button only appears when there are unsaved changes
+- Unsaved changes warning on close
+
+**Data Keys:**
+- `adjustedQty` - Manual charted quantity override
+- `installed` / `totalInstalled` - Installed count
+- `removalQty`, `removedCount`, `removalStatus`, `removalAssignee` - Removal tracking
+- `history` - Array of `{ timestamp, changes[] }` entries
+
+### Removal Tracking
+Pending Removals view tracks campaigns past their end date:
+- 45-day deadline from end date for removal
+- Risk scoring for priority sorting (overdue items first)
+- Splits into `pendingRemovals` and `completedRemovals` based on stage/status
+- Stage override from `manualOverrides` is applied for proper filtering
 
 ## Security Notes
 - API keys are embedded in the HTML file (marked with security warnings)
