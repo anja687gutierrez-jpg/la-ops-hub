@@ -4668,6 +4668,7 @@
             const historyItems = [
                 { id: 'pendingRemovals', icon: 'Trash2' },
                 { id: 'activeInstalls', icon: 'Hammer' },
+                { id: 'awaitingPop', icon: 'Camera' },
                 { id: 'completedCampaigns', icon: 'CheckCircle' },
                 { id: 'lostOpportunities', icon: 'XCircle' },
                 { id: 'impressions', icon: 'MapPin' },
@@ -6587,7 +6588,8 @@ Be DIRECT. Use SPECIFIC NUMBERS. Call out SPECIFIC ADVERTISERS at risk. No corpo
                     onHoldCampaigns: [], // Campaigns specifically on hold (Pending Hold / On Hold stage)
                     pendingRemovals: [], // Campaigns past end date needing removal tracking
                     completedRemovals: [], // Completed removal tracking history
-                    completedCampaigns: [] // Fully completed campaigns (Takedown Complete)
+                    completedCampaigns: [], // Fully completed campaigns (Takedown Complete)
+                    awaitingPop: [] // Installed but missing proof photos
                 };
                 const pipelineCounts = {}; 
                 
@@ -6958,6 +6960,12 @@ Be DIRECT. Use SPECIFIC NUMBERS. Call out SPECIFIC ADVERTISERS at risk. No corpo
                             categories.completedCampaigns.push(item);
                         }
 
+                        // 📸 AWAITING POP: Installed but missing proof photos
+                        // Stage is "Installed" and fully installed (no pending) - needs POP photos
+                        if (stageLower === 'installed' && item.pending === 0) {
+                            categories.awaitingPop.push(item);
+                        }
+
                         // 📋 HOLD REPORT: All campaigns (simplified version of Install Report)
                         categories.holdReport.push(item);
                         
@@ -7197,6 +7205,7 @@ Be DIRECT. Use SPECIFIC NUMBERS. Call out SPECIFIC ADVERTISERS at risk. No corpo
                 categories.materialReadyFuture.sort((a,b) => a.dateObj - b.dateObj); // Sort by Start Date ascending
                 categories.onHoldCampaigns.sort((a,b) => a.dateObj - b.dateObj); // Sort by Start Date ascending
                 categories.completedCampaigns.sort((a,b) => b.endDateObj - a.endDateObj); // Most recently completed first
+                categories.awaitingPop.sort((a,b) => a.dateObj - b.dateObj); // Oldest first (longest waiting for POP)
 
                 // 🐛 DEBUG: Log stage values and installed filter results
                 if (categories.all && categories.all.length > 0) {
@@ -7424,6 +7433,7 @@ Be DIRECT. Use SPECIFIC NUMBERS. Call out SPECIFIC ADVERTISERS at risk. No corpo
                     pendingRemovals: filterArray(processedData.pendingRemovals),
                     completedRemovals: filterArray(processedData.completedRemovals),
                     completedCampaigns: filterArray(processedData.completedCampaigns),
+                    awaitingPop: filterArray(processedData.awaitingPop),
                     pipelineSummary: processedData.pipelineSummary // Keep pipeline summary as-is (it's aggregated)
                 };
             }, [processedData, marketFilters, productFilters, productionFilter]);
@@ -7513,6 +7523,7 @@ Be DIRECT. Use SPECIFIC NUMBERS. Call out SPECIFIC ADVERTISERS at risk. No corpo
                 else if (view === 'recentInstalls') { activeSet = filteredStats.recentInstalls; }
                 else if (view === 'activeInstalls') { activeSet = filteredStats.activeInstalls; }
                 else if (view === 'completedCampaigns') { activeSet = filteredStats.completedCampaigns; }
+                else if (view === 'awaitingPop') { activeSet = filteredStats.awaitingPop; }
                 else if (view === 'upcoming') { activeSet = filteredStats.upcoming; }
                 else if (view === 'thisWeek') { activeSet = filteredStats.thisWeek; }
                 else if (view === 'nextMonth') { activeSet = filteredStats.nextMonth; }
@@ -8499,6 +8510,7 @@ Be DIRECT. Use SPECIFIC NUMBERS. Call out SPECIFIC ADVERTISERS at risk. No corpo
                                                 view === 'recentInstalls' ? 'Installed (Last 30 Days)' :
                                                 view === 'activeInstalls' ? 'Active Installs (In Progress)' :
                                                 view === 'completedCampaigns' ? 'Completed Campaigns (Takedown Complete)' :
+                                                view === 'awaitingPop' ? 'Awaiting POP (Installed, Needs Photos)' :
                                                 view === 'history' ? 'Install History (6 Months)' :
                                                 view === 'lostOpportunities' ? 'Lost Opportunities' :
                                                 view === 'specialMedia' ? 'Specialty Media Pipeline' :

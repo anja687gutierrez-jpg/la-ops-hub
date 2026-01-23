@@ -661,8 +661,10 @@
             // Determine final stage (with auto-stage logic)
             let finalStage = newStage;
 
-            // Auto-stage to Installed when pending = 0
-            if (pending === 0 && installed > 0 && newStage !== 'Installed' && newStage !== 'Takedown Complete') {
+            // Auto-stage to Installed when pending = 0 (but allow progression beyond Installed)
+            const postInstalledStages = ['installed', 'photos taken', 'pop completed', 'takedown complete'];
+            const isPostInstalledStage = postInstalledStages.includes(newStage.toLowerCase());
+            if (pending === 0 && installed > 0 && !isPostInstalledStage) {
                 finalStage = 'Installed';
                 setNewStage('Installed');
             }

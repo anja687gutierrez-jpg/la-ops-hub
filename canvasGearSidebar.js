@@ -96,13 +96,14 @@
             { id: 'pipelineSummary', label: 'SUMMARY', angle: 234 },
         ];
 
-        // HISTORY GEAR - Tertiary navigation (5 items)
+        // HISTORY GEAR - Tertiary navigation (6 items)
         const historyNodes = [
             { id: 'pendingRemovals', label: 'REMOVALS', angle: -90 },
-            { id: 'activeInstalls', label: 'ACTIVE', angle: -18 },
-            { id: 'completedCampaigns', label: 'COMPLETED', angle: 54 },
-            { id: 'lostOpportunities', label: 'LOST', angle: 126 },
-            { id: 'impressions', label: 'IMPRESS', angle: 198 },
+            { id: 'activeInstalls', label: 'ACTIVE', angle: -30 },
+            { id: 'awaitingPop', label: 'AWAIT POP', angle: 30 },
+            { id: 'completedCampaigns', label: 'COMPLETED', angle: 90 },
+            { id: 'lostOpportunities', label: 'LOST', angle: 150 },
+            { id: 'impressions', label: 'IMPRESS', angle: 210 },
         ];
 
         const icons = {
@@ -134,6 +135,7 @@
             recentInstalls: 'M9 11l3 3L22 4 M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11',
             activeInstalls: 'M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z',
             completedCampaigns: 'M22 11.08V12a10 10 0 11-5.93-9.14 M22 4L12 14.01l-3-3',
+            awaitingPop: 'M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z M12 17a4 4 0 100-8 4 4 0 000 8z',
             lostOpportunities: 'M12 12m-10 0a10 10 0 1020 0 10 10 0 10-20 0 M15 9l-6 6 M9 9l6 6',
             impressions: 'M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z M12 10m-3 0a3 3 0 106 0 3 3 0 10-6 0',
         };
