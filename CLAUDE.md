@@ -108,6 +108,34 @@ Pending Removals view tracks campaigns past their end date:
 - Splits into `pendingRemovals` and `completedRemovals` based on stage/status
 - Stage override from `manualOverrides` is applied for proper filtering
 
+### Sidebar Navigation (`canvasGearSidebar.js`)
+Three interlocking gears with orbital menu items. Full view (320px) shows animated gears, collapsed view (64px) shows icon bar.
+
+**MODULES gear (cyan)** - 9 items:
+`dashboard`, `master`, `holdReport`, `availability`, `riskAnalysis`, `specialMedia`, `popGallery`, `materialReceivers`, `performanceReport`
+
+**PIPELINE gear (purple)** - 10 items:
+`delayedFlights`, `onHoldCampaigns`, `inProgressFlights`, `fullyInstalledThisWeek`, `rotations`, `thisWeek`, `upcoming`, `materialReadyFuture`, `nextMonth`, `pipelineSummary`
+
+**HISTORY gear (amber)** - 6 items:
+`pendingRemovals`, `activeInstalls`, `awaitingPop`, `completedCampaigns`, `lostOpportunities`, `impressions`
+
+### Pipeline Summary Dashboard
+Comprehensive analytics view for monthly pipeline (`pipelineSummary` view):
+- **Header Stats Cards** - Total campaigns, faces, installed count, active stages
+- **Visual Funnel** - Bar chart showing campaign count per stage, proportionally sized
+- **Breakdown Table** - Stage details with progress bars, quantities, percentages
+- **Bottleneck Detection** - Alerts when stages have >1.5x average campaigns
+- Color-coded by stage (RFP=gray, Contracted=indigo, Material Ready=yellow, Installed=green, etc.)
+- Clickable rows for drill-down navigation
+
+### AWAIT POP View
+Tracks campaigns needing proof of performance photos:
+- Filters: `stage === 'Installed'` AND `pending === 0`
+- Shows fully installed campaigns waiting for POP photos
+- Sorted oldest first (longest waiting)
+- Change stage to "Photos Taken" or "POP Completed" to move out of this view
+
 ## Security Notes
 - API keys are embedded in the HTML file (marked with security warnings)
 - This is designed for internal/intranet use only
