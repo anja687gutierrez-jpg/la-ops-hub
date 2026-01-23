@@ -21,6 +21,9 @@ LA STAP Operations Portal - A single-page React application for managing out-of-
 - `canvasGearSidebar.js` - Canvas-based gear menu sidebar navigation
 - `mobile.html` - Mobile-optimized field operations app
 - `demo.js` - Demo mode components and mock data generators
+- `GROQ_AI_CONFIG.md` - AI analysis configuration documentation
+- `edge_case_test.csv` - Test data with 50 edge cases
+- `test_data.csv` - Sample campaign data for testing
 
 ### Key Architectural Patterns
 
@@ -34,7 +37,7 @@ LA STAP Operations Portal - A single-page React application for managing out-of-
 **State Management**: Uses React hooks (`useState`, `useEffect`, `useMemo`, `useRef`) for local component state. Data persists via `localStorage`.
 
 **External APIs**:
-- Groq API (Llama 3.3 70B) for AI analysis features
+- Groq API (Llama 3.3 70B) for AI analysis features (see `GROQ_AI_CONFIG.md`)
 - Open-Meteo for weather forecasts (free, no key required)
 - Google Sheets integration for live data sync
 
@@ -135,6 +138,34 @@ Tracks campaigns needing proof of performance photos:
 - Shows fully installed campaigns waiting for POP photos
 - Sorted oldest first (longest waiting)
 - Change stage to "Photos Taken" or "POP Completed" to move out of this view
+
+### Premium Products (Special Media)
+Premium/specialty products appear in ALL views with visual distinction:
+- **Flag:** `isPremium: true` on campaign object
+- **Display:** ⭐ star icon + amber/gold background (`bg-amber-100 text-amber-800`)
+- **Keywords:** `wrap`, `domination`, `takeover`, `special`, `custom`, `embellishment`, `icon`, `spectacular`, `wallscape`, `premium`, `mural`, `vinyl`
+- **Filtering:** Can be filtered via product search; also have dedicated Special Media tab
+- **AI Analysis:** Included in AI Pipeline Insights under "SPECIAL MEDIA" section
+
+### AI Pipeline Insights
+Dashboard AI analysis powered by Groq (Llama 3.3 70B). See `GROQ_AI_CONFIG.md` for full documentation.
+
+**Output Format:**
+```
+## 🚨 TL;DR (3 sentences max)
+[Biggest risk] [Velocity status] [Action needed]
+
+---
+
+## 📋 DETAILED BREAKDOWN
+[HEADLINE RISK, VELOCITY, STALLED/DELAYED, POP, SPECIAL MEDIA, HOLDS, MARKET/WEATHER]
+```
+
+**Status Indicators:** 🔴 Critical (<50%) | 🟡 Caution (50-75%) | 🟢 On track (>75%) | ✅ Good
+
+**Data Sources:** Install metrics, risk detection, delayed flights, material status, holds, POP compliance, special media, market capacity, weather, holidays
+
+**Triggering:** Click "AI Pipeline Insights" button on Dashboard view
 
 ## Security Notes
 - API keys are embedded in the HTML file (marked with security warnings)
