@@ -6431,12 +6431,13 @@
             const generatePipelineInsight = async (allCampaigns) => {
                 setIsInsightLoading(true);
 
-                // --- 1. FETCH LIVE WEATHER ---
+                // --- 1. FETCH LIVE WEATHER (from user's configured location) ---
                 let weatherData = [];
                 let weatherContext = "Weather data unavailable.";
                 let weatherRisk = "unknown";
+                const weatherLocation = getWeatherLocation(); // Use user's saved location
                 try {
-                    weatherData = await fetchLiveWeather('Los Angeles, CA');
+                    weatherData = await fetchLiveWeather(weatherLocation);
                     const next3Days = weatherData.slice(0, 3);
                     const maxRain = Math.max(...next3Days.map(d => d.rainChance));
                     const avgTemp = Math.round(next3Days.reduce((s, d) => s + d.temp, 0) / 3);
@@ -6491,8 +6492,21 @@
                     ? `⚠️ FILTERED VIEW: ${activeFilterContext.join(' | ')}`
                     : '📊 FULL PORTFOLIO VIEW (no filters applied)';
 
-                const safeCampaigns = allCampaigns || [];
+                // Filter to only campaigns within last 6 months (ignore old backlog)
+                const sixMonthsAgo = new Date(now);
+                sixMonthsAgo.setMonth(now.getMonth() - 6);
+
+                const safeCampaigns = (allCampaigns || []).filter(c => {
+                    // Use start date to determine recency
+                    let startDate = c.dateObj;
+                    if (!startDate && c.date) startDate = new Date(c.date);
+                    // Keep if no date (can't determine age) or within 6 months
+                    if (!startDate) return true;
+                    return startDate >= sixMonthsAgo;
+                });
+
                 const totalCampaigns = safeCampaigns.length;
+                const excludedCount = (allCampaigns || []).length - totalCampaigns;
 
                 // --- COMPREHENSIVE INSTALL TRACKING ---
                 const installMetrics = {
@@ -6534,9 +6548,53 @@
                     popComplete: { count: 0, qty: 0 }
                 };
 
+                // Delayed flights tracking (past start date, not complete)
+                const delayedMetrics = {
+                    count: 0,
+                    totalQty: 0,
+                    campaigns: []
+                };
+
+                // Material status tracking
+                const materialMetrics = {
+                    awaitingMaterial: { count: 0, qty: 0, campaigns: [] },
+                    materialReceived: { count: 0, qty: 0 }
+                };
+
+                // Performance tracking (historical success rates)
+                const performanceMetrics = {
+                    completed: { count: 0, qty: 0, impressions: 0 },
+                    photosTaken: { count: 0, qty: 0 },
+                    popCompleted: { count: 0, qty: 0 },
+                    byMarket: {},
+                    byProduct: {}
+                };
+
+                // POP/Photo compliance tracking
+                const popMetrics = {
+                    awaitingPhotos: { count: 0, qty: 0, campaigns: [] },  // Installed but no photos
+                    photosReady: { count: 0, qty: 0 },   // Photos taken, awaiting POP
+                    popComplete: { count: 0, qty: 0 }    // Fully documented
+                };
+
+                // Special media tracking (non-standard installs)
+                const specialMediaMetrics = {
+                    total: { count: 0, qty: 0 },
+                    inProgress: { count: 0, qty: 0, campaigns: [] },
+                    completed: { count: 0, qty: 0 }
+                };
+
+                // Availability/capacity tracking
+                const capacityMetrics = {
+                    byMarket: {},
+                    totalBooked: 0,
+                    peakWeeks: []
+                };
+
                 const completedStages = ['installed', 'photos taken', 'pop completed', 'takedown complete'];
                 const holdStages = ['pending hold', 'on hold'];
                 const activeInstallStages = ['material ready for install', 'installed'];
+                const awaitingMaterialStages = ['contracted', 'proofs approved'];
 
                 safeCampaigns.forEach(c => {
                     const stage = (c.stage || '').trim();
@@ -6635,6 +6693,40 @@
                         }
                     }
 
+                    // --- DELAYED FLIGHTS TRACKING ---
+                    // Past start date (>7 days grace), not completed, within last 3 weeks
+                    const gracePeriod = 7;
+                    const delayedLookback = 21;
+                    if (daysSinceStart > gracePeriod && daysSinceStart <= delayedLookback && !completedStages.includes(stageLower) && !holdStages.includes(stageLower)) {
+                        delayedMetrics.count++;
+                        delayedMetrics.totalQty += qty;
+                        delayedMetrics.campaigns.push({
+                            advertiser: c.advertiser,
+                            market: c.market,
+                            qty: qty,
+                            installed: installed,
+                            daysSinceStart: daysSinceStart,
+                            stage: stage
+                        });
+                    }
+
+                    // --- MATERIAL STATUS TRACKING ---
+                    if (awaitingMaterialStages.includes(stageLower) || stageLower.includes('contracted') || stageLower.includes('proofs')) {
+                        materialMetrics.awaitingMaterial.count++;
+                        materialMetrics.awaitingMaterial.qty += qty;
+                        if (daysSinceStart > 3) {
+                            materialMetrics.awaitingMaterial.campaigns.push({
+                                advertiser: c.advertiser,
+                                qty: qty,
+                                daysSinceStart: daysSinceStart,
+                                stage: stage
+                            });
+                        }
+                    } else if (stageLower.includes('material ready')) {
+                        materialMetrics.materialReceived.count++;
+                        materialMetrics.materialReceived.qty += qty;
+                    }
+
                     // --- PIPELINE STAGE TRACKING ---
                     if (stageLower.includes('rfp')) pipelineMetrics.rfp.count++, pipelineMetrics.rfp.qty += qty;
                     else if (stageLower.includes('proposal')) pipelineMetrics.proposal.count++, pipelineMetrics.proposal.qty += qty;
@@ -6643,6 +6735,73 @@
                     else if (stageLower.includes('material ready')) pipelineMetrics.materialReady.count++, pipelineMetrics.materialReady.qty += qty;
                     else if (stageLower === 'installed') pipelineMetrics.installed.count++, pipelineMetrics.installed.qty += qty;
                     else if (stageLower.includes('pop')) pipelineMetrics.popComplete.count++, pipelineMetrics.popComplete.qty += qty;
+
+                    // --- PERFORMANCE METRICS (completed work) ---
+                    if (completedStages.includes(stageLower)) {
+                        performanceMetrics.completed.count++;
+                        performanceMetrics.completed.qty += qty;
+                        // Estimate impressions (weekly rate * 4 weeks)
+                        const dailyRate = { 'transit shelter': 15000, 'bus': 8000, 'digital': 45000, 'billboard': 35000 };
+                        const mediaType = (c.product || c.media || '').toLowerCase();
+                        const rate = Object.entries(dailyRate).find(([k]) => mediaType.includes(k))?.[1] || 10000;
+                        performanceMetrics.completed.impressions += (rate * qty * 28);
+
+                        // Track by market
+                        const market = (c.market || 'Unknown').split(',')[0];
+                        if (!performanceMetrics.byMarket[market]) {
+                            performanceMetrics.byMarket[market] = { count: 0, qty: 0 };
+                        }
+                        performanceMetrics.byMarket[market].count++;
+                        performanceMetrics.byMarket[market].qty += qty;
+                    }
+
+                    // --- POP/PHOTO COMPLIANCE ---
+                    if (stageLower === 'installed' && pending === 0) {
+                        popMetrics.awaitingPhotos.count++;
+                        popMetrics.awaitingPhotos.qty += qty;
+                        if (daysSinceStart > 7) {
+                            popMetrics.awaitingPhotos.campaigns.push({
+                                advertiser: c.advertiser,
+                                qty: qty,
+                                daysSinceInstall: daysSinceStart
+                            });
+                        }
+                    } else if (stageLower === 'photos taken') {
+                        popMetrics.photosReady.count++;
+                        popMetrics.photosReady.qty += qty;
+                    } else if (stageLower === 'pop completed') {
+                        popMetrics.popComplete.count++;
+                        popMetrics.popComplete.qty += qty;
+                    }
+
+                    // --- SPECIAL MEDIA TRACKING ---
+                    const isSpecialMedia = (c.product || c.media || '').toLowerCase().match(/wrap|domination|takeover|special|custom|full.*wrap/);
+                    if (isSpecialMedia) {
+                        specialMediaMetrics.total.count++;
+                        specialMediaMetrics.total.qty += qty;
+                        if (completedStages.includes(stageLower)) {
+                            specialMediaMetrics.completed.count++;
+                            specialMediaMetrics.completed.qty += qty;
+                        } else {
+                            specialMediaMetrics.inProgress.count++;
+                            specialMediaMetrics.inProgress.qty += qty;
+                            specialMediaMetrics.inProgress.campaigns.push({
+                                advertiser: c.advertiser,
+                                product: c.product || c.media,
+                                qty: qty,
+                                stage: stage
+                            });
+                        }
+                    }
+
+                    // --- CAPACITY/AVAILABILITY TRACKING ---
+                    const market = (c.market || 'Unknown').split(',')[0];
+                    if (!capacityMetrics.byMarket[market]) {
+                        capacityMetrics.byMarket[market] = { booked: 0, campaigns: 0 };
+                    }
+                    capacityMetrics.byMarket[market].booked += qty;
+                    capacityMetrics.byMarket[market].campaigns++;
+                    capacityMetrics.totalBooked += qty;
                 });
 
                 // Calculate overall completion rate
@@ -6676,6 +6835,36 @@
                     `${c.advertiser} (${c.daysOverdue}d overdue)`
                 ).join('; ') || 'None';
 
+                // Sort and summarize delayed flights
+                delayedMetrics.campaigns.sort((a, b) => b.daysSinceStart - a.daysSinceStart);
+                const delayedSummary = delayedMetrics.campaigns.slice(0, 5).map(c =>
+                    `${c.advertiser} (${c.daysSinceStart}d late, ${c.installed}/${c.qty} installed)`
+                ).join('; ') || 'None';
+
+                // Summarize material bottlenecks
+                materialMetrics.awaitingMaterial.campaigns.sort((a, b) => b.daysSinceStart - a.daysSinceStart);
+                const materialSummary = materialMetrics.awaitingMaterial.campaigns.slice(0, 5).map(c =>
+                    `${c.advertiser} (${c.qty} units, waiting ${c.daysSinceStart}d)`
+                ).join('; ') || 'None';
+
+                // Summarize POP compliance issues
+                popMetrics.awaitingPhotos.campaigns.sort((a, b) => b.daysSinceInstall - a.daysSinceInstall);
+                const popSummary = popMetrics.awaitingPhotos.campaigns.slice(0, 5).map(c =>
+                    `${c.advertiser} (${c.qty} units, ${c.daysSinceInstall}d since install)`
+                ).join('; ') || 'All documented';
+
+                // Summarize special media
+                const specialMediaSummary = specialMediaMetrics.inProgress.campaigns.slice(0, 5).map(c =>
+                    `${c.advertiser} - ${c.product} (${c.qty} units, ${c.stage})`
+                ).join('; ') || 'None in progress';
+
+                // Top markets by capacity
+                const topMarkets = Object.entries(capacityMetrics.byMarket)
+                    .sort((a, b) => b[1].booked - a[1].booked)
+                    .slice(0, 5)
+                    .map(([market, data]) => `${market}: ${data.booked} units (${data.campaigns} campaigns)`)
+                    .join('; ') || 'No market data';
+
                 // --- 4. RISK-FOCUSED EXECUTIVE PROMPT ---
                 const prompt = `You are the Senior Director of Operations at Vector Media, a national out-of-home advertising company. You are known for your sharp risk assessment skills and zero tolerance for operational failures. Your job is to identify disasters before they happen.
 
@@ -6683,8 +6872,10 @@
 🎯 OPERATIONAL RISK ASSESSMENT - ${now.toLocaleDateString()}
 ═══════════════════════════════════════════════════════════════════════════════
 
+📋 DATA SOURCE: Pipeline Summary & Installation Report (Last 6 Months Only)
+${excludedCount > 0 ? `ℹ️ Note: ${excludedCount} campaigns older than 6 months excluded from analysis` : ''}
 ${filterNote}
-Total Campaigns in View: ${totalCampaigns}
+Total Active Campaigns: ${totalCampaigns}
 
 ═══════════════════════════════════════════════════════════════════════════════
 📊 INSTALL EXECUTION SCORECARD
@@ -6721,6 +6912,20 @@ ${installMetrics.atRiskCampaigns.length > 0 ? `→ ${atRiskSummary}` : '→ None
 ${holdMetrics.count > 0 ? `→ ${holdSummary}` : '→ No holds - pipeline flowing'}
 
 ═══════════════════════════════════════════════════════════════════════════════
+🔥 DELAYED FLIGHTS (Past Start Date, Not Complete)
+═══════════════════════════════════════════════════════════════════════════════
+• Delayed Campaigns: ${delayedMetrics.count}
+• Units Affected: ${delayedMetrics.totalQty.toLocaleString()}
+${delayedMetrics.count > 0 ? `→ DELAYED: ${delayedSummary}` : '→ All campaigns on schedule'}
+
+═══════════════════════════════════════════════════════════════════════════════
+📦 MATERIAL STATUS
+═══════════════════════════════════════════════════════════════════════════════
+• Awaiting Materials: ${materialMetrics.awaitingMaterial.count} campaigns (${materialMetrics.awaitingMaterial.qty.toLocaleString()} units)
+• Materials Received/Ready: ${materialMetrics.materialReceived.count} campaigns (${materialMetrics.materialReceived.qty.toLocaleString()} units)
+${materialMetrics.awaitingMaterial.campaigns.length > 0 ? `→ WAITING: ${materialSummary}` : '→ No material bottlenecks'}
+
+═══════════════════════════════════════════════════════════════════════════════
 🗑️ REMOVAL OPERATIONS
 ═══════════════════════════════════════════════════════════════════════════════
 • Removals Due This Week: ${removalMetrics.thisWeek.count} campaigns / ${removalMetrics.thisWeek.qty.toLocaleString()} units
@@ -6728,36 +6933,72 @@ ${holdMetrics.count > 0 ? `→ ${holdSummary}` : '→ No holds - pipeline flowin
 ${removalMetrics.overdue.count > 0 ? `→ OVERDUE: ${overdueRemovalSummary}` : '→ Removal schedule on track'}
 
 ═══════════════════════════════════════════════════════════════════════════════
-🌦️ EXTERNAL RISK FACTORS
+🌦️ EXTERNAL RISK FACTORS (${weatherLocation})
 ═══════════════════════════════════════════════════════════════════════════════
 ${weatherContext}
 ${holidayContext}
 
 ═══════════════════════════════════════════════════════════════════════════════
-📈 PIPELINE HEALTH
+📈 PIPELINE SUMMARY (Current Month - from Dashboard)
 ═══════════════════════════════════════════════════════════════════════════════
 • RFP: ${pipelineMetrics.rfp.count} campaigns
 • Proposal: ${pipelineMetrics.proposal.count} campaigns
 • Contracted: ${pipelineMetrics.contracted.count} campaigns
 • Material Ready: ${pipelineMetrics.materialReady.count} campaigns (${pipelineMetrics.materialReady.qty} units)
-• Installed: ${pipelineMetrics.installed.count} campaigns
+• Installed: ${pipelineMetrics.installed.count} campaigns (${pipelineMetrics.installed.qty} units)
 • POP Complete: ${pipelineMetrics.popComplete.count} campaigns
+
+═══════════════════════════════════════════════════════════════════════════════
+📸 POP COMPLIANCE (Proof of Performance)
+═══════════════════════════════════════════════════════════════════════════════
+• Awaiting Photos: ${popMetrics.awaitingPhotos.count} campaigns (${popMetrics.awaitingPhotos.qty.toLocaleString()} units)
+• Photos Ready for Review: ${popMetrics.photosReady.count} campaigns (${popMetrics.photosReady.qty.toLocaleString()} units)
+• POP Completed: ${popMetrics.popComplete.count} campaigns (${popMetrics.popComplete.qty.toLocaleString()} units)
+${popMetrics.awaitingPhotos.campaigns.length > 0 ? `→ NEED PHOTOS: ${popSummary}` : '→ All installed campaigns documented'}
+
+═══════════════════════════════════════════════════════════════════════════════
+⭐ SPECIAL MEDIA (High-Touch Installs)
+═══════════════════════════════════════════════════════════════════════════════
+• Total Special Media: ${specialMediaMetrics.total.count} campaigns (${specialMediaMetrics.total.qty.toLocaleString()} units)
+• In Progress: ${specialMediaMetrics.inProgress.count} campaigns (${specialMediaMetrics.inProgress.qty.toLocaleString()} units)
+• Completed: ${specialMediaMetrics.completed.count} campaigns (${specialMediaMetrics.completed.qty.toLocaleString()} units)
+${specialMediaMetrics.inProgress.campaigns.length > 0 ? `→ ACTIVE: ${specialMediaSummary}` : '→ No special media in progress'}
+
+═══════════════════════════════════════════════════════════════════════════════
+📊 PERFORMANCE REPORT (Completed Work)
+═══════════════════════════════════════════════════════════════════════════════
+• Completed Campaigns: ${performanceMetrics.completed.count} (${performanceMetrics.completed.qty.toLocaleString()} units)
+• Estimated Impressions: ${(performanceMetrics.completed.impressions / 1000000).toFixed(1)}M
+• Top Markets: ${topMarkets}
+
+═══════════════════════════════════════════════════════════════════════════════
+🗺️ MARKET CAPACITY
+═══════════════════════════════════════════════════════════════════════════════
+• Total Units Booked: ${capacityMetrics.totalBooked.toLocaleString()}
+• Markets Active: ${Object.keys(capacityMetrics.byMarket).length}
+• Busiest Markets: ${topMarkets}
 
 ═══════════════════════════════════════════════════════════════════════════════
 📋 YOUR DIRECTIVE
 ═══════════════════════════════════════════════════════════════════════════════
 
-As Senior Director of Operations, provide a SHARP, NO-BS operational briefing (5-8 sentences max). You must:
+As Senior Director of Operations, provide a SHARP, NO-BS operational briefing (8-12 sentences max). You must address:
 
 1. **HEADLINE THE BIGGEST RISK** - What's the #1 thing that could blow up this week? Be specific with campaign names and numbers.
 
 2. **INSTALL VELOCITY CHECK** - We're at ${overallCompletionRate}% installed (${installMetrics.totalUnitsInstalled}/${installMetrics.totalUnitsOrdered} units). ${overallCompletionRate < 50 ? 'This is CONCERNING.' : overallCompletionRate < 75 ? 'We need to accelerate.' : 'Solid progress.'} What's the path to completion?
 
-3. **CALL OUT STALLED WORK** - ${installMetrics.stalledCampaigns.length > 0 ? `We have ${installMetrics.stalledCampaigns.length} stalled campaigns. NAME THEM and demand action.` : 'No stalled campaigns - acknowledge this.'}
+3. **CALL OUT STALLED/DELAYED** - ${installMetrics.stalledCampaigns.length > 0 || delayedMetrics.count > 0 ? `We have ${installMetrics.stalledCampaigns.length} stalled and ${delayedMetrics.count} delayed campaigns. NAME THEM and demand action.` : 'No stalled or delayed campaigns - acknowledge this.'}
 
-4. **HOLDS IMPACT** - ${holdMetrics.count > 0 ? `${holdMetrics.count} campaigns (${holdMetrics.totalQty} units) are held up. What's the revenue impact and who needs to unblock?` : 'Pipeline is clear of holds.'}
+4. **POP COMPLIANCE** - ${popMetrics.awaitingPhotos.count > 0 ? `${popMetrics.awaitingPhotos.count} installed campaigns need photos. Compliance risk if we don't document.` : 'Photo documentation on track.'}
 
-5. **WEATHER/STAFFING** - ${weatherRisk === 'critical' || weatherRisk === 'warning' ? 'CRITICAL: Factor weather into your directive!' : 'Weather is favorable.'} ${nextHoliday ? 'Holiday staffing risk is real.' : ''}
+5. **SPECIAL MEDIA WATCH** - ${specialMediaMetrics.inProgress.count > 0 ? `${specialMediaMetrics.inProgress.count} high-touch installs in progress. These need extra attention.` : 'No special media concerns.'}
+
+6. **HOLDS & MATERIALS** - ${holdMetrics.count > 0 || materialMetrics.awaitingMaterial.campaigns.length > 0 ? `${holdMetrics.count} holds blocking ${holdMetrics.totalQty} units. ${materialMetrics.awaitingMaterial.count} waiting on materials.` : 'Pipeline flowing - no blocks.'}
+
+7. **MARKET CAPACITY** - Top market load: ${Object.entries(capacityMetrics.byMarket).sort((a,b) => b[1].booked - a[1].booked)[0]?.[0] || 'N/A'} with ${Object.entries(capacityMetrics.byMarket).sort((a,b) => b[1].booked - a[1].booked)[0]?.[1]?.booked || 0} units. Any capacity concerns?
+
+8. **WEATHER/STAFFING** - ${weatherRisk === 'critical' || weatherRisk === 'warning' ? `CRITICAL: ${weatherLocation} weather will impact field ops!` : `Weather in ${weatherLocation} is favorable.`} ${nextHoliday ? 'Holiday staffing risk is real.' : ''}
 
 Be DIRECT. Use SPECIFIC NUMBERS. Call out SPECIFIC ADVERTISERS at risk. No corporate fluff. Act like millions of dollars are on the line - because they are.`;
 
