@@ -115,13 +115,18 @@ Campaigns are counted by stage:
 | **POP Complete** | Fully documented campaigns |
 | **Overdue** | Installed >7 days without photos (flagged) |
 
-### 9. Special Media Tracking
+### 9. Special Media Tracking (Premium Products)
 
 | Category | Description |
 |----------|-------------|
 | **Total** | All special media (wraps, dominations, takeovers, custom) |
 | **In Progress** | Not yet completed - requires extra attention |
 | **Completed** | Successfully installed special media |
+
+**Premium Product Keywords:**
+`wrap`, `domination`, `takeover`, `special`, `custom`, `embellishment`, `icon`, `spectacular`, `wallscape`, `premium`, `mural`, `vinyl`
+
+**Display:** Premium products appear in ALL views with ⭐ amber badge, plus dedicated Special Media tab. They are included in AI analysis and can be filtered via product search.
 
 ### 10. Performance Report
 
@@ -148,50 +153,47 @@ Campaigns are counted by stage:
 
 ## AI Directive
 
-The AI is instructed to act as **Senior Director of Operations** and provide a sharp, no-BS operational briefing (8-12 sentences max).
+The AI is instructed to act as **Senior Director of Operations** and provide an operational briefing in two parts:
 
-### Required Analysis Points (8 Total)
+### Output Format
 
-1. **HEADLINE THE BIGGEST RISK**
-   - What's the #1 thing that could blow up this week?
-   - Be specific with campaign names and numbers
+```
+## 🚨 TL;DR (3 sentences max)
+[Biggest risk] [Velocity status] [Action needed or "Ops normal"]
 
-2. **INSTALL VELOCITY CHECK**
-   - Current completion percentage
-   - Path to completion
-   - Flag if below 50% (concerning) or 75% (needs acceleration)
+---
 
-3. **CALL OUT STALLED/DELAYED**
-   - Name specific advertisers
-   - Include both stalled and delayed campaigns
-   - Demand action on problem campaigns
+## 📋 DETAILED BREAKDOWN
+[Full analysis by section]
+```
 
-4. **POP COMPLIANCE**
-   - Installed campaigns needing photos
-   - Compliance risk assessment
+### Required Analysis Sections
 
-5. **SPECIAL MEDIA WATCH**
-   - High-touch installs requiring extra attention
-   - Wraps, dominations, takeovers in progress
+| Section | Content |
+|---------|---------|
+| **HEADLINE RISK** | #1 campaign at risk with %, days left |
+| **INSTALL VELOCITY** | Completion % with 🔴🟡🟢 indicator |
+| **STALLED/DELAYED** | List each campaign with days stalled/late |
+| **POP COMPLIANCE** | Campaigns needing photos with unit counts |
+| **SPECIAL MEDIA** | High-touch installs (wraps, dominations, takeovers) |
+| **HOLDS & MATERIALS** | Blocked campaigns and material bottlenecks |
+| **MARKET/WEATHER** | Top market + weather/holiday alerts |
 
-6. **HOLDS & MATERIALS**
-   - Revenue impact of blocked campaigns
-   - Material bottlenecks
+### Status Indicators
 
-7. **MARKET CAPACITY**
-   - Top market by booking volume
-   - Any capacity concerns or overload
-
-8. **WEATHER/STAFFING**
-   - Factor weather from user's location into directive
-   - Note holiday staffing risks
+| Indicator | Meaning |
+|-----------|---------|
+| 🔴 | Critical - below 50% or urgent risk |
+| 🟡 | Caution - needs acceleration (50-75%) |
+| 🟢 | On track - above 75% |
+| ✅ | Good - no issues |
 
 ## Output Style
 
-- **Length:** 8-12 sentences maximum
+- **TL;DR:** 3 sentences max - just the fires
+- **Details:** Expand only on problem areas
 - **Tone:** Direct, executive-level, no corporate fluff
 - **Content:** Specific numbers, specific advertiser names
-- **Format:** Bullet points and specific metrics
 
 ## API Configuration
 
@@ -211,7 +213,7 @@ Authorization: Bearer ${GROQ_API_KEY}
         { role: "user", content: ANALYSIS_PROMPT }
     ],
     max_tokens: 2000,
-    temperature: 0.7
+    temperature: 0.3  // Lower for consistent output
 }
 ```
 
