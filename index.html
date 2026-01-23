@@ -896,7 +896,7 @@
                             { role: "user", content: prompt }
                         ],
                         max_tokens: maxTokens,
-                        temperature: 0.7
+                        temperature: 0.3
                     })
                 });
 
@@ -2055,14 +2055,23 @@
                 };
 
                 const stageLower = (finalItem.stage || '').toLowerCase().trim();
-                
+
+                // Check if this is a premium/specialty product
+                const isPremium = SPECIALTY_KEYWORDS.some(k => (finalItem.product || '').toLowerCase().includes(k));
+                if (isPremium) {
+                    finalItem.isPremium = true; // Flag it as premium for labeling/filtering
+                }
+
                 // Route to appropriate category
                 if (stageLower === 'lost opportunity' || stageLower === '- none -' || stageLower === '-none-') {
                     lostItems.push(finalItem);
-                } else if (SPECIALTY_KEYWORDS.some(k => (finalItem.product || '').toLowerCase().includes(k))) {
-                    specialtyItems.push(finalItem);
                 } else {
+                    // ALL campaigns go to regularItems (including premium)
                     regularItems.push(finalItem);
+                    // Premium items ALSO go to specialtyItems for the Special Media tab
+                    if (isPremium) {
+                        specialtyItems.push(finalItem);
+                    }
                 }
             });
 
@@ -3230,7 +3239,10 @@
                                 </div>
                             </td>}
                             {visibleCols.product && <td className={`${cellPad} ${fontSize} text-center`} title={row.product}>
-                                <span className="px-1.5 py-0.5 bg-purple-50 text-purple-700 rounded text-[10px] font-medium">{abbreviateProduct(row.product)}</span>
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${row.isPremium ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-purple-50 text-purple-700'}`}>
+                                    {row.isPremium && <span className="mr-0.5">⭐</span>}
+                                    {abbreviateProduct(row.product)}
+                                </span>
                             </td>}
                             {visibleCols.stage && <td className={cellPad}>
                                 <span className={`px-1.5 py-0.5 rounded text-[10px] border ${getStatusColor(row.stage, row.dateObj)}`}>
@@ -3412,7 +3424,8 @@
                                             <div className="text-[10px] text-gray-500 truncate" title={row.name}>{row.name}</div>
                                         </td>
                                         <td className="px-2 py-2 text-center">
-                                            <span className="px-1.5 py-0.5 bg-purple-50 text-purple-700 rounded text-[10px] font-medium" title={row.product}>
+                                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${row.isPremium ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-purple-50 text-purple-700'}`} title={row.product}>
+                                                {row.isPremium && <span className="mr-0.5">⭐</span>}
                                                 {abbreviateProduct(row.product)}
                                             </span>
                                         </td>
@@ -3627,7 +3640,8 @@
                                                 </div>
                                             </td>
                                             <td className="px-2 py-2">
-                                                <span className="px-1.5 py-0.5 bg-purple-50 text-purple-700 rounded text-[10px] font-medium" title={row.product}>
+                                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${row.isPremium ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-purple-50 text-purple-700'}`} title={row.product}>
+                                                    {row.isPremium && <span className="mr-0.5">⭐</span>}
                                                     {abbreviateProduct(row.product)}
                                                 </span>
                                             </td>
@@ -4015,7 +4029,8 @@
                                             <div className="text-xs text-gray-500 truncate" title={row.name}>{row.name}</div>
                                         </td>
                                         <td className="px-4 py-3 text-center">
-                                            <span className="px-1.5 py-0.5 bg-purple-50 text-purple-700 rounded text-xs font-medium" title={row.product}>
+                                            <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${row.isPremium ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-purple-50 text-purple-700'}`} title={row.product}>
+                                                {row.isPremium && <span className="mr-0.5">⭐</span>}
                                                 {abbreviateProduct(row.product)}
                                             </span>
                                         </td>
@@ -4136,7 +4151,8 @@
                                         <td className="px-4 py-3 text-sm text-gray-600">{row.name}</td>
                                         <td className="px-4 py-3 text-center">
                                             {row.product ? (
-                                                <span className="px-1.5 py-0.5 bg-purple-50 text-purple-700 rounded text-xs font-medium" title={row.product}>
+                                                <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${row.isPremium ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-purple-50 text-purple-700'}`} title={row.product}>
+                                                    {row.isPremium && <span className="mr-0.5">⭐</span>}
                                                     {abbreviateProduct(row.product)}
                                                 </span>
                                             ) : (
@@ -6200,10 +6216,12 @@
                     }
                 }
                 
+                // Premium/specialty items are now included in result.regular with isPremium flag
+                // specialtyHolds is kept for the Special Media tab filter
                 const data = {
                     holds: result.regular,
-                    installs: result.regular, // Same data source now
-                    specialtyHolds: result.specialty,
+                    installs: result.regular,
+                    specialtyHolds: result.specialty, // Reference for Special Media tab
                     lost: result.lost
                 };
 
@@ -6496,7 +6514,22 @@
                 const sixMonthsAgo = new Date(now);
                 sixMonthsAgo.setMonth(now.getMonth() - 6);
 
-                const safeCampaigns = (allCampaigns || []).filter(c => {
+                // SAFETY NET: Ensure specialty items are included even if main data flow missed them
+                // This handles cases where cached data from before the fix is loaded
+                const specialtyItems = baseData?.specialtyHolds || [];
+                const combinedCampaigns = [...(allCampaigns || [])];
+
+                // Add specialty items if not already in the list (check by ID to avoid duplicates)
+                const existingIds = new Set(combinedCampaigns.map(c => `${c.id}_${c.date}_${c.product}`));
+                specialtyItems.forEach(item => {
+                    const key = `${item.id}_${item.date}_${item.product}`;
+                    if (!existingIds.has(key)) {
+                        combinedCampaigns.push(item);
+                        console.log('🔧 AI: Added missing specialty item:', item.advertiser, item.product);
+                    }
+                });
+
+                const safeCampaigns = combinedCampaigns.filter(c => {
                     // Use start date to determine recency
                     let startDate = c.dateObj;
                     if (!startDate && c.date) startDate = new Date(c.date);
@@ -6775,7 +6808,10 @@
                     }
 
                     // --- SPECIAL MEDIA TRACKING ---
-                    const isSpecialMedia = (c.product || c.media || '').toLowerCase().match(/wrap|domination|takeover|special|custom|full.*wrap/);
+                    const productStr = (c.product || c.media || '').toLowerCase();
+                    const specialMediaRegex = /wrap|domination|takeover|special|custom/i;
+                    const isSpecialMedia = specialMediaRegex.test(productStr);
+
                     if (isSpecialMedia) {
                         specialMediaMetrics.total.count++;
                         specialMediaMetrics.total.qty += qty;
@@ -6982,25 +7018,81 @@ ${specialMediaMetrics.inProgress.campaigns.length > 0 ? `→ ACTIVE: ${specialMe
 📋 YOUR DIRECTIVE
 ═══════════════════════════════════════════════════════════════════════════════
 
-As Senior Director of Operations, provide a SHARP, NO-BS operational briefing (8-12 sentences max). You must address:
+As Senior Director of Operations, provide an operational briefing using THIS EXACT FORMAT:
 
-1. **HEADLINE THE BIGGEST RISK** - What's the #1 thing that could blow up this week? Be specific with campaign names and numbers.
+## 🚨 TL;DR (3 sentences max)
+[One-liner on biggest risk] [One-liner on velocity status: green/yellow/red] [One action item if urgent, or "Operations normal" if no fires]
 
-2. **INSTALL VELOCITY CHECK** - We're at ${overallCompletionRate}% installed (${installMetrics.totalUnitsInstalled}/${installMetrics.totalUnitsOrdered} units). ${overallCompletionRate < 50 ? 'This is CONCERNING.' : overallCompletionRate < 75 ? 'We need to accelerate.' : 'Solid progress.'} What's the path to completion?
+---
 
-3. **CALL OUT STALLED/DELAYED** - ${installMetrics.stalledCampaigns.length > 0 || delayedMetrics.count > 0 ? `We have ${installMetrics.stalledCampaigns.length} stalled and ${delayedMetrics.count} delayed campaigns. NAME THEM and demand action.` : 'No stalled or delayed campaigns - acknowledge this.'}
+## 📋 DETAILED BREAKDOWN
 
-4. **POP COMPLIANCE** - ${popMetrics.awaitingPhotos.count > 0 ? `${popMetrics.awaitingPhotos.count} installed campaigns need photos. Compliance risk if we don't document.` : overallCompletionRate < 50 ? `N/A - only ${overallCompletionRate}% installed, focus on completing installs first before POP.` : `${popMetrics.popComplete.count} campaigns fully documented. On track.`}
+**HEADLINE RISK:** [What's the #1 thing that could blow up this week? Name the campaign, % complete, days left]
 
-5. **SPECIAL MEDIA WATCH** - ${specialMediaMetrics.inProgress.count > 0 ? `${specialMediaMetrics.inProgress.count} high-touch installs in progress. These need extra attention.` : 'No special media concerns.'}
+**INSTALL VELOCITY:** ${overallCompletionRate}% complete (${installMetrics.totalUnitsInstalled}/${installMetrics.totalUnitsOrdered} units). ${overallCompletionRate < 50 ? '🔴 CONCERNING.' : overallCompletionRate < 75 ? '🟡 Needs acceleration.' : '🟢 On track.'}
 
-6. **HOLDS & MATERIALS** - ${holdMetrics.count > 0 || materialMetrics.awaitingMaterial.campaigns.length > 0 ? `${holdMetrics.count} holds blocking ${holdMetrics.totalQty} units. ${materialMetrics.awaitingMaterial.count} waiting on materials.` : 'Pipeline flowing - no blocks.'}
+**STALLED/DELAYED:** ${installMetrics.stalledCampaigns.length > 0 || delayedMetrics.count > 0 ? `${installMetrics.stalledCampaigns.length} stalled, ${delayedMetrics.count} delayed. List each with days.` : '✅ None - all progressing.'}
 
-7. **MARKET CAPACITY** - Top market load: ${Object.entries(capacityMetrics.byMarket).sort((a,b) => b[1].booked - a[1].booked)[0]?.[0] || 'N/A'} with ${Object.entries(capacityMetrics.byMarket).sort((a,b) => b[1].booked - a[1].booked)[0]?.[1]?.booked || 0} units. Any capacity concerns?
+**POP COMPLIANCE:** ${popMetrics.awaitingPhotos.count > 0 ? `${popMetrics.awaitingPhotos.count} campaigns (${popMetrics.awaitingPhotos.qty} units) need photos.` : overallCompletionRate < 50 ? `N/A - only ${overallCompletionRate}% installed.` : `✅ On track.`}
 
-8. **WEATHER/STAFFING** - ${weatherRisk === 'critical' || weatherRisk === 'warning' ? `CRITICAL: ${weatherLocation} weather will impact field ops!` : `Weather in ${weatherLocation} is favorable.`} ${nextHoliday ? 'Holiday staffing risk is real.' : ''}
+**SPECIAL MEDIA:** ${specialMediaMetrics.inProgress.count > 0 ? `${specialMediaMetrics.inProgress.count} high-touch installs in progress.` : '✅ None active.'}
 
-Be DIRECT. Use SPECIFIC NUMBERS. Call out SPECIFIC ADVERTISERS at risk. No corporate fluff. Act like millions of dollars are on the line - because they are.`;
+**HOLDS & MATERIALS:** ${holdMetrics.count > 0 ? `${holdMetrics.count} holds (${holdMetrics.totalQty} units).` : '✅ No holds.'} ${materialMetrics.awaitingMaterial.count > 0 ? `${materialMetrics.awaitingMaterial.count} awaiting materials.` : ''}
+
+**MARKET/WEATHER:** ${Object.entries(capacityMetrics.byMarket).sort((a,b) => b[1].booked - a[1].booked)[0]?.[0] || 'N/A'} leads (${Object.entries(capacityMetrics.byMarket).sort((a,b) => b[1].booked - a[1].booked)[0]?.[1]?.booked || 0} units). ${weatherRisk === 'critical' || weatherRisk === 'warning' ? `⚠️ Weather risk!` : 'Weather OK.'} ${nextHoliday ? `📅 ${nextHoliday.name} ahead.` : ''}
+
+Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Use ✅ for green, 🟡 for caution, 🔴 for critical.`;
+
+                // DEBUG: Comprehensive special media detection logging
+                const debugSpecialMediaRegex = /wrap|domination|takeover|special|custom/i;
+
+                // Get ALL unique products in dataset
+                const allUniqueProducts = [...new Set(safeCampaigns.map(c => c.product || c.media || 'NO PRODUCT'))];
+
+                // Test each unique product against regex
+                const productRegexTests = allUniqueProducts.map(prod => ({
+                    product: prod,
+                    matches: debugSpecialMediaRegex.test(prod.toLowerCase()),
+                    lowercase: prod.toLowerCase()
+                }));
+
+                const potentialSpecialMedia = safeCampaigns.filter(c => {
+                    const prod = (c.product || c.media || '').toLowerCase();
+                    return debugSpecialMediaRegex.test(prod);
+                }).map(c => ({ advertiser: c.advertiser, product: c.product || c.media, stage: c.stage }));
+
+                console.log('🔍 SPECIAL MEDIA DEBUG - All unique products:', allUniqueProducts);
+                console.log('🔍 SPECIAL MEDIA DEBUG - Regex test results:', productRegexTests);
+                console.log('🔍 SPECIAL MEDIA DEBUG - Matching campaigns:', potentialSpecialMedia);
+                console.log('🔍 SPECIAL MEDIA DEBUG - Metrics object:', specialMediaMetrics);
+
+                console.log('🎯 AI Analysis Debug:', {
+                    filters: filterNote,
+                    totalCampaigns: safeCampaigns.length,
+                    allUniqueProducts: allUniqueProducts,
+                    specialMedia: {
+                        total: specialMediaMetrics.total.count,
+                        inProgress: specialMediaMetrics.inProgress.count,
+                        completed: specialMediaMetrics.completed.count,
+                        campaigns: specialMediaMetrics.inProgress.campaigns,
+                        potentialMatches: potentialSpecialMedia,
+                        regexTests: productRegexTests.filter(p => p.matches)
+                    },
+                    holds: {
+                        count: holdMetrics.count,
+                        qty: holdMetrics.totalQty,
+                        campaigns: holdMetrics.campaigns
+                    },
+                    materials: {
+                        awaiting: materialMetrics.awaitingMaterial.count,
+                        campaigns: materialMetrics.awaitingMaterial.campaigns.slice(0, 5)
+                    },
+                    sampleProducts: safeCampaigns.slice(0, 10).map(c => ({
+                        advertiser: c.advertiser,
+                        product: c.product || c.media || 'NO PRODUCT',
+                        stage: c.stage
+                    }))
+                });
 
                 try {
                     const text = await callGroq(prompt, 2000);
