@@ -98,7 +98,7 @@
 
         // HISTORY GEAR - Tertiary navigation (6 items)
         const historyNodes = [
-            { id: 'expiredFlights', label: 'EXPIRED', angle: -90 },
+            { id: 'pendingRemovals', label: 'REMOVALS', angle: -90 },
             { id: 'pastDue', label: 'PAST DUE', angle: -30 },
             { id: 'recentInstalls', label: 'INSTALLED 30D', angle: 30 },
             { id: 'history', label: '6-MONTH', angle: 90 },
@@ -129,6 +129,7 @@
             nextMonth: 'M12 6v6l4 2 M2 12a10 10 0 1020 0 10 10 0 00-20 0z',
             pipelineSummary: 'M18 20V10 M12 20V4 M6 20v-6',
             // History gear icons
+            pendingRemovals: 'M3 6h18 M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6 M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2 M10 11v6 M14 11v6',
             expiredFlights: 'M9 18h6 M10 22h4 M12 2a7 7 0 017 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 01-2 2h-4a2 2 0 01-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 017-7z',
             pastDue: 'M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z M12 9v4 M12 17h.01',
             recentInstalls: 'M9 11l3 3L22 4 M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11',
