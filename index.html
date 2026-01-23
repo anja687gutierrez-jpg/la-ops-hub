@@ -6990,7 +6990,7 @@ As Senior Director of Operations, provide a SHARP, NO-BS operational briefing (8
 
 3. **CALL OUT STALLED/DELAYED** - ${installMetrics.stalledCampaigns.length > 0 || delayedMetrics.count > 0 ? `We have ${installMetrics.stalledCampaigns.length} stalled and ${delayedMetrics.count} delayed campaigns. NAME THEM and demand action.` : 'No stalled or delayed campaigns - acknowledge this.'}
 
-4. **POP COMPLIANCE** - ${popMetrics.awaitingPhotos.count > 0 ? `${popMetrics.awaitingPhotos.count} installed campaigns need photos. Compliance risk if we don't document.` : 'Photo documentation on track.'}
+4. **POP COMPLIANCE** - ${popMetrics.awaitingPhotos.count > 0 ? `${popMetrics.awaitingPhotos.count} installed campaigns need photos. Compliance risk if we don't document.` : overallCompletionRate < 50 ? `N/A - only ${overallCompletionRate}% installed, focus on completing installs first before POP.` : `${popMetrics.popComplete.count} campaigns fully documented. On track.`}
 
 5. **SPECIAL MEDIA WATCH** - ${specialMediaMetrics.inProgress.count > 0 ? `${specialMediaMetrics.inProgress.count} high-touch installs in progress. These need extra attention.` : 'No special media concerns.'}
 
