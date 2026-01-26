@@ -2040,13 +2040,17 @@
             const lostItems = [];
 
             aggregationMap.forEach(item => {
+                // FIX: ALWAYS calculate pending from (qty - installed) instead of trusting CSV
+                // This fixes cases where CSV pending value is stale/incorrect
+                const calculatedPending = Math.max(0, item.totalQty - item.totalInstalled);
+
                 const finalItem = {
                     ...item,
                     quantity: item.totalQty,
                     installed: item.totalInstalled,
-                    pending: item.totalPending,
+                    pending: calculatedPending, // Use calculated value, not CSV's totalPending
                     progress: `${item.totalInstalled} / ${item.totalQty}`,
-                    isComplete: item.totalPending === 0 && item.totalQty > 0,
+                    isComplete: calculatedPending === 0 && item.totalQty > 0,
                     firstInstall: item.rawFirstInstall,
                     completion: item.rawCompletion,
                     // Bonus indicator: Show if multiple lines were combined
@@ -5847,15 +5851,53 @@
             };
             
             // Function to explicitly clear persisted CSV (for new upload)
+            // FIXED: Clears ALL data except settings (API keys, sheet URLs, webhooks)
             const clearPersistedData = () => {
                 try {
-                    localStorage.removeItem('stap_csv_data');
-                    localStorage.removeItem('stap_data_source');
-                    localStorage.removeItem('stap_current_view');
+                    // Keys to PRESERVE (settings that should survive reset)
+                    const preserveKeys = [
+                        'stap_groq_api_key',
+                        'stap_google_sheet_url',
+                        'stap_material_sheet_url',
+                        'stap_material_webhook',
+                        'stap_pop_sheet_url',
+                        'stap_mobile_sheet_url',
+                        'stap_proof_webhook'
+                    ];
+
+                    // Keys to CLEAR (all data/state)
+                    const clearKeys = [
+                        'stap_csv_data',
+                        'stap_data_source',
+                        'stap_current_view',
+                        'stap_manual_overrides',
+                        'stap_materials_data',
+                        'stap_materials_sheet',
+                        'stap_material_data',
+                        'stap_email_log',
+                        'stap_dashboard_prefs',
+                        'stap_custom_widgets',
+                        'stap_storage_overflow',
+                        'stap_production_proof',
+                        'STAP_SESSION'
+                    ];
+
+                    // Clear each key
+                    clearKeys.forEach(key => {
+                        localStorage.removeItem(key);
+                    });
+
+                    // Reset all state
                     setBaseData({ holds: [], installs: [] });
                     setDataSource({ type: 'none', timestamp: null, error: null });
+                    setManualOverrides({});
+                    setMaterialReceiverData([]);
+                    setGhostBookings([]);
+                    setEmailStats({ totalSent: 0, totalClicks: 0, sentHistory: [] });
                     setView('upload');
-                    console.log('🗑️ Persisted data cleared');
+
+                    console.log('🗑️ Full reset complete - all data cleared, settings preserved');
+                    console.log('📋 Preserved settings:', preserveKeys.filter(k => localStorage.getItem(k)).join(', ') || 'none');
                 } catch (e) {
                     console.warn('Could not clear persisted data:', e);
                 }
@@ -7239,6 +7281,11 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                                 const installed = newItem.totalInstalled || newItem.installed || 0;
                                 newItem.pending = Math.max(0, newItem.adjustedQty - installed);
                             }
+                            // Apply pending override (if explicitly set)
+                            if (override.pending !== undefined) {
+                                newItem.pending = override.pending;
+                                newItem.isOverridden = true;
+                            }
                             if (override.productionProof) {
                                 newItem.productionProof = override.productionProof;
                                 newItem.isOverridden = true;
@@ -7300,6 +7347,11 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                             } else if (newItem.hasQtyAdjustment) {
                                 const installed = newItem.totalInstalled || newItem.installed || 0;
                                 newItem.pending = Math.max(0, newItem.adjustedQty - installed);
+                            }
+                            // Apply pending override (if explicitly set)
+                            if (override.pending !== undefined) {
+                                newItem.pending = override.pending;
+                                newItem.isOverridden = true;
                             }
                             if (override.productionProof) {
                                 newItem.productionProof = override.productionProof;
