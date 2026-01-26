@@ -101,8 +101,16 @@ Unified campaign detail view with 3-column layout:
 **Data Keys:**
 - `adjustedQty` - Manual charted quantity override
 - `installed` / `totalInstalled` - Installed count
+- `pending` - Pending count (always calculated as `max(0, qty - installed)`)
 - `removalQty`, `removedCount`, `removalStatus`, `removalAssignee` - Removal tracking
 - `history` - Array of `{ timestamp, changes[] }` entries
+
+### Pending Calculation
+**Important:** Pending is ALWAYS calculated as `Math.max(0, qty - installed)`, never trusted from CSV.
+- CSV pending values can be stale/incorrect
+- Aggregation step computes `calculatedPending = totalQty - totalInstalled`
+- Manual overrides can set explicit `pending` value via `override.pending`
+- This prevents "35/35 Done but Pending: 1" edge cases
 
 ### Removal Tracking
 Pending Removals view tracks campaigns past their end date:
@@ -166,6 +174,32 @@ Dashboard AI analysis powered by Groq (Llama 3.3 70B). See `GROQ_AI_CONFIG.md` f
 **Data Sources:** Install metrics, risk detection, delayed flights, material status, holds, POP compliance, special media, market capacity, weather, holidays
 
 **Triggering:** Click "AI Pipeline Insights" button on Dashboard view
+
+### Reset Button Behavior
+The Reset Data button (`clearPersistedData()`) performs a full cache clear:
+
+**Clears (13 keys):**
+- `stap_csv_data` - Main CSV data
+- `stap_data_source` - Data source info
+- `stap_current_view` - Current view state
+- `stap_manual_overrides` - All manual edits
+- `stap_materials_data`, `stap_materials_sheet`, `stap_material_data` - Materials
+- `stap_email_log` - Email statistics
+- `stap_dashboard_prefs` - Dashboard preferences
+- `stap_custom_widgets` - Custom widgets
+- `stap_storage_overflow`, `stap_production_proof` - Misc flags
+- `STAP_SESSION` - Session data
+
+**Preserves (7 settings keys):**
+- `stap_groq_api_key` - AI API key
+- `stap_google_sheet_url` - Google Sheet URL for live sync
+- `stap_material_sheet_url`, `stap_material_webhook` - Material settings
+- `stap_pop_sheet_url`, `stap_mobile_sheet_url` - POP/Mobile settings
+- `stap_proof_webhook` - Proof webhook URL
+
+**Also resets React state:** `baseData`, `manualOverrides`, `materialReceiverData`, `ghostBookings`, `emailStats`
+
+After reset, user is returned to upload view and must re-upload CSV or use live sync.
 
 ## Security Notes
 - API keys are embedded in the HTML file (marked with security warnings)
