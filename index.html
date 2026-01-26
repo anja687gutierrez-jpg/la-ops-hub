@@ -7242,7 +7242,13 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                         if (!newItem.dateObj && newItem.date) {
                             newItem.dateObj = new Date(newItem.date);
                         }
-                        
+
+                        // FIX: ALWAYS recalculate pending from qty/installed
+                        const baseQty = newItem.totalQty || newItem.quantity || 0;
+                        const baseInstalled = newItem.totalInstalled || newItem.installed || 0;
+                        newItem.pending = Math.max(0, baseQty - baseInstalled);
+                        newItem.isComplete = newItem.pending === 0 && baseQty > 0;
+
                         // 👻 Collect ghosts from specialty items too
                         if (newItem.isGhost) {
                             categories.ghostBookings.push(newItem);
@@ -7310,7 +7316,13 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                         if (!newItem.dateObj && newItem.date) {
                             newItem.dateObj = new Date(newItem.date);
                         }
-                        
+
+                        // FIX: ALWAYS recalculate pending from qty/installed
+                        const baseQty = newItem.totalQty || newItem.quantity || 0;
+                        const baseInstalled = newItem.totalInstalled || newItem.installed || 0;
+                        newItem.pending = Math.max(0, baseQty - baseInstalled);
+                        newItem.isComplete = newItem.pending === 0 && baseQty > 0;
+
                         // 👻 Collect ghosts from lost items too
                         if (newItem.isGhost) {
                             categories.ghostBookings.push(newItem);
@@ -7404,7 +7416,14 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                         if (!item.endDateObj && item.endDate) {
                             item.endDateObj = new Date(item.endDate);
                         }
-                        
+
+                        // FIX: ALWAYS recalculate pending from qty/installed
+                        // This fixes localStorage data that may have stale pending values
+                        const baseQty = item.totalQty || item.quantity || 0;
+                        const baseInstalled = item.totalInstalled || item.installed || 0;
+                        item.pending = Math.max(0, baseQty - baseInstalled);
+                        item.isComplete = item.pending === 0 && baseQty > 0;
+
                         // 👻 GHOST FILTER: Skip ghosts from main views unless explicitly included
                         if (item.isGhost) {
                             categories.ghostBookings.push(item);
