@@ -69,17 +69,18 @@
             textDim: '#475569',
         };
 
-        // MAIN GEAR - Navigation nodes (9 items)
+        // MAIN GEAR - Navigation nodes (10 items)
         const navNodes = [
+            { id: 'search', label: 'SEARCH', angle: -126 },  // Global campaign search
             { id: 'dashboard', label: 'DASHBOARD', angle: -90 },
-            { id: 'master', label: 'INSTALLATIONS', angle: -50 },  // Hidden admin feature - access via triple-click logo
-            { id: 'holdReport', label: 'HOLD REPORT', angle: -10 },
-            { id: 'availability', label: 'AVAILABILITY', angle: 30 },
-            { id: 'riskAnalysis', label: 'RISK CENTER', angle: 70 },
-            { id: 'specialMedia', label: 'SPECIALTY', angle: 110 },
-            { id: 'popGallery', label: 'POP GALLERY', angle: 150 },
-            { id: 'materialReceivers', label: 'MATERIALS', angle: 190 },
-            { id: 'performanceReport', label: 'PERFORMANCE', angle: 230 },
+            { id: 'master', label: 'INSTALLATIONS', angle: -54 },  // Hidden admin feature - access via triple-click logo
+            { id: 'holdReport', label: 'HOLD REPORT', angle: -18 },
+            { id: 'availability', label: 'AVAILABILITY', angle: 18 },
+            { id: 'riskAnalysis', label: 'RISK CENTER', angle: 54 },
+            { id: 'specialMedia', label: 'SPECIALTY', angle: 90 },
+            { id: 'popGallery', label: 'POP GALLERY', angle: 126 },
+            { id: 'materialReceivers', label: 'MATERIALS', angle: 162 },
+            { id: 'performanceReport', label: 'PERFORMANCE', angle: 198 },
         ];
 
         // PIPELINE GEAR - Secondary navigation (10 items)
@@ -108,6 +109,7 @@
 
         const icons = {
             // Main gear icons
+            search: 'M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z',  // Magnifying glass
             dashboard: 'M3 3h7v9H3V3zm11 0h7v5h-7V3zm0 9h7v9h-7v-9zM3 16h7v5H3v-5z',
             holdReport: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2 M9 5a2 2 0 002 2h2a2 2 0 002-2 M9 5a2 2 0 012-2h2a2 2 0 012 2 M12 12h4 M12 16h4 M8 12h.01 M8 16h.01',
             availability: 'M8 2v4 M16 2v4 M3 10h18 M5 4h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z',

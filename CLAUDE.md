@@ -119,17 +119,39 @@ Pending Removals view tracks campaigns past their end date:
 - Splits into `pendingRemovals` and `completedRemovals` based on stage/status
 - Stage override from `manualOverrides` is applied for proper filtering
 
-### Sidebar Navigation (`canvasGearSidebar.js`)
-Three interlocking gears with orbital menu items. Full view (320px) shows animated gears, collapsed view (64px) shows icon bar.
+### Sidebar Navigation (DUAL RENDERING SYSTEM)
+Three interlocking gears with orbital menu items. **IMPORTANT:** The sidebar has TWO separate rendering systems that must BOTH be updated when adding/removing items:
 
-**MODULES gear (cyan)** - 9 items:
-`dashboard`, `master`, `holdReport`, `availability`, `riskAnalysis`, `specialMedia`, `popGallery`, `materialReceivers`, `performanceReport`
+| View | Width | File | Array to Update |
+|------|-------|------|-----------------|
+| **Expanded** | 320px | `canvasGearSidebar.js` | `navNodes`, `pipelineNodes`, `historyNodes` |
+| **Collapsed** | 64px | `index.html` | `moduleItems`, `pipelineItems`, `historyItems` in `CollapsedMiniBar` |
+
+**To add a new sidebar item:**
+1. Add to `canvasGearSidebar.js` → appropriate `*Nodes` array (with `id`, `label`, `angle`)
+2. Add to `canvasGearSidebar.js` → `icons` object (SVG path)
+3. Add to `index.html` → `CollapsedMiniBar` component → appropriate `*Items` array (with `id`, `icon`)
+
+**MODULES gear (cyan)** - 10 items:
+`search`, `dashboard`, `master`, `holdReport`, `availability`, `riskAnalysis`, `specialMedia`, `popGallery`, `materialReceivers`, `performanceReport`
 
 **PIPELINE gear (purple)** - 10 items:
 `delayedFlights`, `onHoldCampaigns`, `inProgressFlights`, `fullyInstalledThisWeek`, `rotations`, `thisWeek`, `upcoming`, `materialReadyFuture`, `nextMonth`, `pipelineSummary`
 
 **HISTORY gear (amber)** - 6 items:
 `pendingRemovals`, `activeInstalls`, `awaitingPop`, `completedCampaigns`, `lostOpportunities`, `impressions`
+
+### Global Search (`search` view)
+Fullscreen search overlay accessible via:
+- **Gear menu:** SEARCH item in MODULES gear (first position)
+- **Keyboard:** `Cmd+K` (Mac) or `Ctrl+K` (Windows)
+
+Features:
+- Searches ALL campaigns in `filteredStats.all` (respects Market/Product filters)
+- Queries: advertiser, campaign name, ID, product, market, owner
+- Shows stage badges, qty/installed counts, premium indicators
+- Keyboard navigation: ↑↓ to navigate, Enter to select, Esc to close
+- "Show all X results" expander for large result sets
 
 ### Pipeline Summary Dashboard
 Comprehensive analytics view for monthly pipeline (`pipelineSummary` view):
