@@ -400,18 +400,29 @@
                     { header: 'Progress', dataKey: 'progress' }
                 ];
 
-                doc.autoTable({
-                    startY: 48,
-                    head: [columns.map(c => c.header)],
-                    body: data.map(row => columns.map(c => {
-                        let val = row[c.dataKey] || '-';
-                        // Strip emojis for clean PDF output
-                        val = stripEmojis(String(val));
+                // Process data with transforms
+                const processedBody = data.map((row, rowIdx) => ({
+                    cells: columns.map(c => {
+                        let val = row[c.dataKey];
+                        // Apply transform if provided
+                        if (c.transform) {
+                            val = c.transform(val, row);
+                        }
+                        val = val !== undefined && val !== null ? val : '-';
+                        // Strip emojis for clean PDF output (except warning symbol)
+                        val = String(val).replace(/[\u{1F300}-\u{1F9FF}]/gu, '');
                         if (typeof val === 'string' && val.length > 30) {
                             val = val.substring(0, 27) + '...';
                         }
                         return val;
-                    })),
+                    }),
+                    needsReview: row.needsReview
+                }));
+
+                doc.autoTable({
+                    startY: 48,
+                    head: [columns.map(c => c.header)],
+                    body: processedBody.map(r => r.cells),
                     theme: 'grid',
                     headStyles: {
                         fillColor: [51, 65, 85],
@@ -437,6 +448,19 @@
                         5: { cellWidth: 30 },
                         6: { cellWidth: 20 }
                     },
+                    // Highlight rows that need review with amber background
+                    didParseCell: (hookData) => {
+                        if (hookData.section === 'body' && processedBody[hookData.row.index]?.needsReview) {
+                            hookData.cell.styles.fillColor = [255, 251, 235]; // amber-50
+                            hookData.cell.styles.textColor = [180, 83, 9]; // amber-700
+                            hookData.cell.styles.fontStyle = 'bold';
+                        }
+                        // Style the warning column
+                        if (hookData.section === 'body' && hookData.column.index === 0 && hookData.cell.raw === '⚠') {
+                            hookData.cell.styles.textColor = [245, 158, 11]; // amber-500
+                            hookData.cell.styles.fontSize = 10;
+                        }
+                    },
                     margin: { left: 10, right: 10 },
                     didDrawPage: (hookData) => {
                         // Footer on each page
@@ -458,31 +482,44 @@
         // Quick PDF export for different report types
         const exportToPDF = (reportType, data, customOptions = {}) => {
             const reportConfigs = {
-                installations: {
-                    title: 'Master Installation Report',
-                    subtitle: `${data.length} Active Campaigns | ${new Date().toLocaleDateString()}`,
-                    columns: [
-                        { header: 'Product Start', dataKey: 'date' },
-                        { header: 'Campaign ID', dataKey: 'id' },
-                        { header: 'Market', dataKey: 'market' },
-                        { header: 'Advertiser', dataKey: 'advertiser' },
-                        { header: 'Campaign', dataKey: 'name' },
-                        { header: 'Product', dataKey: 'product' },
-                        { header: 'Stage', dataKey: 'stage' },
-                        { header: 'Progress', dataKey: 'progress' }
-                    ],
-                    columnStyles: {
-                        0: { cellWidth: 20 },
-                        1: { cellWidth: 22 },
-                        2: { cellWidth: 25 },
-                        3: { cellWidth: 30 },
-                        4: { cellWidth: 40 },
-                        5: { cellWidth: 30 },
-                        6: { cellWidth: 25 },
-                        7: { cellWidth: 18 }
-                    },
-                    filename: `Installations_${new Date().toISOString().split('T')[0]}.pdf`
-                },
+                installations: (() => {
+                    // Sort data: needsReview items first, then by date
+                    const sortedData = [...data].sort((a, b) => {
+                        if (a.needsReview && !b.needsReview) return -1;
+                        if (!a.needsReview && b.needsReview) return 1;
+                        return new Date(b.dateObj || b.date) - new Date(a.dateObj || a.date);
+                    });
+                    const reviewCount = data.filter(r => r.needsReview).length;
+                    return {
+                        title: 'Master Installation Report',
+                        subtitle: `${data.length} Active Campaigns | ${reviewCount > 0 ? `⚠ ${reviewCount} Need Review | ` : ''}${new Date().toLocaleDateString()}`,
+                        data: sortedData,
+                        columns: [
+                            { header: '!', dataKey: 'needsReview', transform: v => v ? '⚠' : '' },
+                            { header: 'Start', dataKey: 'date' },
+                            { header: 'Advertiser', dataKey: 'advertiser' },
+                            { header: 'Campaign', dataKey: 'name' },
+                            { header: 'Product', dataKey: 'product' },
+                            { header: 'Stage', dataKey: 'stage' },
+                            { header: 'Pend', dataKey: 'pending', transform: v => v > 0 ? v : '-' },
+                            { header: 'Done', dataKey: 'installed' },
+                            { header: 'Total', dataKey: 'quantity' }
+                        ],
+                        columnStyles: {
+                            0: { cellWidth: 8, halign: 'center' },
+                            1: { cellWidth: 20 },
+                            2: { cellWidth: 35 },
+                            3: { cellWidth: 40 },
+                            4: { cellWidth: 28 },
+                            5: { cellWidth: 28 },
+                            6: { cellWidth: 12, halign: 'center' },
+                            7: { cellWidth: 12, halign: 'center' },
+                            8: { cellWidth: 12, halign: 'center' }
+                        },
+                        rowStyles: (row) => row.needsReview ? { fillColor: [255, 251, 235] } : {},
+                        filename: `Installations_${new Date().toISOString().split('T')[0]}.pdf`
+                    };
+                })(),
                 campaigns: {
                     title: 'Campaign Status Report',
                     subtitle: `${data.length} Campaigns | ${new Date().toLocaleDateString()}`,
@@ -536,7 +573,9 @@
             };
 
             const config = { ...reportConfigs[reportType], ...customOptions };
-            return generatePDFReport(data, config);
+            // Use pre-sorted/transformed data if provided in config, otherwise use original data
+            const finalData = config.data || data;
+            return generatePDFReport(finalData, config);
         };
 
         // --- 3D "GRAND CHRONOS" SCENE (The Core Engine) ---
@@ -2061,6 +2100,11 @@
 
                 const stageLower = (finalItem.stage || '').toLowerCase().trim();
 
+                // 🔍 NEEDS REVIEW FLAG: Detect stage/numbers mismatch
+                // When stage is "Installed" but there's still pending work (rotation/copy change scenario)
+                // This flags campaigns for user review without changing the workflow
+                finalItem.needsReview = stageLower === 'installed' && finalItem.pending > 0;
+
                 // Check if this is a premium/specialty product
                 const isPremium = SPECIALTY_KEYWORDS.some(k => (finalItem.product || '').toLowerCase().includes(k));
                 if (isPremium) {
@@ -3054,14 +3098,75 @@
         );
 
         const MasterTrackingTable = ({ data, onRowClick, onBack, onOpenSettings }) => {
-            // Column visibility state
-            const [visibleCols, setVisibleCols] = useState({
+            // Column presets
+            const allColumns = {
                 date: true, id: true, market: true, advertiser: true,
                 product: true, stage: true, progress: true, charted: true, pending: true,
+                firstInstall: true, completion: true, status: true
+            };
+            const compactColumns = {
+                date: true, id: false, market: false, advertiser: true,
+                product: false, stage: true, progress: false, charted: false, pending: true,
                 firstInstall: false, completion: false, status: true
-            });
+            };
+
+            // Column visibility state - default to ALL columns visible
+            const [visibleCols, setVisibleCols] = useState(allColumns);
             const [showColMenu, setShowColMenu] = useState(false);
-            const [compactMode, setCompactMode] = useState(true); // Default to compact
+            const [compactMode, setCompactMode] = useState(false); // Default to full view
+            const [viewMode, setViewMode] = useState('grouped'); // 'grouped' or 'flat'
+
+            // Toggle compact mode and update visible columns
+            const toggleCompactMode = () => {
+                const newCompactMode = !compactMode;
+                setCompactMode(newCompactMode);
+                setVisibleCols(newCompactMode ? compactColumns : allColumns);
+            };
+
+            // Calculate visible column count for colSpan
+            const visibleColCount = Object.values(visibleCols).filter(Boolean).length;
+
+            // Calculate summary stats
+            const stats = useMemo(() => {
+                const needsReview = data.filter(r => r.needsReview).length;
+                const inProgress = data.filter(r => {
+                    const stage = (r.stage || '').toLowerCase();
+                    return stage === 'material ready for install' && r.pending > 0;
+                }).length;
+                const installed = data.filter(r => {
+                    const stage = (r.stage || '').toLowerCase();
+                    return stage === 'installed' && !r.needsReview;
+                }).length;
+                const pending = data.reduce((sum, r) => sum + (r.pending || 0), 0);
+                return { needsReview, inProgress, installed, pending, total: data.length };
+            }, [data]);
+
+            // Group data by priority
+            const groupedData = useMemo(() => {
+                if (viewMode === 'flat') return { all: data };
+
+                const groups = {
+                    needsReview: [],
+                    inProgress: [],
+                    upcoming: [],
+                    complete: []
+                };
+
+                data.forEach(row => {
+                    const stage = (row.stage || '').toLowerCase();
+                    if (row.needsReview) {
+                        groups.needsReview.push(row);
+                    } else if (stage === 'material ready for install' || stage.includes('pending')) {
+                        groups.inProgress.push(row);
+                    } else if (['installed', 'photos taken', 'pop completed', 'takedown complete'].includes(stage)) {
+                        groups.complete.push(row);
+                    } else {
+                        groups.upcoming.push(row);
+                    }
+                });
+
+                return groups;
+            }, [data, viewMode]);
             
             // Hidden settings gear - requires 5 clicks to open
             const settingsClickRef = useRef({ count: 0, timer: null });
@@ -3126,8 +3231,126 @@
             const cellPad = compactMode ? 'px-2 py-1.5' : 'px-4 py-3';
             const fontSize = compactMode ? 'text-xs' : 'text-sm';
 
+            // Render a single table section (for grouped view)
+            const renderTableSection = (sectionData, sectionTitle, sectionColor, sectionIcon) => {
+                if (!sectionData || sectionData.length === 0) return null;
+
+                return (
+                    <div className="mb-4">
+                        {sectionTitle && (
+                            <div className={`px-4 py-2 ${sectionColor} border-l-4 flex items-center justify-between`}>
+                                <div className="flex items-center gap-2">
+                                    <Icon name={sectionIcon} size={14} />
+                                    <span className="font-semibold text-sm">{sectionTitle}</span>
+                                    <span className="text-xs opacity-75">({sectionData.length})</span>
+                                </div>
+                            </div>
+                        )}
+                        <table className="w-full text-left border-collapse">
+                            <tbody className="divide-y divide-gray-100">
+                                {sectionData.map((row, idx) => renderTableRow(row, idx))}
+                            </tbody>
+                        </table>
+                    </div>
+                );
+            };
+
+            // Render a single row (extracted for reuse)
+            const renderTableRow = (row, idx) => (
+                <tr
+                    key={`${row.id}-${row.date}-${idx}`}
+                    onClick={() => onRowClick(row)}
+                    className={`hover:bg-gray-50 transition-colors cursor-pointer ${row.needsReview ? 'bg-amber-50/70 border-l-4 border-l-amber-400' : ''} ${row.hasQtyAdjustment && !row.needsReview ? 'bg-blue-50/50' : ''} ${row.isComplete && !row.needsReview ? 'bg-green-50/30' : ''} ${row.isGhost ? 'bg-orange-50' : ''}`}
+                >
+                    {visibleCols.date && <td className={`${cellPad} ${fontSize} text-gray-600 whitespace-nowrap ${row.needsReview ? 'bg-amber-50/70' : row.hasQtyAdjustment ? 'bg-blue-50/50' : row.isComplete ? 'bg-green-50/30' : row.isGhost ? 'bg-orange-50' : 'bg-white'}`}>
+                        {row.rawDate || row.date}
+                    </td>}
+                    {visibleCols.id && <td className={`${cellPad} text-[10px] font-mono text-gray-500`}>{row.id}</td>}
+                    {visibleCols.market && <td className={`${cellPad} ${fontSize}`}>
+                        {row.market ? <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px]">{row.market.split(',')[0]}</span> : <span className="text-gray-300">-</span>}
+                    </td>}
+                    {visibleCols.advertiser && <td className={`${cellPad} ${fontSize} max-w-[200px]`}>
+                        <div className="font-medium text-gray-900 truncate" title={row.advertiser}>
+                            {row.advertiser}
+                            {row.isGhost && <span className="ml-1" title={row.ghostReason || 'Ghost Booking'}>👻</span>}
+                        </div>
+                        <div className="text-gray-500 truncate text-[10px]" title={row.name}>
+                            {row.name}
+                            {row.isOverridden && <span className="ml-1 text-blue-500">✎</span>}
+                            {row.hasBonus && <span className="ml-1 px-1 bg-purple-100 text-purple-700 rounded text-[9px]" title={row.bonusNote}>+B</span>}
+                        </div>
+                    </td>}
+                    {visibleCols.product && <td className={`${cellPad} ${fontSize} text-center`} title={row.product}>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${row.isPremium ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-purple-50 text-purple-700'}`}>
+                            {row.isPremium && <span className="mr-0.5">⭐</span>}
+                            {abbreviateProduct(row.product)}
+                        </span>
+                    </td>}
+                    {visibleCols.stage && <td className={cellPad}>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] border ${getStatusColor(row.stage, row.dateObj)}`}>{row.stage}</span>
+                    </td>}
+                    {visibleCols.progress && <td className={`${cellPad} ${fontSize} font-mono`}>{row.progress}</td>}
+                    {visibleCols.charted && <td className={`${cellPad} text-center ${fontSize}`}>
+                        {row.adjustedQty ? <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-medium">{row.adjustedQty}</span> : <span className="text-gray-300">-</span>}
+                    </td>}
+                    {visibleCols.pending && <td className={`${cellPad} text-center font-bold ${fontSize}`}>
+                        {row.pending > 0 ? <span className="text-orange-600">{row.pending}</span> : <span className="text-gray-300">-</span>}
+                    </td>}
+                    {visibleCols.firstInstall && <td className={`${cellPad} ${fontSize} font-mono text-gray-600`}>{row.firstInstall || '-'}</td>}
+                    {visibleCols.completion && <td className={`${cellPad} ${fontSize} font-mono text-gray-600`}>{row.completion || '-'}</td>}
+                    {visibleCols.status && <td className={`${cellPad} text-right`}>
+                        <div className="flex items-center justify-end gap-1">
+                            {(() => {
+                                const completedStages = ['installed', 'photos taken', 'pop completed', 'takedown complete'];
+                                const stageLower = (row.stage || '').toLowerCase();
+                                const isDone = row.isComplete || completedStages.includes(stageLower);
+                                return isDone ? (
+                                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${compactMode ? 'text-[10px]' : 'text-xs'} bg-green-100 text-green-700 font-medium`}>
+                                        <Icon name="CheckCircle" size={compactMode ? 10 : 12} /> Done
+                                    </span>
+                                ) : (
+                                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded ${compactMode ? 'text-[10px]' : 'text-xs'} bg-gray-100 text-gray-600`}>Active</span>
+                                );
+                            })()}
+                            {row.needsReview && (
+                                <span title="⚠️ Stage mismatch" className="text-amber-500 ml-0.5">
+                                    <Icon name="AlertTriangle" size={compactMode ? 10 : 12} />
+                                </span>
+                            )}
+                            {row.productionProof && (
+                                <ProductionIcon type={row.productionProof} size={12} compact />
+                            )}
+                        </div>
+                    </td>}
+                </tr>
+            );
+
             return (
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                {/* Summary Stats Strip */}
+                <div className="grid grid-cols-4 gap-px bg-gray-200 border-b">
+                    <div className={`px-4 py-3 text-center ${stats.needsReview > 0 ? 'bg-amber-50' : 'bg-white'}`}>
+                        <div className={`text-2xl font-bold ${stats.needsReview > 0 ? 'text-amber-600' : 'text-gray-400'}`}>{stats.needsReview}</div>
+                        <div className="text-xs text-gray-500 flex items-center justify-center gap-1">
+                            {stats.needsReview > 0 && <Icon name="AlertTriangle" size={10} className="text-amber-500" />}
+                            Needs Review
+                        </div>
+                    </div>
+                    <div className="px-4 py-3 bg-white text-center">
+                        <div className="text-2xl font-bold text-blue-600">{stats.inProgress}</div>
+                        <div className="text-xs text-gray-500">In Progress</div>
+                    </div>
+                    <div className="px-4 py-3 bg-white text-center">
+                        <div className="text-2xl font-bold text-green-600">{stats.installed}</div>
+                        <div className="text-xs text-gray-500">Installed</div>
+                    </div>
+                    <div className="px-4 py-3 bg-white text-center">
+                        <div className="text-2xl font-bold text-gray-700">{stats.pending}</div>
+                        <div className="text-xs text-gray-500">Total Pending</div>
+                    </div>
+                </div>
+
+                {/* Header Bar */}
                 <div className="px-4 py-3 border-b border-gray-100 flex flex-wrap justify-between items-center bg-gray-50 gap-2">
                     <h3 className="font-semibold text-gray-800 flex items-center gap-2">
                     {onBack && (
@@ -3139,6 +3362,15 @@
                     Installations
                     <span className="text-xs text-gray-500 font-normal ml-1">— Click any row to update</span>
                     <span className="bg-purple-100 text-purple-700 text-xs py-0.5 px-2 rounded-full">{data.length}</span>
+                    {(() => {
+                        const reviewCount = data.filter(r => r.needsReview).length;
+                        return reviewCount > 0 ? (
+                            <span className="bg-amber-100 text-amber-700 text-xs py-0.5 px-2 rounded-full flex items-center gap-1">
+                                <Icon name="AlertTriangle" size={10} />
+                                {reviewCount} Need{reviewCount === 1 ? 's' : ''} Review
+                            </span>
+                        ) : null;
+                    })()}
                     </h3>
                     <div className="flex items-center gap-2">
                         {/* Settings Gear - Hidden feature, requires 5 clicks to open */}
@@ -3151,16 +3383,26 @@
                                 <Icon name="Settings" size={16} />
                             </button>
                         )}
-                        {/* Compact Mode Toggle */}
-                        <button 
-                            onClick={() => setCompactMode(!compactMode)}
+                        {/* View Mode Toggle - Grouped vs Flat */}
+                        <button
+                            onClick={() => setViewMode(viewMode === 'grouped' ? 'flat' : 'grouped')}
+                            className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded transition-colors ${viewMode === 'grouped' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                            title={viewMode === 'grouped' ? 'Switch to flat list view' : 'Switch to grouped view'}
+                        >
+                            <Icon name={viewMode === 'grouped' ? "Layers" : "List"} size={12} />
+                            {viewMode === 'grouped' ? 'Grouped' : 'Flat'}
+                        </button>
+
+                        {/* Compact Mode Toggle - switches column visibility */}
+                        <button
+                            onClick={toggleCompactMode}
                             className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded transition-colors ${compactMode ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                            title="Toggle compact view"
+                            title={compactMode ? "Show all columns" : "Show minimal columns (date, advertiser, stage, pending, status)"}
                         >
                             <Icon name={compactMode ? "Minimize2" : "Maximize2"} size={12} />
                             {compactMode ? 'Compact' : 'Full'}
                         </button>
-                        
+
                         {/* Column Visibility Menu */}
                         <div className="relative">
                             <button 
@@ -3199,6 +3441,7 @@
                 {showColMenu && <div className="fixed inset-0 z-20" onClick={() => setShowColMenu(false)} />}
                 
                 <div className="overflow-x-auto">
+                    {/* TABLE HEADER - Shared for both views */}
                     <table className="w-full text-left border-collapse" style={{ minWidth: compactMode ? '800px' : '1200px' }}>
                     <thead>
                         <tr className={`${compactMode ? 'text-[10px]' : 'text-xs'} font-semibold text-gray-500 bg-gray-50 border-b border-gray-200 uppercase tracking-wider`}>
@@ -3216,14 +3459,83 @@
                         {visibleCols.status && <th className={`${cellPad} text-right`}>Status</th>}
                         </tr>
                     </thead>
+
+                    {/* GROUPED VIEW - Priority-based sections */}
+                    {viewMode === 'grouped' ? (
+                        <tbody>
+                            {/* NEEDS REVIEW - Amber section */}
+                            {groupedData.needsReview?.length > 0 && (
+                                <>
+                                <tr>
+                                    <td colSpan={visibleColCount} className="px-4 py-2 bg-amber-50 border-l-4 border-l-amber-400">
+                                        <div className="flex items-center gap-2 text-amber-700">
+                                            <Icon name="AlertTriangle" size={14} />
+                                            <span className="font-semibold text-sm">Needs Review</span>
+                                            <span className="text-xs opacity-75 bg-amber-200 px-1.5 py-0.5 rounded-full">{groupedData.needsReview.length}</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {groupedData.needsReview.map((row, idx) => renderTableRow(row, `review-${idx}`))}
+                                </>
+                            )}
+                            {/* IN PROGRESS - Blue section */}
+                            {groupedData.inProgress?.length > 0 && (
+                                <>
+                                <tr>
+                                    <td colSpan={visibleColCount} className="px-4 py-2 bg-blue-50 border-l-4 border-l-blue-400">
+                                        <div className="flex items-center gap-2 text-blue-700">
+                                            <Icon name="Hammer" size={14} />
+                                            <span className="font-semibold text-sm">In Progress</span>
+                                            <span className="text-xs opacity-75 bg-blue-200 px-1.5 py-0.5 rounded-full">{groupedData.inProgress.length}</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {groupedData.inProgress.map((row, idx) => renderTableRow(row, `progress-${idx}`))}
+                                </>
+                            )}
+                            {/* UPCOMING - Gray section */}
+                            {groupedData.upcoming?.length > 0 && (
+                                <>
+                                <tr>
+                                    <td colSpan={visibleColCount} className="px-4 py-2 bg-gray-50 border-l-4 border-l-gray-400">
+                                        <div className="flex items-center gap-2 text-gray-600">
+                                            <Icon name="Clock" size={14} />
+                                            <span className="font-semibold text-sm">Upcoming / Other</span>
+                                            <span className="text-xs opacity-75 bg-gray-200 px-1.5 py-0.5 rounded-full">{groupedData.upcoming.length}</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {groupedData.upcoming.map((row, idx) => renderTableRow(row, `upcoming-${idx}`))}
+                                </>
+                            )}
+                            {/* COMPLETE - Green section */}
+                            {groupedData.complete?.length > 0 && (
+                                <>
+                                <tr>
+                                    <td colSpan={visibleColCount} className="px-4 py-2 bg-green-50 border-l-4 border-l-green-400">
+                                        <div className="flex items-center gap-2 text-green-700">
+                                            <Icon name="CheckCircle" size={14} />
+                                            <span className="font-semibold text-sm">Installed / Complete</span>
+                                            <span className="text-xs opacity-75 bg-green-200 px-1.5 py-0.5 rounded-full">{groupedData.complete.length}</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {groupedData.complete.map((row, idx) => renderTableRow(row, `complete-${idx}`))}
+                                </>
+                            )}
+                        </tbody>
+                    ) : (
+                    /* FLAT VIEW - Original chronological list */
                     <tbody className="divide-y divide-gray-100">
                         {data.map((row, idx) => (
-                        <tr 
-                            key={idx} 
+                        <tr
+                            key={idx}
                             onClick={() => onRowClick(row)}
-                            className={`hover:bg-gray-50 transition-colors cursor-pointer ${row.hasQtyAdjustment ? 'bg-blue-50/50' : ''} ${row.isComplete ? 'bg-green-50/30' : ''} ${row.isGhost ? 'bg-orange-50' : ''}`}
+                            className={`hover:bg-gray-50 transition-colors cursor-pointer ${row.needsReview ? 'bg-amber-50/70 border-l-4 border-l-amber-400' : ''} ${row.hasQtyAdjustment && !row.needsReview ? 'bg-blue-50/50' : ''} ${row.isComplete && !row.needsReview ? 'bg-green-50/30' : ''} ${row.isGhost ? 'bg-orange-50' : ''}`}
                         >
-                            {visibleCols.date && <td className={`${cellPad} ${fontSize} text-gray-600 whitespace-nowrap sticky left-0 bg-white ${row.hasQtyAdjustment ? 'bg-blue-50/50' : ''} ${row.isComplete ? 'bg-green-50/30' : ''} ${row.isGhost ? 'bg-orange-50' : ''}`}>{row.rawDate || row.date}</td>}
+                            {visibleCols.date && <td className={`${cellPad} ${fontSize} text-gray-600 whitespace-nowrap sticky left-0 ${row.needsReview ? 'bg-amber-50/70' : row.hasQtyAdjustment ? 'bg-blue-50/50' : row.isComplete ? 'bg-green-50/30' : row.isGhost ? 'bg-orange-50' : 'bg-white'}`}>
+                                {row.rawDate || row.date}
+                            </td>}
                             {visibleCols.id && <td className={`${cellPad} text-[10px] font-mono text-gray-500 ${!visibleCols.date ? 'sticky left-0 bg-white' : ''}`}>{row.id}</td>}
                             {visibleCols.market && <td className={`${cellPad} ${fontSize}`}>
                                 {row.market ? (
@@ -3286,6 +3598,15 @@
                                             </span>
                                         );
                                     })()}
+                                    {/* Stage Mismatch Warning Icon - shows when stage is "Installed" but pending > 0 */}
+                                    {row.needsReview && (
+                                        <span
+                                            title="⚠️ Stage mismatch: Stage is 'Installed' but pending > 0. Verify install count."
+                                            className="text-amber-500 ml-0.5"
+                                        >
+                                            <Icon name="AlertTriangle" size={compactMode ? 10 : 12} />
+                                        </span>
+                                    )}
                                     {/* Production Proof Icon - only show if set */}
                                     {row.productionProof && (
                                         <ProductionIcon type={row.productionProof} size={12} compact />
@@ -3295,6 +3616,7 @@
                         </tr>
                         ))}
                     </tbody>
+                    )}
                     </table>
                 </div>
                 </div>
