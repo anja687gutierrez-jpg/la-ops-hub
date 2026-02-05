@@ -6,6 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 LA STAP Operations Portal - A single-page React application for managing out-of-home (OOH) transit advertising operations. Built as a browser-based tool with no build system or server requirements.
 
+**Repo:** `github.com/anja687gutierrez-jpg/ops-hub-portal`
+**Branch:** `main`
+
 ## Architecture
 
 ### Stack
@@ -16,14 +19,33 @@ LA STAP Operations Portal - A single-page React application for managing out-of-
 - **Three.js** for 3D login screen animation
 
 ### File Structure
-- `index.html` - Main desktop application (~1.3MB, self-contained)
-- `detailModal.js` - External detail modal component for campaign editing
+
+**Core Application:**
+- `index.html` - Main desktop application (~1.3MB, self-contained SPA)
+- `detailModal.js` - Campaign detail modal (schedule, install progress, removal)
 - `canvasGearSidebar.js` - Canvas-based gear menu sidebar navigation
 - `mobile.html` - Mobile-optimized field operations app
+
+**Extracted Components:**
+- `searchOverlay.js` - Global search overlay component
+- `availability.js` - Availability charting component
+- `impressionsDashboard.js` - Impressions analytics dashboard
+- `digestModal.js` - Digest/summary modal component
+- `riskCommandCenter.js` - Risk analysis command center
+- `materialReceivers.js` - Material receivers tracking
+- `popGallery.js` - POP (Proof of Performance) gallery
+- `icon.js` - Icon utilities
+
+**Demo & Testing:**
 - `demo.js` - Demo mode components and mock data generators
+- `demoGuide.js` - Demo guide/walkthrough component
+- `demo.html` - Standalone demo page
+- `csv-consolidator-test.html` - CSV consolidation test page
+- `FULL_DATE_FIX.js` - Date parsing fix utility
+- `check-bundle-sizes.js` - Bundle size checker
+
+**Documentation:**
 - `GROQ_AI_CONFIG.md` - AI analysis configuration documentation
-- `edge_case_test.csv` - Test data with 50 edge cases
-- `test_data.csv` - Sample campaign data for testing
 
 ### Key Architectural Patterns
 
@@ -32,7 +54,7 @@ LA STAP Operations Portal - A single-page React application for managing out-of-
 **Component Organization**: React components are defined inline within the script block. Major sections:
 - `LoginScreen` / `ChronosScene` - 3D animated login with Three.js
 - Dashboard views (Upload, Dashboard, POP Gallery, Availability Charting, etc.)
-- Sidebar navigation with gear-based menu system
+- Sidebar navigation with draggable gear-based menu system
 
 **State Management**: Uses React hooks (`useState`, `useEffect`, `useMemo`, `useRef`) for local component state. Data persists via `localStorage`.
 
@@ -74,6 +96,7 @@ npx serve .
 - CSV uploads parsed client-side via `parseCSV()` function
 - Data stored in component state and `localStorage`
 - Google Sheets integration uses published CSV export URLs
+- Live sync is the primary data source (daily), manual CSV is fallback
 
 ### Date Handling
 The `parseDate()` function handles multiple formats:
@@ -83,7 +106,7 @@ The `parseDate()` function handles multiple formats:
 
 ### Campaign Stages
 Campaigns flow through stages defined in `ALL_STAGES` array:
-`RFP` → `Initial Proposal` → `Contracted` → `Proofs Approved` → `Material Ready For Install` → `Installed` → `POP Completed` → `Takedown Complete`
+`RFP` -> `Initial Proposal` -> `Contracted` -> `Proofs Approved` -> `Material Ready For Install` -> `Installed` -> `POP Completed` -> `Takedown Complete`
 
 ### Detail Modal (`detailModal.js`)
 Unified campaign detail view with 3-column layout:
@@ -92,11 +115,12 @@ Unified campaign detail view with 3-column layout:
 - **REMOVAL** - Removal tracking with qty, done count, status, assignee
 
 **Key Features:**
-- Waterfall data flow: Charted qty → Install Progress → Removal
+- Waterfall data flow: Charted qty -> Install Progress -> Removal
 - Smart removal status: auto-calculates `in_progress`/`complete` from numbers, manual `scheduled`/`blocked`
 - Change history tracking with timestamps (stored in `manualOverrides`)
 - Save button only appears when there are unsaved changes
 - Unsaved changes warning on close
+- **Dirty-field saving**: Only saves fields that were actually changed (prevents phantom overrides)
 
 **Data Keys:**
 - `adjustedQty` - Manual charted quantity override
@@ -105,12 +129,18 @@ Unified campaign detail view with 3-column layout:
 - `removalQty`, `removedCount`, `removalStatus`, `removalAssignee` - Removal tracking
 - `history` - Array of `{ timestamp, changes[] }` entries
 
-### Pending Calculation
+### Pending Calculation & Smart Merge
 **Important:** Pending is ALWAYS calculated as `Math.max(0, qty - installed)`, never trusted from CSV.
 - CSV pending values can be stale/incorrect
 - Aggregation step computes `calculatedPending = totalQty - totalInstalled`
-- Manual overrides can set explicit `pending` value via `override.pending`
 - This prevents "35/35 Done but Pending: 1" edge cases
+
+**Smart Merge (Override vs Fresh Data):**
+- Manual overrides have a `lastModified` timestamp, data imports have a `dataSource.timestamp`
+- If override is **older** than the latest import: `stage`, `installed`, `pending` from the override are **skipped** (fresh CSV values used)
+- `adjustedQty` (charted qty) is **always preserved** regardless of freshness (intentional workflow data)
+- Metadata overrides (`productionProof`, `notes`, `materialBreakdown`, removal tracking) are always preserved
+- After all overrides, `isComplete` is reconciled from the final `pending` value to prevent contradictions
 
 ### Removal Tracking
 Pending Removals view tracks campaigns past their end date:
@@ -120,7 +150,9 @@ Pending Removals view tracks campaigns past their end date:
 - Stage override from `manualOverrides` is applied for proper filtering
 
 ### Sidebar Navigation (DUAL RENDERING SYSTEM)
-Three interlocking gears with orbital menu items. **IMPORTANT:** The sidebar has TWO separate rendering systems that must BOTH be updated when adding/removing items:
+Three interlocking gears with orbital menu items. The sidebar is **draggable to any screen edge** (top, bottom, left, right) using flexbox distribution.
+
+**IMPORTANT:** The sidebar has TWO separate rendering systems that must BOTH be updated when adding/removing items:
 
 | View | Width | File | Array to Update |
 |------|-------|------|-----------------|
@@ -128,9 +160,9 @@ Three interlocking gears with orbital menu items. **IMPORTANT:** The sidebar has
 | **Collapsed** | 64px | `index.html` | `moduleItems`, `pipelineItems`, `historyItems` in `CollapsedMiniBar` |
 
 **To add a new sidebar item:**
-1. Add to `canvasGearSidebar.js` → appropriate `*Nodes` array (with `id`, `label`, `angle`)
-2. Add to `canvasGearSidebar.js` → `icons` object (SVG path)
-3. Add to `index.html` → `CollapsedMiniBar` component → appropriate `*Items` array (with `id`, `icon`)
+1. Add to `canvasGearSidebar.js` -> appropriate `*Nodes` array (with `id`, `label`, `angle`)
+2. Add to `canvasGearSidebar.js` -> `icons` object (SVG path)
+3. Add to `index.html` -> `CollapsedMiniBar` component -> appropriate `*Items` array (with `id`, `icon`)
 
 **MODULES gear (cyan)** - 10 items:
 `search`, `dashboard`, `master`, `holdReport`, `availability`, `riskAnalysis`, `specialMedia`, `popGallery`, `materialReceivers`, `performanceReport`
@@ -150,7 +182,7 @@ Features:
 - Searches ALL campaigns in `filteredStats.all` (respects Market/Product filters)
 - Queries: advertiser, campaign name, ID, product, market, owner
 - Shows stage badges, qty/installed counts, premium indicators
-- Keyboard navigation: ↑↓ to navigate, Enter to select, Esc to close
+- Keyboard navigation: up/down to navigate, Enter to select, Esc to close
 - "Show all X results" expander for large result sets
 
 ### Pipeline Summary Dashboard
@@ -172,7 +204,7 @@ Tracks campaigns needing proof of performance photos:
 ### Premium Products (Special Media)
 Premium/specialty products appear in ALL views with visual distinction:
 - **Flag:** `isPremium: true` on campaign object
-- **Display:** ⭐ star icon + amber/gold background (`bg-amber-100 text-amber-800`)
+- **Display:** star icon + amber/gold background (`bg-amber-100 text-amber-800`)
 - **Keywords:** `wrap`, `domination`, `takeover`, `special`, `custom`, `embellishment`, `icon`, `spectacular`, `wallscape`, `premium`, `mural`, `vinyl`
 - **Filtering:** Can be filtered via product search; also have dedicated Special Media tab
 - **AI Analysis:** Included in AI Pipeline Insights under "SPECIAL MEDIA" section
@@ -182,16 +214,16 @@ Dashboard AI analysis powered by Groq (Llama 3.3 70B). See `GROQ_AI_CONFIG.md` f
 
 **Output Format:**
 ```
-## 🚨 TL;DR (3 sentences max)
+## TL;DR (3 sentences max)
 [Biggest risk] [Velocity status] [Action needed]
 
 ---
 
-## 📋 DETAILED BREAKDOWN
+## DETAILED BREAKDOWN
 [HEADLINE RISK, VELOCITY, STALLED/DELAYED, POP, SPECIAL MEDIA, HOLDS, MARKET/WEATHER]
 ```
 
-**Status Indicators:** 🔴 Critical (<50%) | 🟡 Caution (50-75%) | 🟢 On track (>75%) | ✅ Good
+**Status Indicators:** Critical (<50%) | Caution (50-75%) | On track (>75%) | Good
 
 **Data Sources:** Install metrics, risk detection, delayed flights, material status, holds, POP compliance, special media, market capacity, weather, holidays
 
@@ -200,7 +232,7 @@ Dashboard AI analysis powered by Groq (Llama 3.3 70B). See `GROQ_AI_CONFIG.md` f
 ### Reset Button Behavior
 The Reset Data button (`clearPersistedData()`) performs a full cache clear:
 
-**Clears (13 keys):**
+**Clears (12 keys):**
 - `stap_csv_data` - Main CSV data
 - `stap_data_source` - Data source info
 - `stap_current_view` - Current view state
@@ -209,8 +241,10 @@ The Reset Data button (`clearPersistedData()`) performs a full cache clear:
 - `stap_email_log` - Email statistics
 - `stap_dashboard_prefs` - Dashboard preferences
 - `stap_custom_widgets` - Custom widgets
-- `stap_storage_overflow`, `stap_production_proof` - Misc flags
+- `stap_storage_overflow` - Storage overflow flag
 - `STAP_SESSION` - Session data
+
+Note: `stap_production_proof` is a legacy key that gets auto-migrated into `stap_manual_overrides` on first load and then removed.
 
 **Preserves (7 settings keys):**
 - `stap_groq_api_key` - AI API key
