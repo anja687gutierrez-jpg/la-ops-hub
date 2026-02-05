@@ -8309,7 +8309,7 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                                 newItem.isOverridden = true;
                             }
                         }
-                        // RECONCILE: Recalculate isComplete from final state after overrides
+                        // RECONCILE: Recalculate isComplete and needsReview from final state after overrides
                         const specFinalQty = newItem.adjustedQty || newItem.totalQty || newItem.quantity || 0;
                         newItem.isComplete = newItem.pending === 0 && specFinalQty > 0;
                         const specCompletedStages = ['installed', 'photos taken', 'pop completed', 'takedown complete'];
@@ -8320,6 +8320,7 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                                 newItem.pending = Math.max(0, specFinalQty - reconciledInst);
                             }
                         }
+                        newItem.needsReview = (newItem.stage || '').toLowerCase() === 'installed' && newItem.pending > 0;
                         categories.specialMedia.push(newItem);
                     });
                 }
@@ -8402,7 +8403,7 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                                 newItem.isOverridden = true;
                             }
                         }
-                        // RECONCILE: Recalculate isComplete from final state after overrides
+                        // RECONCILE: Recalculate isComplete and needsReview from final state after overrides
                         const lostFinalQty = newItem.adjustedQty || newItem.totalQty || newItem.quantity || 0;
                         newItem.isComplete = newItem.pending === 0 && lostFinalQty > 0;
                         const lostCompletedStages = ['installed', 'photos taken', 'pop completed', 'takedown complete'];
@@ -8413,6 +8414,7 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                                 newItem.pending = Math.max(0, lostFinalQty - reconciledInst);
                             }
                         }
+                        newItem.needsReview = (newItem.stage || '').toLowerCase() === 'installed' && newItem.pending > 0;
                         categories.lostOpportunities.push(newItem);
                     });
                 }
@@ -8562,7 +8564,7 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                             }
                         }
 
-                        // RECONCILE: Always recalculate isComplete from final pending after ALL overrides
+                        // RECONCILE: Always recalculate isComplete and needsReview from final pending after ALL overrides
                         // This prevents contradictions (e.g., "Done" checkmark + "31 pending" in red)
                         const finalQty = item.adjustedQty || item.totalQty || item.quantity || 0;
                         item.isComplete = item.pending === 0 && finalQty > 0;
@@ -8577,6 +8579,8 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                                 item.pending = Math.max(0, reconciledQty - reconciledInstalled);
                             }
                         }
+                        // Recalculate needsReview from final pending (not stale CSV value)
+                        item.needsReview = (item.stage || '').toLowerCase() === 'installed' && item.pending > 0;
 
                         // INJECT EMAIL STATS
                         item.emailSentCount = emailStats[uniqueKey] || 0;
@@ -8982,6 +8986,20 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                                     newItem.isOverridden = true;
                                 }
                             }
+
+                            // RECONCILE: Always recalculate isComplete and needsReview from final pending after ALL overrides
+                            const finalQty = newItem.adjustedQty || newItem.totalQty || newItem.quantity || 0;
+                            newItem.isComplete = newItem.pending === 0 && finalQty > 0;
+                            const completedStagesCheck = ['installed', 'photos taken', 'pop completed', 'takedown complete'];
+                            if (completedStagesCheck.includes((newItem.stage || '').toLowerCase())) {
+                                newItem.isComplete = true;
+                                if (newItem.pending > 0 && newItem.isOverridden) {
+                                    const reconciledInstalled = newItem.totalInstalled || newItem.installed || 0;
+                                    const reconciledQty = newItem.adjustedQty || newItem.totalQty || newItem.quantity || 0;
+                                    newItem.pending = Math.max(0, reconciledQty - reconciledInstalled);
+                                }
+                            }
+                            newItem.needsReview = (newItem.stage || '').toLowerCase() === 'installed' && newItem.pending > 0;
 
                             return newItem;
                         })
