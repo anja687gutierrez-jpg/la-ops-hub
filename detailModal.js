@@ -61,7 +61,7 @@
         const [issueReason, setIssueReason] = useState('');
         const [newEta, setNewEta] = useState('');
         const [missingType, setMissingType] = useState('instructions');
-        const [deadlineDate, setDeadlineDate] = useState('End of Day Today');
+        const [deadlineDate, setDeadlineDate] = useState('');
         const [showInstallControls, setShowInstallControls] = useState(false);
 
         // Material breakdown for inventory
@@ -167,6 +167,18 @@
                 setRemovalStatus(item.removalStatus || 'scheduled');
                 setRemovalAssignee(item.removalAssignee || '');
                 setRemovalPhotosLink(item.removalPhotosLink || '');
+
+                // Auto-calculate deadline from contract end date (program_end_date) + 45 days
+                const contractEnd = item.programEndDateObj || item.programEndDate;
+                const flightEnd = item.endDateObj || item.endDate || item.productEndDateObj || item.productEndDate;
+                const baseDate = contractEnd ? new Date(contractEnd) : (flightEnd ? new Date(flightEnd) : null);
+                if (baseDate && !isNaN(baseDate.getTime())) {
+                    const deadline = new Date(baseDate);
+                    deadline.setDate(deadline.getDate() + 45);
+                    setDeadlineDate(deadline.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }));
+                } else {
+                    setDeadlineDate('End of Day Today');
+                }
                 setHasReplacement(item.hasReplacement || false);
                 setEditingRemoval(false);
             }
@@ -190,7 +202,7 @@
             if (removedCount === 0) return;
 
             if (removalQty > 0 && removedCount >= removalQty) {
-                setRemovalStatus('complete');
+                setRemovalStatus('removed');
             } else if (removedCount > 0 && removedCount < removalQty) {
                 setRemovalStatus('in_progress');
             }
@@ -239,13 +251,13 @@
         // Template generators
         const generateScheduleTemplate = () => {
             const designCodes = materialBreakdown.filter(row => row.code).map(row => row.code);
-            return `<div style='font-family:Arial,sans-serif; max-width:520px; color:#333;'>
+            return `<div style='font-family:Arial,sans-serif; max-width:560px; color:#333;'>
                 <div style='background:#007bff; padding:12px 15px; color:white;'><strong style='font-size:16px;'>📅 Installation Scheduled</strong></div>
                 <div style='padding:15px; background:#fff; border:1px solid #ddd; border-top:none;'>
                     <p style='margin:0 0 12px;'>Hi ${item.owner || 'Team'},</p>
                     <p style='margin:0 0 15px;'>Work orders have been submitted for scheduling:</p>
                     <table style='width:100%; font-size:13px; border-collapse:collapse; background:#f8f9fa; border-radius:4px;'>
-                        <tr><td style='padding:8px 10px; color:#666; width:110px; border-bottom:1px solid #eee;'>Advertiser</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${item.advertiser || 'N/A'}</strong></td></tr>
+                        <tr><td style='padding:8px 10px; color:#666; width:120px; border-bottom:1px solid #eee;'>Advertiser</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${item.advertiser || 'N/A'}</strong></td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Campaign</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.id || 'N/A'}</td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Flight Name</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.name || 'N/A'}</td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Media Type</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${formatMediaType(customDesigns)}</strong></td></tr>
@@ -265,13 +277,13 @@
                 if (row.link) return `<a href="${row.link}" style="color:#28a745;" target="_blank">${row.code}</a>`;
                 return row.code;
             });
-            return `<div style='font-family:Arial,sans-serif; max-width:520px; color:#333;'>
+            return `<div style='font-family:Arial,sans-serif; max-width:560px; color:#333;'>
                 <div style='background:#28a745; padding:12px 15px; color:white;'><strong style='font-size:16px;'>✅ Installation Complete</strong></div>
                 <div style='padding:15px; background:#fff; border:1px solid #ddd; border-top:none;'>
                     <p style='margin:0 0 12px;'>Hi ${item.owner || 'Team'},</p>
                     <p style='margin:0 0 15px;'>Great news! This campaign is now <strong>fully installed</strong>.</p>
                     <table style='width:100%; font-size:13px; border-collapse:collapse; background:#f8f9fa; border-radius:4px;'>
-                        <tr><td style='padding:8px 10px; color:#666; width:110px; border-bottom:1px solid #eee;'>Advertiser</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${item.advertiser || 'N/A'}</strong></td></tr>
+                        <tr><td style='padding:8px 10px; color:#666; width:120px; border-bottom:1px solid #eee;'>Advertiser</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${item.advertiser || 'N/A'}</strong></td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Campaign</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.id || 'N/A'}</td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Flight Name</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.name || 'N/A'}</td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Media Type</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${formatMediaType(customDesigns)}</strong></td></tr>
@@ -292,14 +304,14 @@
         const generateMissingAssetsTemplate = () => {
             let missingText = missingType === 'instructions' ? "Posting Instructions" : missingType === 'material' ? "Creative Materials" : "Instructions & Materials";
             const designCodes = materialBreakdown.filter(row => row.code).map(row => row.code);
-            return `<div style='font-family:Arial,sans-serif; max-width:520px; color:#333;'>
+            return `<div style='font-family:Arial,sans-serif; max-width:560px; color:#333;'>
                 <div style='background:#dc3545; padding:12px 15px; color:white;'><strong style='font-size:16px;'>⚠️ HOLD — Missing Assets</strong></div>
                 <div style='padding:15px; background:#fff; border:1px solid #ddd; border-top:none;'>
                     <p style='margin:0 0 12px;'>Hi ${item.owner || 'Team'},</p>
                     <p style='margin:0 0 10px;'>This campaign is <strong>on hold</strong>. We are missing:</p>
                     <p style='margin:0 0 15px; padding:10px; background:#fff5f5; border-left:3px solid #dc3545; color:#c92a2a;'><strong>${missingText}</strong></p>
                     <table style='width:100%; font-size:13px; border-collapse:collapse; background:#f8f9fa; border-radius:4px;'>
-                        <tr><td style='padding:8px 10px; color:#666; width:110px; border-bottom:1px solid #eee;'>Advertiser</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${item.advertiser || 'N/A'}</strong></td></tr>
+                        <tr><td style='padding:8px 10px; color:#666; width:120px; border-bottom:1px solid #eee;'>Advertiser</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${item.advertiser || 'N/A'}</strong></td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Campaign</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.id || 'N/A'}</td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Flight Name</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.name || 'N/A'}</td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Media Type</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${formatMediaType(customDesigns)}</strong></td></tr>
@@ -316,7 +328,7 @@
 
         const generateDelayTemplate = () => {
             const designCodes = materialBreakdown.filter(row => row.code).map(row => row.code);
-            return `<div style='font-family:Arial,sans-serif; max-width:520px; color:#333;'>
+            return `<div style='font-family:Arial,sans-serif; max-width:560px; color:#333;'>
                 <div style='background:#fd7e14; padding:12px 15px; color:white;'><strong style='font-size:16px;'>🚧 Installation Delay</strong></div>
                 <div style='padding:15px; background:#fff; border:1px solid #ddd; border-top:none;'>
                     <p style='margin:0 0 12px;'>Hi ${item.owner || 'Team'},</p>
@@ -326,7 +338,7 @@
                         <strong>New Target:</strong> ${newEta || 'TBD'}
                     </div>
                     <table style='width:100%; font-size:13px; border-collapse:collapse; background:#f8f9fa; border-radius:4px;'>
-                        <tr><td style='padding:8px 10px; color:#666; width:110px; border-bottom:1px solid #eee;'>Advertiser</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${item.advertiser || 'N/A'}</strong></td></tr>
+                        <tr><td style='padding:8px 10px; color:#666; width:120px; border-bottom:1px solid #eee;'>Advertiser</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${item.advertiser || 'N/A'}</strong></td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Campaign</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.id || 'N/A'}</td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Flight Name</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.name || 'N/A'}</td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Media Type</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${formatMediaType(customDesigns)}</strong></td></tr>
@@ -342,14 +354,14 @@
 
         const generateMaintenanceTemplate = () => {
             const designCodes = materialBreakdown.filter(row => row.code).map(row => row.code);
-            return `<div style='font-family:Arial,sans-serif; max-width:520px; color:#333;'>
+            return `<div style='font-family:Arial,sans-serif; max-width:560px; color:#333;'>
                 <div style='background:#20c997; padding:12px 15px; color:white;'><strong style='font-size:16px;'>🛠️ Maintenance Resolved</strong></div>
                 <div style='padding:15px; background:#fff; border:1px solid #ddd; border-top:none;'>
                     <p style='margin:0 0 12px;'>Hi ${item.owner || 'Team'},</p>
                     <p style='margin:0 0 15px;'>Maintenance has been completed for this campaign:</p>
                     <p style='margin:0 0 15px; padding:10px; background:#e6fffa; border-left:3px solid #20c997; color:#0ca678;'><strong>Action Taken:</strong> ${issueReason || 'Repairs completed'}</p>
                     <table style='width:100%; font-size:13px; border-collapse:collapse; background:#f8f9fa; border-radius:4px;'>
-                        <tr><td style='padding:8px 10px; color:#666; width:110px; border-bottom:1px solid #eee;'>Advertiser</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${item.advertiser || 'N/A'}</strong></td></tr>
+                        <tr><td style='padding:8px 10px; color:#666; width:120px; border-bottom:1px solid #eee;'>Advertiser</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${item.advertiser || 'N/A'}</strong></td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Campaign</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.id || 'N/A'}</td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Flight Name</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.name || 'N/A'}</td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Media Type</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${formatMediaType(customDesigns)}</strong></td></tr>
@@ -366,13 +378,13 @@
 
         const generateRemovalTemplate = () => {
             const designCodes = materialBreakdown.filter(row => row.code).map(row => row.code);
-            return `<div style='font-family:Arial,sans-serif; max-width:520px; color:#333;'>
+            return `<div style='font-family:Arial,sans-serif; max-width:560px; color:#333;'>
                 <div style='background:#6c757d; padding:12px 15px; color:white;'><strong style='font-size:16px;'>🗑️ Removal Confirmed</strong></div>
                 <div style='padding:15px; background:#fff; border:1px solid #ddd; border-top:none;'>
                     <p style='margin:0 0 12px;'>Hi ${item.owner || 'Team'},</p>
                     <p style='margin:0 0 15px;'>All materials have been removed for this campaign.</p>
                     <table style='width:100%; font-size:13px; border-collapse:collapse; background:#f8f9fa; border-radius:4px;'>
-                        <tr><td style='padding:8px 10px; color:#666; width:110px; border-bottom:1px solid #eee;'>Advertiser</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${item.advertiser || 'N/A'}</strong></td></tr>
+                        <tr><td style='padding:8px 10px; color:#666; width:120px; border-bottom:1px solid #eee;'>Advertiser</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${item.advertiser || 'N/A'}</strong></td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Campaign</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.id || 'N/A'}</td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Flight Name</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.name || 'N/A'}</td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Media Type</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${formatMediaType(customDesigns)}</strong></td></tr>
@@ -422,7 +434,7 @@
                 </p>
             ` : '';
 
-            return `<div style='font-family:Arial,sans-serif; max-width:520px; color:#333;'>
+            return `<div style='font-family:Arial,sans-serif; max-width:560px; color:#333;'>
                 <div style='background:#6f42c1; padding:12px 15px; color:white;'><strong style='font-size:16px;'>📦 Materials Received</strong></div>
                 <div style='padding:15px; background:#fff; border:1px solid #ddd; border-top:none;'>
                     <p style='margin:0 0 12px;'>Hi ${item.owner || 'Team'},</p>
@@ -437,7 +449,7 @@
                         ${breakdownRows}
                     </table>` : ''}
                     <table style='width:100%; font-size:13px; border-collapse:collapse; background:#f8f9fa; border-radius:4px;'>
-                        <tr><td style='padding:8px 10px; color:#666; width:110px; border-bottom:1px solid #eee;'>Advertiser</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${item.advertiser || 'N/A'}</strong></td></tr>
+                        <tr><td style='padding:8px 10px; color:#666; width:120px; border-bottom:1px solid #eee;'>Advertiser</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${item.advertiser || 'N/A'}</strong></td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Campaign</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.id || 'N/A'}</td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Flight Name</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.name || 'N/A'}</td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Media Type</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${formatMediaType(customDesigns)}</strong></td></tr>
@@ -653,10 +665,13 @@
 
             console.log('Saving charted qty:', { adjustedQty, parsed: adjQty, itemAdjustedQty: item.adjustedQty });
 
-            const targetQty = adjQty || originalQty || 0;
+            // Use adjQty when explicitly set (even if 0), else fall back to originalQty
+            const targetQty = (adjQty !== null && adjQty !== undefined) ? adjQty : (originalQty || 0);
             const installed = newInstalledCount || 0;
+            // Allow zeroing out pending when charted matches installed (ghost booking clearance)
             const pending = Math.max(0, targetQty - installed);
             const isRemovalComplete = removedCount >= removalQty && removalQty > 0;
+            const effectiveRemovalStatusValue = isRemovalComplete ? 'removed' : removalStatus;
 
             // Determine final stage (with auto-stage logic)
             let finalStage = newStage;
@@ -682,8 +697,7 @@
             if (installed !== (item.totalInstalled || item.installed || 0)) changes.push(`Installed: ${item.totalInstalled || item.installed || 0} → ${installed}`);
             if (removalQty !== (item.removalQty || 0)) changes.push(`Removal Qty: ${item.removalQty || 0} → ${removalQty}`);
             if (removedCount !== (item.removedCount || 0)) changes.push(`Removed: ${item.removedCount || 0} → ${removedCount}`);
-            const effectiveRemovalStatus = isRemovalComplete ? 'complete' : removalStatus;
-            if (effectiveRemovalStatus !== (item.removalStatus || 'scheduled')) changes.push(`Removal Status: ${item.removalStatus || 'scheduled'} → ${effectiveRemovalStatus}`);
+            if (effectiveRemovalStatusValue !== (item.removalStatus || 'scheduled')) changes.push(`Removal Status: ${item.removalStatus || 'scheduled'} → ${effectiveRemovalStatusValue}`);
             if (removalAssignee !== (item.removalAssignee || '')) changes.push(`Assignee: ${item.removalAssignee || 'none'} → ${removalAssignee || 'none'}`);
 
             // Build history entry if there were changes
@@ -711,7 +725,7 @@
                 // Removal tracking
                 removalQty: removalQty,
                 removedCount: removedCount,
-                removalStatus: isRemovalComplete ? 'complete' : removalStatus,
+                removalStatus: effectiveRemovalStatusValue,
                 removalAssignee: removalAssignee || null,
                 removalPhotosLink: removalPhotosLink || null,
                 hasReplacement: hasReplacement,
@@ -966,9 +980,9 @@
                                                     </select>
                                                 ) : (
                                                     <div className={`w-full text-xs border rounded px-1.5 py-1 bg-gray-100 ${
-                                                        removalStatus === 'complete' ? 'text-green-600' : 'text-blue-600'
+                                                        removalStatus === 'removed' ? 'text-green-600' : 'text-blue-600'
                                                     }`}>
-                                                        {removalStatus === 'complete' ? '✓ Complete' : '⏳ In Progress'} <span className="text-gray-400">(auto)</span>
+                                                        {removalStatus === 'removed' ? '✓ Removed' : '⏳ In Progress'} <span className="text-gray-400">(auto)</span>
                                                     </div>
                                                 )}
                                             </div>
@@ -999,23 +1013,30 @@
                                                 <div className="flex justify-between items-center mb-1">
                                                     <span className="text-[10px] text-gray-600">{removedCount}/{removalQty}</span>
                                                     <span className={`text-[10px] font-bold ${
-                                                        removalStatus === 'complete' ? 'text-green-600' :
+                                                        removalStatus === 'removed' ? 'text-green-600' :
                                                         removalStatus === 'in_progress' ? 'text-blue-600' :
                                                         removalStatus === 'blocked' ? 'text-red-600' : 'text-gray-500'
                                                     }`}>
-                                                        {removalStatus === 'complete' ? '✓' : removalStatus === 'in_progress' ? '⏳' : removalStatus === 'blocked' ? '⛔' : '📅'}
+                                                        {removalStatus === 'removed' ? '✓' : removalStatus === 'in_progress' ? '⏳' : removalStatus === 'blocked' ? '⛔' : '📅'}
                                                     </span>
                                                 </div>
                                                 <div className="w-full bg-gray-200 rounded-full h-1.5">
                                                     <div className={`h-1.5 rounded-full transition-all ${
-                                                        removedCount >= removalQty ? 'bg-green-500' : removedCount / removalQty >= 0.5 ? 'bg-amber-500' : 'bg-red-400'
+                                                        removalStatus === 'removed' ? 'bg-green-500' : removedCount / removalQty >= 0.5 ? 'bg-amber-500' : 'bg-red-400'
                                                     }`} style={{ width: `${removalQty > 0 ? Math.min(100, (removedCount / removalQty) * 100) : 0}%` }} />
                                                 </div>
                                             </div>
                                             {/* Status & Assignee */}
-                                            <div className="text-[10px] text-gray-600 mb-1">
-                                                <span className="capitalize">{(removalStatus || 'scheduled').replace('_', ' ')}</span>
-                                                {removalAssignee && <span className="ml-1">• {removalAssignee}</span>}
+                                            <div className="text-[10px] mb-1 flex items-center gap-1">
+                                                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                                                    removalStatus === 'removed' ? 'bg-green-100 text-green-700' :
+                                                    removalStatus === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                                                    removalStatus === 'blocked' ? 'bg-red-100 text-red-700' :
+                                                    'bg-gray-100 text-gray-600'
+                                                }`}>
+                                                    {removalStatus === 'blocked' && '⛔ '}{(removalStatus || 'scheduled').replace('_', ' ')}
+                                                </span>
+                                                {removalAssignee && <span className="text-gray-500">• {removalAssignee}</span>}
                                             </div>
                                             {/* Deadline */}
                                             {item.daysUntilDeadline !== undefined && (

@@ -9,8 +9,15 @@
 
     // ═══════════════════════════════════════════════════════════════════════════
     // CANVAS GEAR SIDEBAR - Animated navigation with three interlocking gears
+    // NOTE: Canvas gears only work for vertical (left/right) positions.
+    // For horizontal positions (top/bottom), the parent renders HorizontalMiniBar instead.
     // ═══════════════════════════════════════════════════════════════════════════
-    const CanvasGearSidebar = ({ view, setView, onLogout, onOpenDigest, onReset, onResetEmailLogs, onOpenSheetSettings, isCollapsed, setIsCollapsed }) => {
+    const CanvasGearSidebar = ({ view, setView, onLogout, onOpenDigest, onReset, onResetEmailLogs, onOpenSheetSettings, isCollapsed, setIsCollapsed, position = 'left', onOpenPositionPicker }) => {
+        // Early return for horizontal positions - canvas gears require vertical layout
+        if (position === 'top' || position === 'bottom') {
+            return null;
+        }
+
         const canvasRef = useRef(null);
         const animationRef = useRef(null);
         const stateRef = useRef({
@@ -318,7 +325,7 @@
                 const h = canvas.height;
 
                 // FOOTER FIXED AT BOTTOM - calculate footer height first
-                const footerHeight = 150;  // Space needed for date/time + buttons
+                const footerHeight = 178;  // Space for date/time + buttons + position toggle
                 const footerStartY = h - footerHeight;
 
                 // THREE GEAR POSITIONS - Vertically stacked with MORE spacing
@@ -960,8 +967,33 @@
                 ctx.textAlign = 'center';
                 ctx.fillText('Clear Logs', 40 + btnWidth + btnWidth/2, btnY + 18);
 
+                // Position Toggle — cycles through left → right → top → bottom (like macOS Dock)
+                const posY = btnY + 34;
+                const positionCycle = { left: 'right', right: 'top', top: 'bottom', bottom: 'left' };
+                const nextPos = positionCycle[position] || 'right';
+                const posLabel = `Move to ${nextPos.charAt(0).toUpperCase() + nextPos.slice(1)} →`;
+                const posHovered = mouse.x >= 30 && mouse.x <= sidebarWidth - 30 &&
+                                   mouse.y >= posY && mouse.y <= posY + 24;
+
+                ctx.strokeStyle = posHovered ? '#a78bfa' : T.metalDim;
+                ctx.lineWidth = 1;
+                ctx.setLineDash([3, 3]);
+                ctx.beginPath();
+                ctx.roundRect(30, posY, sidebarWidth - 60, 24, 4);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                if (posHovered) {
+                    ctx.fillStyle = 'rgba(167, 139, 250, 0.1)';
+                    ctx.fill();
+                }
+
+                ctx.fillStyle = posHovered ? '#a78bfa' : T.textDim;
+                ctx.font = '500 9px Inter, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(posLabel, sidebarWidth / 2, posY + 16);
+
                 // Logout Button
-                const logoutY = btnY + 38;
+                const logoutY = posY + 32;
                 const logoutHovered = mouse.x >= 30 && mouse.x <= sidebarWidth - 30 &&
                                      mouse.y >= logoutY && mouse.y <= logoutY + 32;
 
@@ -987,6 +1019,7 @@
                 if (digestHovered) stateRef.current.hoveredButton = 'digest';
                 if (resetHovered) stateRef.current.hoveredButton = 'reset';
                 if (clearHovered) stateRef.current.hoveredButton = 'clear';
+                if (posHovered) stateRef.current.hoveredButton = 'position';
                 if (logoutHovered) stateRef.current.hoveredButton = 'logout';
 
                 // Handle click
@@ -1033,6 +1066,9 @@
                     if (stateRef.current.hoveredButton === 'clear' && onResetEmailLogs) {
                         onResetEmailLogs();
                     }
+                    if (stateRef.current.hoveredButton === 'position' && onOpenPositionPicker) {
+                        onOpenPositionPicker();
+                    }
                     if (stateRef.current.hoveredButton === 'logout' && onLogout) {
                         onLogout();
                     }
@@ -1074,12 +1110,12 @@
                     cancelAnimationFrame(animationRef.current);
                 }
             };
-        }, [view, setView, onLogout, onOpenDigest, onReset, onResetEmailLogs, onOpenSheetSettings]);
+        }, [view, setView, onLogout, onOpenDigest, onReset, onResetEmailLogs, onOpenSheetSettings, position, onOpenPositionPicker]);
 
         return (
             <canvas
                 ref={canvasRef}
-                className="fixed left-0 top-0 z-20 hidden md:block"
+                className={`fixed ${position === 'right' ? 'right-0' : 'left-0'} top-0 z-20 hidden md:block`}
                 style={{ width: 320, cursor: 'pointer' }}
             />
         );

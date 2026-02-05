@@ -80,7 +80,7 @@
                 upcoming: "Upcoming",
                 installed: "Installed this Week",
                 recent: "Recent Completed Installs",
-                pipeline: "Hold Pipeline Summary (This Month)",
+                pipeline: "Pipeline Snapshot (This Week)",
                 removal: "Removal Dates (Past 45 days)"
             }
         });
@@ -107,16 +107,20 @@
             setDigestProducts([]);
         };
 
-        // Fetch live weather
+        // Fetch live weather - priority: saved location > digest market filter > active market filter
         useEffect(() => {
             const loadWeather = async () => {
                 if (!isOpen) return;
                 setIsLoadingWeather(true);
                 try {
                     initDependencies();
-                    const marketForWeather = digestMarkets.length > 0
-                        ? digestMarkets[0]
-                        : (currentMarket || 'Los Angeles, CA');
+                    // Priority chain: user's saved weather setting > digest filter > active market > fallback
+                    const savedLocation = digestSettings.weatherLocation ||
+                        (window.STAP_getWeatherLocation && window.STAP_getWeatherLocation());
+                    const marketForWeather = savedLocation ||
+                        (digestMarkets.length > 0 ? digestMarkets[0] : null) ||
+                        currentMarket ||
+                        'Los Angeles, CA';
                     const data = await fetchLiveWeather(marketForWeather);
                     setLiveWeather(data);
                 } catch (err) {
@@ -126,7 +130,7 @@
                 setIsLoadingWeather(false);
             };
             loadWeather();
-        }, [isOpen, digestMarkets, currentMarket]);
+        }, [isOpen, digestMarkets, currentMarket, digestSettings.weatherLocation]);
 
         // Editable digest data state
         const [editableData, setEditableData] = useState(null);

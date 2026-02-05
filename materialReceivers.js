@@ -984,7 +984,9 @@ function doGet(e) {
                             csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`;
                         }
                         
-                        const response = await fetch(csvUrl);
+                        // Use CORS proxy (same as handleConnectSheet) — Loop 4 fix
+                        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(csvUrl)}`;
+                        const response = await fetch(proxyUrl);
                         if (!response.ok) throw new Error('Failed to fetch');
                         const text = await response.text();
                         const lines = text.split('\n').filter(line => line.trim());

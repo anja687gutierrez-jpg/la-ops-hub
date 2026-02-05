@@ -119,10 +119,16 @@
             background-size: 1000px 100%;
         }
         
-        /* Sidebar responsive margin classes */
+        /* Sidebar responsive margin classes — supports left/right/top/bottom positioning */
         @media (min-width: 768px) {
+            /* Vertical (left/right) positioning */
             .main-content-expanded { margin-left: 320px; }
             .main-content-collapsed { margin-left: 64px; }
+            .main-content-expanded-right { margin-right: 320px; margin-left: 0; }
+            .main-content-collapsed-right { margin-right: 64px; margin-left: 0; }
+            /* Horizontal (top/bottom) positioning - 56px strip with larger icons */
+            .main-content-top-collapsed { margin-top: 56px; margin-left: 0; margin-right: 0; }
+            .main-content-bottom-collapsed { margin-bottom: 56px; margin-left: 0; margin-right: 0; }
         }
         
         /* Custom Scrollbar Styling for Tables */
@@ -1120,17 +1126,39 @@
             const padding = settings.compactMode ? '4px 6px' : '8px 10px';
             
             // --- Helper: Create Table Row ---
-            const createHtmlTable = (data, headers, columnWidths, rowMapper) => {
+            // Options: { groupByProduct: true } to insert product sub-headers when product column is shown
+            const createHtmlTable = (data, headers, columnWidths, rowMapper, options = {}) => {
                 if (!data || data.length === 0) {
                     return "<p style='font-style: italic; color: #666;'>No flights are currently in this category.</p>";
                 }
+
+                // Sort by product if grouping is enabled and product column is shown
+                let sortedData = data;
+                if (options.groupByProduct && settings.showProductColumn) {
+                    sortedData = [...data].sort((a, b) => {
+                        const pA = (a.product || a.media || '').toLowerCase();
+                        const pB = (b.product || b.media || '').toLowerCase();
+                        return pA.localeCompare(pB);
+                    });
+                }
+
                 let table = `<table class="data-table" style="font-size: ${fontSize};"><tr>`;
                 headers.forEach((header, index) => {
                     const widthAttr = columnWidths[index] ? ` width="${columnWidths[index]}"` : '';
                     table += `<th${widthAttr} style="font-size: ${headerSize}; padding: ${padding};">${header}</th>`;
                 });
                 table += '</tr>';
-                data.forEach(item => {
+
+                let lastProduct = null;
+                sortedData.forEach(item => {
+                    // Insert product sub-header row when product changes
+                    if (options.groupByProduct && settings.showProductColumn) {
+                        const currentProduct = formatProduct(item.product || item.media || 'Other');
+                        if (currentProduct !== lastProduct) {
+                            table += `<tr><td colspan="${headers.length}" style="padding: 4px 8px; background: #eef2ff; font-size: 10px; font-weight: 700; color: #4338ca; border-bottom: 1px solid #c7d2fe; letter-spacing: 0.3px;">${currentProduct}</td></tr>`;
+                            lastProduct = currentProduct;
+                        }
+                    }
                     const rowValues = rowMapper(item);
                     table += '<tr>';
                     rowValues.forEach(val => {
@@ -1173,10 +1201,18 @@
                 return `<strong>${client}</strong>${inHouseIcon}<br/><span style="font-size:11px;color:#666;">${campaign}</span>`;
             };
             
-            // Helper to shorten product names
+            // Helper to shorten product names - keep product type, abbreviate common prefixes
+            // Order matters: strip suffixes first, then prefixes, then normalize whitespace
             const formatProduct = (product) => {
                 if (!product) return '-';
-                return product.replace('Transit Shelter-', '').replace('Transit Shelters-', '').replace('Transit Buses-', '');
+                return product
+                    .replace(/-Spot-Playlist$/i, ' Playlist')
+                    .replace(/-Spot$/i, '')
+                    .replace(/^Transit Shelters?-/i, 'Shelter ')
+                    .replace(/^Transit Bus(es)?-/i, 'Bus ')
+                    .replace(/^Digital Network-?/i, 'Digi Net ')
+                    .replace(/^Digital Panel-?/i, 'Digi Panel ')
+                    .replace(/\s+/g, ' ').trim();
             };
             
             // Helper to shorten market names
@@ -1233,7 +1269,7 @@
                         const daysLateDisplay = daysLate > 0 ? `<span style="color: ${daysLate > 7 ? '#d32f2f' : '#f57c00'}; font-weight: bold;">${daysLate}d</span>` : '-';
                         row.push(formatDate(item.date), daysLateDisplay);
                         return row;
-                    });
+                    }, { groupByProduct: true });
                 })(),
                 
                 inProgress: (() => {
@@ -1256,16 +1292,13 @@
                         const pct = totalQty > 0 ? Math.round((installedQty / totalQty) * 100) : 0;
                         const barColor = pct >= 75 ? '#4caf50' : pct >= 50 ? '#ff9800' : '#f44336';
 
-                        // Add adjusted qty badge if applicable
-                        const adjustedBadge = item.hasQtyAdjustment ? `<span style="background: #2196f3; color: white; font-size: 9px; padding: 1px 4px; border-radius: 3px; margin-left: 4px;">ADJ</span>` : '';
-
                         const progressHtml = totalQty > 0 ? `
                             <div style="display: flex; align-items: center; gap: 6px;">
                                 <div style="flex: 1; background: #e0e0e0; border-radius: 4px; height: 8px; min-width: 80px;">
                                     <div style="width: ${pct}%; background: ${barColor}; height: 100%; border-radius: 4px;"></div>
                                 </div>
                                 <span style="font-size: 11px; white-space: nowrap; color: #333;">
-                                    <strong>${installedQty}</strong>/${totalQty}${adjustedBadge}
+                                    <strong>${installedQty}</strong>/${totalQty}
                                 </span>
                             </div>
                             <div style="font-size: 10px; color: #666; margin-top: 2px;">${pct}% • ${pendingQty} pending</div>
@@ -1273,9 +1306,9 @@
 
                         row.push(formatDate(item.date), progressHtml);
                         return row;
-                    });
+                    }, { groupByProduct: true });
                 })(),
-                
+
                 upcoming: (() => {
                     const base = { headers: ["Stage", "Campaign #", "Client / Campaign"], widths: ['18%', '10%', '50%'] };
                     if (settings.showMarketColumn) { base.headers.push('Market'); base.widths.push('18%'); }
@@ -1290,9 +1323,9 @@
                         if (settings.showOwnerColumn) row.push(item.owner);
                         row.push(formatDate(item.date));
                         return row;
-                    });
+                    }, { groupByProduct: true });
                 })(),
-                
+
                 installed: (() => {
                     const base = { headers: ["Campaign #", "Advertiser / Campaign"], widths: ['10%', '50%'] };
                     if (settings.showMarketColumn) { base.headers.push('Market'); base.widths.push('18%'); }
@@ -1316,9 +1349,9 @@
                         
                         row.push(formatDate(item.date), unitsHtml);
                         return row;
-                    });
+                    }, { groupByProduct: true });
                 })(),
-                
+
                 recentCompleted: (() => {
                     const base = { headers: ["Stage", "Campaign #", "Advertiser / Campaign"], widths: ['18%', '10%', '55%'] };
                     if (settings.showMarketColumn) { base.headers.push('Market'); base.widths.push('18%'); }
@@ -1331,9 +1364,9 @@
                         if (settings.showProductColumn) row.push(formatProduct(item.product || item.media));
                         if (settings.showOwnerColumn) row.push(item.owner);
                         return row;
-                    });
+                    }, { groupByProduct: true });
                 })(),
-                
+
                 pipeline: (() => {
                     // Count unique campaigns (by ID) for each category
                     const countUniqueCampaigns = (arr) => {
@@ -1341,23 +1374,28 @@
                         const uniqueIds = new Set(arr.map(item => item.id));
                         return uniqueIds.size;
                     };
-                    
-                    // Match dashboard stat cards - count unique campaigns
-                    const dashboardStats = [
-                        { stage: 'Delayed / Overdue', count: countUniqueCampaigns(processedData.delayedFlights) },
-                        { stage: 'In-Progress', count: countUniqueCampaigns(processedData.inProgressFlights) },
-                        { stage: 'Upcoming (7 Days)', count: countUniqueCampaigns(processedData.upcoming) },
-                        { stage: 'Installed This Week', count: countUniqueCampaigns(processedData.fullyInstalledThisWeek) },
-                        { stage: 'Ready for Removal', count: countUniqueCampaigns(processedData.expiredFlights) },
-                        { stage: 'Rotations', count: countUniqueCampaigns(processedData.rotations) },
-                        { stage: 'On Hold', count: countUniqueCampaigns(processedData.onHoldCampaigns) }
+                    // Sum faces/qty for anticipated installs
+                    const sumFaces = (arr) => {
+                        if (!arr || arr.length === 0) return 0;
+                        return arr.reduce((sum, item) => sum + (item.adjustedQty || item.totalQty || item.quantity || 0), 0);
+                    };
+
+                    // Simplified: campaign counts + anticipated faces this week
+                    const thisWeekFaces = sumFaces(processedData.thisWeek || processedData.upcoming);
+                    const inProgressFaces = sumFaces(processedData.inProgressFlights);
+                    const holdCount = countUniqueCampaigns(processedData.onHoldCampaigns);
+
+                    const pipelineStats = [
+                        { stage: 'Anticipated Installs This Week', count: countUniqueCampaigns(processedData.thisWeek || processedData.upcoming), faces: thisWeekFaces },
+                        { stage: 'In-Progress', count: countUniqueCampaigns(processedData.inProgressFlights), faces: inProgressFaces },
+                        { stage: 'On Hold', count: holdCount, faces: sumFaces(processedData.onHoldCampaigns) },
                     ].filter(s => s.count > 0);
-                    
+
                     return createHtmlTable(
-                        dashboardStats,
-                        ["Category", "Campaigns"],
-                        ['80%', '20%'],
-                        item => [item.stage, `<strong>${item.count}</strong>`]
+                        pipelineStats,
+                        ["Category", "Campaigns", "Faces"],
+                        ['60%', '20%', '20%'],
+                        item => [item.stage, `<strong>${item.count}</strong>`, `<strong>${item.faces.toLocaleString()}</strong>`]
                     );
                 })(),
                 
@@ -1378,7 +1416,7 @@
                         const daysDisplay = daysAgo > 0 ? `${daysAgo}d` : '-';
                         row.push(formatDate(item.endDate), daysDisplay);
                         return row;
-                    });
+                    }, { groupByProduct: true });
                 })()
             };
 
@@ -1413,31 +1451,31 @@
             // Production Source Breakdown - now independent section
             if (settings.sections.productionBreakdown) {
                 sectionsHtml += `
-                <tr><td class="summary-section" style="padding-top: 15px; padding-bottom: 15px;">
-                <h3 style="margin: 0 0 10px; font-size: 14px; color: #666; text-align: center;">PRODUCTION SOURCE BREAKDOWN</h3>
+                <tr><td class="summary-section" style="padding-top: 12px; padding-bottom: 12px;">
+                <h3 style="margin: 0 0 8px; font-size: 12px; color: #666; text-align: center; text-transform: uppercase; letter-spacing: 0.5px;">PRODUCTION SOURCE BREAKDOWN</h3>
                 <div class="summary-grid">
                     <div class="summary-item">
-                        <div class="count" style="font-size: 20px; color: #7c3aed;">
+                        <div class="count" style="font-size: 18px; color: #7c3aed;">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
                             ${productionBreakdown.inHouse}
                         </div>
                         <div class="label" style="font-size: 10px;">IN-HOUSE</div>
                     </div>
                     <div class="summary-item">
-                        <div class="count" style="font-size: 20px; color: #2563eb;">
+                        <div class="count" style="font-size: 18px; color: #2563eb;">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
                             ${productionBreakdown.client}
                         </div>
                         <div class="label" style="font-size: 10px;">CLIENT</div>
                     </div>
                     <div class="summary-item">
-                        <div class="count" style="font-size: 20px; color: #d97706;">
+                        <div class="count" style="font-size: 18px; color: #d97706;">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
                             ${productionBreakdown.mixed}
                         </div>
                         <div class="label" style="font-size: 10px;">MIXED</div>
                     </div>
-                    ${productionBreakdown.unset > 0 ? `<div class="summary-item"><div class="count" style="font-size: 20px; color: #9ca3af;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>${productionBreakdown.unset}</div><div class="label" style="font-size: 10px;">NOT SET</div></div>` : ''}
+                    ${productionBreakdown.unset > 0 ? `<div class="summary-item"><div class="count" style="font-size: 18px; color: #9ca3af;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>${productionBreakdown.unset}</div><div class="label" style="font-size: 10px;">NOT SET</div></div>` : ''}
                 </div>
                 </td></tr>`;
             }
@@ -1467,42 +1505,42 @@
             return `
             <!DOCTYPE html><html><head><meta charset="UTF-8"><style>
             body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            background-color: #f0f4f8; margin: 0; padding: 15px; color: #333333; }
-            .container { max-width: 1000px; margin: 0 auto; background-color: #ffffff; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); overflow: hidden; }
-            .header { background-color: #00C9FF; background-image: linear-gradient(to right, #00C9FF, #6E6AFF); padding: 15px 20px; color: #ffffff; }
-            .header h1 { margin: 0; font-size: 26px; font-weight: 600; line-height: 1.2; color: #ffffff; }
-            .header p { margin: 4px 0 0; font-size: 16px; opacity: 0.9; color: #ffffff; }
-            .logo { max-width: 80px; height: auto; display: block; }
-            .summary-section { padding: 25px 30px; background-color: #f8f9fa; border-bottom: 1px solid #e0e0e8; }
-            .summary-section h2 { margin: 0 0 15px; font-size: 20px; color: #0d47a1; text-align: center;}
+            background-color: #f0f4f8; margin: 0; padding: 10px; color: #333333; }
+            .container { max-width: 680px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); overflow: hidden; }
+            .header { background-color: #00C9FF; background-image: linear-gradient(to right, #00C9FF, #6E6AFF); padding: 12px 16px; color: #ffffff; }
+            .header h1 { margin: 0; font-size: 20px; font-weight: 600; line-height: 1.2; color: #ffffff; }
+            .header p { margin: 3px 0 0; font-size: 13px; opacity: 0.9; color: #ffffff; }
+            .logo { max-width: 60px; height: auto; display: block; }
+            .summary-section { padding: 16px 20px; background-color: #f8f9fa; border-bottom: 1px solid #e0e0e8; }
+            .summary-section h2 { margin: 0 0 10px; font-size: 15px; color: #0d47a1; text-align: center; }
             .summary-grid { display: table; width: 100%; border-collapse: collapse; }
-            .summary-item { display: table-cell; text-align: center; padding: 10px; }
-            .summary-item .count { font-size: 28px; font-weight: 600; color: #d32f2f; line-height: 1.1; }
+            .summary-item { display: table-cell; text-align: center; padding: 6px; }
+            .summary-item .count { font-size: 24px; font-weight: 600; color: #d32f2f; line-height: 1.1; }
             .summary-item .count.normal { color: #2979ff; }
-            .summary-item .label { font-size: 12px; color: #555; text-transform: uppercase; letter-spacing: 0.5px; }
-            .section { padding: 25px 30px; border-bottom: 1px solid #e0e0e8; }
+            .summary-item .label { font-size: 11px; color: #555; text-transform: uppercase; letter-spacing: 0.5px; }
+            .section { padding: 14px 20px; border-bottom: 1px solid #e0e0e8; }
             .section:last-of-type { border-bottom: none; }
-            .section h2 { margin: 0 0 15px; font-size: 20px; color: #0d47a1; }
+            .section h2 { margin: 0 0 10px; font-size: 15px; color: #0d47a1; }
             table.data-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-            .data-table th, .data-table td { padding: 9px 8px; text-align: left; border-bottom: 1px solid #eeeeee; font-size: 13px; vertical-align: top; word-break: break-word; }
-            .data-table th { font-weight: 600; color: #555; background-color: #f8f9fa; }
+            .data-table th, .data-table td { padding: 6px 8px; text-align: left; border-bottom: 1px solid #eeeeee; font-size: 12px; vertical-align: top; word-break: break-word; }
+            .data-table th { font-weight: 600; color: #555; background-color: #f8f9fa; font-size: 11px; }
             .data-table tr:last-child td { border-bottom: none; }
-            .footer { padding: 30px; text-align: center; font-size: 14px; background-color: #f0f4f8; }
-            .footer a { background-color: #2979ff; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block; }
+            .footer { padding: 18px 20px; text-align: center; font-size: 12px; background-color: #f0f4f8; }
+            .footer a { background-color: #2979ff; color: #ffffff; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block; font-size: 13px; }
             </style></head><body>
             <table class="container" align="center" cellpadding="0" cellspacing="0">
                 <tr>
                 <td class="header">
                     <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse: collapse;">
                     <tr>
-                        <td width="100" align="left" valign="middle">
+                        <td width="70" align="left" valign="middle">
                         <img src="https://drive.google.com/thumbnail?id=1Z8ZtHCnM5MT06YFAsokHxBXV70JsD3c7" alt="Vector Logo" class="logo">
                         </td>
-                        <td align="center" valign="middle" style="padding: 0 10px;">
-                        <h1 style="margin: 0; font-size: 26px; font-weight: 600; line-height: 1.2;">${settings.mainTitle}</h1>
-                        <p style="margin: 4px 0 0; font-size: 16px; opacity: 0.9;">${today}</p>
+                        <td align="center" valign="middle" style="padding: 0 8px;">
+                        <h1 style="margin: 0; font-size: 20px; font-weight: 600; line-height: 1.2;">${settings.mainTitle}</h1>
+                        <p style="margin: 3px 0 0; font-size: 13px; opacity: 0.9;">${today}</p>
                         </td>
-                        <td width="200" align="right" valign="middle">${settings.showWeather ? weatherHtml : ''}</td>
+                        <td width="180" align="right" valign="middle">${settings.showWeather ? weatherHtml : ''}</td>
                     </tr>
                     </table>
                 </td>
@@ -1865,13 +1903,10 @@
                 });
             });
 
-            // Log mapping results for debugging
-            console.log('📊 Smart Column Mapping Results:');
-            console.log('Headers found:', headers.length);
-            mappingResults.forEach(({ field, mappedTo, found, status }) => {
-                const icon = status === 'matched' ? '✅' : (status === 'missing' ? '❌' : '⚠️');
-                console.log(`  ${icon} ${field} → "${mappedTo}"`);
-            });
+            // Log mapping summary (one line instead of per-field)
+            const matched = mappingResults.filter(r => r.found).length;
+            const missing = mappingResults.filter(r => !r.found).length;
+            console.log(`📊 Column mapping: ${matched}/${mappingResults.length} matched, ${missing} missing from ${headers.length} headers`);
 
             // Store mapping results globally for UI feedback
             window.__lastColumnMapping = {
@@ -3831,9 +3866,50 @@
         // 🗑️ REMOVALS TABLE - Dedicated table for tracking campaign removals/takedowns
         const RemovalsTable = ({ data, completedData = [], onRowClick, onBack }) => {
             const [showCompleted, setShowCompleted] = useState(false);
+            const [statusFilter, setStatusFilter] = useState('all'); // all, in_progress, scheduled, blocked, removed
+            const [sortField, setSortField] = useState('deadline'); // deadline, expired
+            const [sortDir, setSortDir] = useState('asc'); // asc = most urgent first
 
-            // Combine data based on toggle
-            const displayData = showCompleted ? [...data, ...completedData] : data;
+            const toggleSort = (field) => {
+                if (sortField === field) {
+                    setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+                } else {
+                    setSortField(field);
+                    setSortDir('asc');
+                }
+            };
+
+            // Combine data based on toggle, then filter by status, then sort
+            const baseData = showCompleted ? [...data, ...completedData] : data;
+            const displayData = React.useMemo(() => {
+                let filtered = baseData;
+                if (statusFilter !== 'all') {
+                    filtered = baseData.filter(row => {
+                        const status = row.removalStatus || 'scheduled';
+                        if (statusFilter === 'removed') return status === 'removed' || status === 'complete';
+                        return status === statusFilter;
+                    });
+                }
+                return [...filtered].sort((a, b) => {
+                    const multiplier = sortDir === 'asc' ? 1 : -1;
+                    if (sortField === 'deadline') {
+                        return multiplier * ((a.daysUntilDeadline || 999) - (b.daysUntilDeadline || 999));
+                    }
+                    return multiplier * ((b.daysSinceExpired || 0) - (a.daysSinceExpired || 0));
+                });
+            }, [baseData, statusFilter, sortField, sortDir]);
+
+            // Status counts for filter tabs
+            const statusCounts = React.useMemo(() => {
+                const src = showCompleted ? [...data, ...completedData] : data;
+                return {
+                    all: src.length,
+                    in_progress: src.filter(r => r.removalStatus === 'in_progress').length,
+                    scheduled: src.filter(r => !r.removalStatus || r.removalStatus === 'scheduled').length,
+                    blocked: src.filter(r => r.removalStatus === 'blocked').length,
+                    removed: src.filter(r => r.removalStatus === 'removed' || r.removalStatus === 'complete').length,
+                };
+            }, [data, completedData, showCompleted]);
 
             const downloadCSV = () => {
                 const headers = ['Campaign #', 'Advertiser', 'Campaign', 'Product', 'Market', 'End Date', 'Days Expired', 'Days to Deadline', 'Removal Qty', 'Removed', 'Pending', 'Status', 'Assignee'];
@@ -3920,6 +3996,26 @@
                             </button>
                         </div>
                     </div>
+                    {/* Status Filter Tabs */}
+                    <div className="px-6 py-2 border-b bg-gray-50 flex items-center gap-2 overflow-x-auto">
+                        {[
+                            { key: 'all', label: 'All', active: 'bg-gray-600 text-white', inactive: 'bg-gray-50 text-gray-700 hover:bg-gray-100' },
+                            { key: 'in_progress', label: 'In Progress', active: 'bg-blue-600 text-white', inactive: 'bg-blue-50 text-blue-700 hover:bg-blue-100' },
+                            { key: 'scheduled', label: 'Scheduled', active: 'bg-gray-600 text-white', inactive: 'bg-gray-50 text-gray-600 hover:bg-gray-100' },
+                            { key: 'blocked', label: '⛔ Blocked', active: 'bg-red-600 text-white', inactive: 'bg-red-50 text-red-700 hover:bg-red-100' },
+                            { key: 'removed', label: '✓ Removed', active: 'bg-green-600 text-white', inactive: 'bg-green-50 text-green-700 hover:bg-green-100' },
+                        ].map(tab => (
+                            <button
+                                key={tab.key}
+                                onClick={() => setStatusFilter(tab.key)}
+                                className={`px-2.5 py-1 rounded-full text-[10px] font-medium transition-colors whitespace-nowrap ${
+                                    statusFilter === tab.key ? tab.active : tab.inactive
+                                }`}
+                            >
+                                {tab.label} ({statusCounts[tab.key]})
+                            </button>
+                        ))}
+                    </div>
                     <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
                         <table className="w-full text-left border-collapse table-fixed min-w-[1200px]">
                             <thead className="sticky top-0 z-10">
@@ -3928,8 +4024,12 @@
                                     <th className="px-2 py-2 w-[100px]">Product</th>
                                     <th className="px-2 py-2 w-[100px]">Market</th>
                                     <th className="px-2 py-2 w-[75px]">End Date</th>
-                                    <th className="px-2 py-2 w-[70px] text-center">Expired</th>
-                                    <th className="px-2 py-2 w-[85px] text-center">Deadline</th>
+                                    <th className="px-2 py-2 w-[70px] text-center cursor-pointer hover:text-blue-600 select-none" onClick={() => toggleSort('expired')}>
+                                        Expired {sortField === 'expired' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
+                                    </th>
+                                    <th className="px-2 py-2 w-[85px] text-center cursor-pointer hover:text-blue-600 select-none" onClick={() => toggleSort('deadline')}>
+                                        Deadline {sortField === 'deadline' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
+                                    </th>
                                     <th className="px-2 py-2 w-[140px]">Removal Progress</th>
                                     <th className="px-2 py-2 w-[90px]">Status</th>
                                     <th className="px-2 py-2 w-[90px]">Assignee</th>
@@ -3938,7 +4038,7 @@
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                                 {displayData.map((row, i) => {
-                                    const isCompleted = row.isRemovalComplete || row.removalStatus === 'complete';
+                                    const isCompleted = row.isRemovalComplete || row.removalStatus === 'removed' || row.removalStatus === 'complete';
                                     const deadlineColor = isCompleted ? 'bg-green-100 text-green-700' :
                                         row.isOverDeadline ? 'bg-red-100 text-red-700' :
                                         row.daysUntilDeadline <= 7 ? 'bg-orange-100 text-orange-700' :
@@ -3946,8 +4046,9 @@
                                         'bg-green-100 text-green-700';
                                     const progressColor = row.removalPct >= 75 ? 'bg-green-500' :
                                         row.removalPct >= 50 ? 'bg-amber-500' : 'bg-red-400';
-                                    const statusColor = row.removalStatus === 'complete' ? 'bg-green-100 text-green-700' :
+                                    const statusColor = (row.removalStatus === 'removed' || row.removalStatus === 'complete') ? 'bg-green-100 text-green-700' :
                                         row.removalStatus === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                                        row.removalStatus === 'blocked' ? 'bg-red-100 text-red-700' :
                                         'bg-gray-100 text-gray-600';
 
                                     return (
@@ -4307,14 +4408,14 @@
 
             return (
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                    <div className="px-6 py-4 border-b bg-amber-50 flex justify-between items-center">
-                        <h3 className="font-semibold text-amber-900 flex items-center gap-2">
+                    <div className="px-6 py-3 border-b bg-amber-50 flex justify-between items-center">
+                        <h3 className="font-semibold text-gray-800 flex items-center gap-2 text-sm">
                             {onBack && (
                                 <button onClick={onBack} className="p-1 hover:bg-amber-200 rounded-full transition-colors mr-1" title="Back to Dashboard">
-                                    <Icon name="ArrowLeft" size={18} />
+                                    <Icon name="ArrowLeft" size={16} />
                                 </button>
                             )}
-                            <Icon name="ClipboardList" size={20} /> Hold Report (Simplified View)
+                            <Icon name="ClipboardList" size={16} className="text-amber-600" /> Hold Report
                             <span className="bg-amber-200 text-amber-800 text-xs py-0.5 px-2 rounded-full">{data.length}</span>
                         </h3>
                         <div className="flex items-center gap-2">
@@ -4327,57 +4428,58 @@
                         </div>
                     </div>
                     <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
-                        <table className="w-full text-left border-collapse">
+                        {/* Loop 4: Aligned padding/font to match CampaignTable & RemovalsTable */}
+                        <table className="w-full text-left border-collapse table-fixed min-w-[1100px]">
                             <thead className="sticky top-0 z-10">
-                                <tr className="text-xs font-semibold text-gray-500 bg-gray-50 border-b border-gray-200 uppercase tracking-wider">
-                                    <th className="px-4 py-3">ID</th>
-                                    <th className="px-4 py-3">Start</th>
-                                    <th className="px-4 py-3">End</th>
-                                    <th className="px-4 py-3">Market</th>
-                                    <th className="px-4 py-3">Advertiser / Campaign</th>
-                                    <th className="px-4 py-3">Product</th>
-                                    <th className="px-4 py-3">Stage</th>
-                                    <th className="px-4 py-3">Owner</th>
-                                    <th className="px-4 py-3 text-right">Qty</th>
-                                    <th className="px-4 py-3 text-center">Charted</th>
+                                <tr className="text-[10px] font-semibold text-gray-500 bg-gray-50 border-b border-gray-200 uppercase tracking-wider">
+                                    <th className="px-2 py-2 w-[80px]">ID</th>
+                                    <th className="px-2 py-2 w-[75px]">Start</th>
+                                    <th className="px-2 py-2 w-[75px]">End</th>
+                                    <th className="px-2 py-2 w-[100px]">Market</th>
+                                    <th className="px-2 py-2 w-[220px]">Advertiser / Campaign</th>
+                                    <th className="px-2 py-2 w-[110px]">Product</th>
+                                    <th className="px-2 py-2 w-[120px]">Stage</th>
+                                    <th className="px-2 py-2 w-[90px]">Owner</th>
+                                    <th className="px-2 py-2 text-right w-[50px]">Qty</th>
+                                    <th className="px-2 py-2 text-center w-[70px]">Charted</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                                 {data.map((row, i) => (
                                     <tr key={i} onClick={() => onRowClick && onRowClick(row)} className="hover:bg-amber-50 cursor-pointer transition-colors">
-                                        <td className="px-4 py-3 text-xs font-mono text-gray-500">{row.id}</td>
-                                        <td className="px-4 py-3 text-sm text-gray-600">{row.date}</td>
-                                        <td className="px-4 py-3 text-sm text-gray-600">{row.endDate}</td>
-                                        <td className="px-4 py-3 text-sm text-gray-600">
-                                            <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs">{row.market || '-'}</span>
+                                        <td className="px-2 py-2 text-[10px] font-mono text-gray-500">{row.id}</td>
+                                        <td className="px-2 py-2 text-xs text-gray-600 whitespace-nowrap">{row.date}</td>
+                                        <td className="px-2 py-2 text-xs text-gray-600 whitespace-nowrap">{row.endDate}</td>
+                                        <td className="px-2 py-2">
+                                            <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] truncate block" title={row.market}>{row.market || '-'}</span>
                                         </td>
-                                        <td className="px-4 py-3">
-                                            <div className="font-medium text-gray-900">{row.advertiser}</div>
-                                            <div className="text-xs text-gray-500 truncate" title={row.name}>{row.name}</div>
+                                        <td className="px-2 py-2">
+                                            <div className="text-xs font-medium text-gray-900 truncate" title={row.advertiser}>{row.advertiser}</div>
+                                            <div className="text-[10px] text-gray-500 truncate" title={row.name}>{row.name}</div>
                                         </td>
-                                        <td className="px-4 py-3 text-center">
-                                            <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${row.isPremium ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-purple-50 text-purple-700'}`} title={row.product}>
+                                        <td className="px-2 py-2 text-center">
+                                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${row.isPremium ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-purple-50 text-purple-700'}`} title={row.product}>
                                                 {row.isPremium && <span className="mr-0.5">⭐</span>}
                                                 {abbreviateProduct(row.product)}
                                             </span>
                                         </td>
-                                        <td className="px-4 py-3">
-                                            <span className={`px-2 py-1 rounded text-xs border ${getStatusColor(row.stage, row.dateObj)}`}>{row.stage}</span>
+                                        <td className="px-2 py-2">
+                                            <span className={`px-1.5 py-0.5 rounded text-[10px] border ${getStatusColor(row.stage, row.dateObj)}`}>{row.stage}</span>
                                         </td>
-                                        <td className="px-4 py-3 text-sm text-gray-600">{row.owner}</td>
-                                        <td className="px-4 py-3 text-right text-sm font-mono text-gray-600">{row.quantity || row.totalQty}</td>
-                                        <td className="px-4 py-3 text-center">
+                                        <td className="px-2 py-2 text-xs text-gray-600 truncate" title={row.owner}>{row.owner}</td>
+                                        <td className="px-2 py-2 text-right text-xs font-semibold text-gray-900">{row.quantity || row.totalQty}</td>
+                                        <td className="px-2 py-2 text-center">
                                             {(() => {
                                                 const booked = row.quantity || row.totalQty || 0;
                                                 const charted = row.adjustedQty;
                                                 if (charted === null || charted === undefined) {
-                                                    return <span className="text-xs text-gray-400">--</span>;
+                                                    return <span className="text-[10px] text-gray-400">--</span>;
                                                 } else if (charted === booked) {
-                                                    return <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">{charted} ✓</span>;
+                                                    return <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-[10px] font-medium">{charted} ✓</span>;
                                                 } else if (charted < booked) {
-                                                    return <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-xs font-medium">{charted} ⚠</span>;
+                                                    return <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[10px] font-medium">{charted} ⚠</span>;
                                                 } else {
-                                                    return <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">{charted} ↑</span>;
+                                                    return <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-medium">{charted} ↑</span>;
                                                 }
                                             })()}
                                         </td>
@@ -4418,14 +4520,14 @@
 
             return (
                 <div className="bg-white rounded-xl shadow-sm border border-orange-200 overflow-hidden">
-                    <div className="px-6 py-4 border-b bg-orange-50 flex justify-between items-center">
-                        <h3 className="font-semibold text-orange-900 flex items-center gap-2">
+                    <div className="px-6 py-3 border-b bg-orange-50 flex justify-between items-center">
+                        <h3 className="font-semibold text-gray-800 flex items-center gap-2 text-sm">
                             {onBack && (
                                 <button onClick={onBack} className="p-1 hover:bg-orange-200 rounded-full transition-colors mr-1" title="Back to Dashboard">
-                                    <Icon name="ArrowLeft" size={18} />
+                                    <Icon name="ArrowLeft" size={16} />
                                 </button>
                             )}
-                            <Icon name="Ghost" size={20} /> 👻 Ghost Bookings
+                            <Icon name="Ghost" size={16} className="text-orange-600" /> 👻 Ghost Bookings
                             <span className="bg-orange-200 text-orange-800 text-xs py-0.5 px-2 rounded-full">{data.length}</span>
                         </h3>
                         <div className="flex items-center gap-2">
@@ -4443,53 +4545,54 @@
                         </p>
                     </div>
                     <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
-                        <table className="w-full text-left border-collapse">
+                        {/* Loop 4: Aligned padding/font to match CampaignTable & RemovalsTable */}
+                        <table className="w-full text-left border-collapse table-fixed min-w-[1100px]">
                             <thead className="sticky top-0 z-10">
-                                <tr className="text-xs font-semibold text-gray-500 bg-gray-50 border-b border-gray-200 uppercase tracking-wider">
-                                    <th className="px-4 py-3">Reason</th>
-                                    <th className="px-4 py-3">Campaign #</th>
-                                    <th className="px-4 py-3">Start Date</th>
-                                    <th className="px-4 py-3">Market</th>
-                                    <th className="px-4 py-3">Advertiser</th>
-                                    <th className="px-4 py-3">Campaign</th>
-                                    <th className="px-4 py-3">Product</th>
-                                    <th className="px-4 py-3">Stage</th>
-                                    <th className="px-4 py-3 text-right">Qty</th>
+                                <tr className="text-[10px] font-semibold text-gray-500 bg-gray-50 border-b border-gray-200 uppercase tracking-wider">
+                                    <th className="px-2 py-2 w-[90px]">Reason</th>
+                                    <th className="px-2 py-2 w-[90px]">Campaign #</th>
+                                    <th className="px-2 py-2 w-[75px]">Start Date</th>
+                                    <th className="px-2 py-2 w-[100px]">Market</th>
+                                    <th className="px-2 py-2 w-[180px]">Advertiser</th>
+                                    <th className="px-2 py-2 w-[180px]">Campaign</th>
+                                    <th className="px-2 py-2 w-[110px]">Product</th>
+                                    <th className="px-2 py-2 w-[120px]">Stage</th>
+                                    <th className="px-2 py-2 text-right w-[50px]">Qty</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                                 {data.map((row, i) => (
-                                    <tr key={i} onClick={() => onRowClick && onRowClick(row)} className="hover:bg-orange-50 cursor-pointer transition-colors bg-orange-25">
-                                        <td className="px-4 py-3">
-                                            <span className={`px-2 py-1 rounded text-xs font-bold ${
-                                                row.ghostReason === 'No Stage' ? 'bg-purple-100 text-purple-700' : 
-                                                row.ghostReason === 'No Product' ? 'bg-pink-100 text-pink-700' : 
+                                    <tr key={i} onClick={() => onRowClick && onRowClick(row)} className="hover:bg-orange-50 cursor-pointer transition-colors">
+                                        <td className="px-2 py-2">
+                                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                                row.ghostReason === 'No Stage' ? 'bg-purple-100 text-purple-700' :
+                                                row.ghostReason === 'No Product' ? 'bg-pink-100 text-pink-700' :
                                                 'bg-orange-100 text-orange-700'
                                             }`}>
                                                 {row.ghostReason || 'No Owner'}
                                             </span>
                                         </td>
-                                        <td className="px-4 py-3 text-xs font-mono text-orange-700 font-bold">{row.id}</td>
-                                        <td className="px-4 py-3 text-sm text-gray-600">{row.date}</td>
-                                        <td className="px-4 py-3 text-sm">
-                                            <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs">{row.market || '-'}</span>
+                                        <td className="px-2 py-2 text-[10px] font-mono text-orange-700 font-bold">{row.id}</td>
+                                        <td className="px-2 py-2 text-xs text-gray-600 whitespace-nowrap">{row.date}</td>
+                                        <td className="px-2 py-2">
+                                            <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] truncate block" title={row.market}>{row.market || '-'}</span>
                                         </td>
-                                        <td className="px-4 py-3 font-medium text-gray-900">{row.advertiser}</td>
-                                        <td className="px-4 py-3 text-sm text-gray-600">{row.name}</td>
-                                        <td className="px-4 py-3 text-center">
+                                        <td className="px-2 py-2 text-xs font-medium text-gray-900 truncate" title={row.advertiser}>{row.advertiser}</td>
+                                        <td className="px-2 py-2 text-xs text-gray-600 truncate" title={row.name}>{row.name}</td>
+                                        <td className="px-2 py-2 text-center">
                                             {row.product ? (
-                                                <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${row.isPremium ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-purple-50 text-purple-700'}`} title={row.product}>
+                                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${row.isPremium ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-purple-50 text-purple-700'}`} title={row.product}>
                                                     {row.isPremium && <span className="mr-0.5">⭐</span>}
                                                     {abbreviateProduct(row.product)}
                                                 </span>
                                             ) : (
-                                                <span className="text-pink-500 italic text-xs">No Product</span>
+                                                <span className="text-pink-500 italic text-[10px]">No Product</span>
                                             )}
                                         </td>
-                                        <td className="px-4 py-3">
-                                            <span className={`px-2 py-1 rounded text-xs border ${getStatusColor(row.stage, row.dateObj)}`}>{row.stage || 'No Stage'}</span>
+                                        <td className="px-2 py-2">
+                                            <span className={`px-1.5 py-0.5 rounded text-[10px] border ${getStatusColor(row.stage, row.dateObj)}`}>{row.stage || 'No Stage'}</span>
                                         </td>
-                                        <td className="px-4 py-3 text-right text-sm font-mono text-gray-600">{row.quantity || row.totalQty}</td>
+                                        <td className="px-2 py-2 text-right text-xs font-semibold text-gray-900">{row.quantity || row.totalQty}</td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -5184,41 +5287,42 @@
         // ═══════════════════════════════════════════════════════════════════════════
         // COLLAPSED MINI-BAR with Waterfall Cascade
         // ═══════════════════════════════════════════════════════════════════════════
-        const CollapsedMiniBar = ({ view, setView, onLogout }) => {
-            
+        const CollapsedMiniBar = ({ view, setView, onLogout, position = 'left', onOpenPositionPicker, onDragStart }) => {
+
+            // Loop 5: Added human-readable labels for collapsed sidebar tooltips
             const moduleItems = [
-                { id: 'search', icon: 'Search' },  // Global campaign search
-                { id: 'dashboard', icon: 'LayoutDashboard' },
-                { id: 'holdReport', icon: 'ClipboardList' },
-                { id: 'availability', icon: 'Calendar' },
-                { id: 'riskAnalysis', icon: 'ShieldAlert' },
-                { id: 'master', icon: 'Hammer' },
-                { id: 'specialMedia', icon: 'Megaphone' },
-                { id: 'popGallery', icon: 'Camera' },
-                { id: 'materialReceivers', icon: 'Package' },
-                { id: 'performanceReport', icon: 'FileText' },
+                { id: 'search', icon: 'Search', label: 'Search' },
+                { id: 'dashboard', icon: 'LayoutDashboard', label: 'Dashboard' },
+                { id: 'holdReport', icon: 'ClipboardList', label: 'Hold Report' },
+                { id: 'availability', icon: 'Calendar', label: 'Availability' },
+                { id: 'riskAnalysis', icon: 'ShieldAlert', label: 'Risk Analysis' },
+                { id: 'master', icon: 'Hammer', label: 'Master Tracker' },
+                { id: 'specialMedia', icon: 'Megaphone', label: 'Special Media' },
+                { id: 'popGallery', icon: 'Camera', label: 'POP Gallery' },
+                { id: 'materialReceivers', icon: 'Package', label: 'Materials' },
+                { id: 'performanceReport', icon: 'FileText', label: 'Performance' },
             ];
-            
+
             const pipelineItems = [
-                { id: 'delayedFlights', icon: 'Flame' },
-                { id: 'onHoldCampaigns', icon: 'Pause' },
-                { id: 'inProgressFlights', icon: 'Rocket' },
-                { id: 'fullyInstalledThisWeek', icon: 'Medal' },
-                { id: 'rotations', icon: 'Repeat' },
-                { id: 'thisWeek', icon: 'Calendar' },
-                { id: 'upcoming', icon: 'Sun' },
-                { id: 'materialReadyFuture', icon: 'Archive' },
-                { id: 'nextMonth', icon: 'Clock' },
-                { id: 'pipelineSummary', icon: 'BarChart' },
+                { id: 'delayedFlights', icon: 'Flame', label: 'Delayed' },
+                { id: 'onHoldCampaigns', icon: 'Pause', label: 'On Hold' },
+                { id: 'inProgressFlights', icon: 'Rocket', label: 'In Progress' },
+                { id: 'fullyInstalledThisWeek', icon: 'Medal', label: 'Installed This Week' },
+                { id: 'rotations', icon: 'Repeat', label: 'Rotations' },
+                { id: 'thisWeek', icon: 'Calendar', label: 'This Week' },
+                { id: 'upcoming', icon: 'Sun', label: 'Upcoming' },
+                { id: 'materialReadyFuture', icon: 'Archive', label: 'Material Ready' },
+                { id: 'nextMonth', icon: 'Clock', label: 'Next Month' },
+                { id: 'pipelineSummary', icon: 'BarChart', label: 'Pipeline Summary' },
             ];
-            
+
             const historyItems = [
-                { id: 'pendingRemovals', icon: 'Trash2' },
-                { id: 'activeInstalls', icon: 'Hammer' },
-                { id: 'awaitingPop', icon: 'Camera' },
-                { id: 'completedCampaigns', icon: 'CheckCircle' },
-                { id: 'lostOpportunities', icon: 'XCircle' },
-                { id: 'impressions', icon: 'MapPin' },
+                { id: 'pendingRemovals', icon: 'Trash2', label: 'Pending Removals' },
+                { id: 'activeInstalls', icon: 'Hammer', label: 'Active Installs' },
+                { id: 'awaitingPop', icon: 'Camera', label: 'Awaiting POP' },
+                { id: 'completedCampaigns', icon: 'CheckCircle', label: 'Completed' },
+                { id: 'lostOpportunities', icon: 'XCircle', label: 'Lost Opportunities' },
+                { id: 'impressions', icon: 'MapPin', label: 'Impressions' },
             ];
             
             const IconButton = ({ item, colorClass, bgClass, borderClass, hoverBorderClass, index = 0, isVisible = true }) => (
@@ -5234,7 +5338,7 @@
                         transform: isVisible ? 'translateY(0) scale(1)' : 'translateY(-10px) scale(0.8)',
                         transitionDelay: isVisible ? `${index * 50}ms` : '0ms',
                     }}
-                    title={item.id}
+                    title={item.label || item.id}
                 >
                     <Icon
                         name={item.icon}
@@ -5245,7 +5349,17 @@
             );
             
             return (
-                <div className="w-full h-full bg-gradient-to-b from-slate-800 to-slate-950 flex flex-col items-center py-3 overflow-y-auto hide-scrollbar">
+                <div className="w-full h-full bg-gradient-to-b from-slate-800 to-slate-950 flex flex-col items-center py-2 overflow-y-auto hide-scrollbar">
+                    {/* Drag handle at top */}
+                    {onDragStart && (
+                        <div
+                            className="w-10 h-5 mb-2 flex items-center justify-center cursor-grab active:cursor-grabbing hover:bg-slate-700/50 rounded transition-colors"
+                            onMouseDown={onDragStart}
+                            title="Drag to reposition sidebar"
+                        >
+                            <Icon name="GripHorizontal" size={14} className="text-slate-500" />
+                        </div>
+                    )}
                     {/* Modules Section - Always show all */}
                     <div className="text-cyan-400 text-[9px] font-bold mb-2 tracking-wider">MOD</div>
                     {moduleItems.map((item, i) => (
@@ -5299,6 +5413,16 @@
                     </div>
                     
                     <div className="flex-1" />
+                    {/* Position picker button — opens popup to select any edge */}
+                    {onOpenPositionPicker && (
+                        <button
+                            onClick={onOpenPositionPicker}
+                            className="w-8 h-8 mb-1 border border-slate-700 rounded-lg flex items-center justify-center text-slate-500 hover:text-purple-400 hover:border-purple-400 hover:bg-purple-500/10 transition-colors"
+                            title="Change sidebar position"
+                        >
+                            <Icon name="Move" size={14} />
+                        </button>
+                    )}
                     <button
                         onClick={onLogout}
                         className="w-8 h-8 mb-3 border border-slate-700 rounded-lg flex items-center justify-center text-slate-500 hover:text-red-400 hover:border-red-400 hover:bg-red-500/10 transition-colors"
@@ -5308,20 +5432,399 @@
                 </div>
             );
         };
-        
-        // Wrapper that handles collapse state
-        const Sidebar = ({ view, setView, onReset, onOpenDigest, onResetEmailLogs, onOpenSheetSettings, onLogout, ghostCount = 0, isCollapsed: externalCollapsed, setIsCollapsed: externalSetCollapsed }) => {
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // POSITION PICKER - Simple popup to select sidebar position
+        // Click the button → see 4 options → click to move sidebar
+        // ═══════════════════════════════════════════════════════════════════════════
+        const PositionPicker = ({ isOpen, onClose, currentPosition, onSelectPosition }) => {
+            if (!isOpen) return null;
+
+            const positions = [
+                { id: 'left', label: 'Left', icon: 'PanelLeft', description: 'Vertical sidebar on left' },
+                { id: 'right', label: 'Right', icon: 'PanelRight', description: 'Vertical sidebar on right' },
+                { id: 'top', label: 'Top', icon: 'PanelTop', description: 'Horizontal bar at top' },
+                { id: 'bottom', label: 'Bottom', icon: 'PanelBottom', description: 'Horizontal bar at bottom' },
+            ];
+
+            return (
+                <>
+                    {/* Backdrop */}
+                    <div
+                        className="fixed inset-0 z-[200] bg-black/20"
+                        onClick={onClose}
+                    />
+                    {/* Popup */}
+                    <div className="fixed z-[201] bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-3 min-w-[200px]"
+                         style={{
+                             top: '50%',
+                             left: '50%',
+                             transform: 'translate(-50%, -50%)',
+                         }}
+                    >
+                        <div className="text-xs text-slate-400 font-medium mb-2 px-1">Move Sidebar To</div>
+                        <div className="grid grid-cols-2 gap-2">
+                            {positions.map(pos => (
+                                <button
+                                    key={pos.id}
+                                    onClick={() => onSelectPosition(pos.id)}
+                                    className={`
+                                        flex flex-col items-center justify-center p-3 rounded-lg
+                                        transition-all duration-200
+                                        ${currentPosition === pos.id
+                                            ? 'bg-purple-600 text-white border-2 border-purple-400 shadow-lg'
+                                            : 'bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 hover:border-purple-500'
+                                        }
+                                    `}
+                                >
+                                    <Icon name={pos.icon} size={24} className={currentPosition === pos.id ? 'text-white' : 'text-slate-400'} />
+                                    <span className="text-xs font-medium mt-1">{pos.label}</span>
+                                </button>
+                            ))}
+                        </div>
+                        <div className="text-[10px] text-slate-500 mt-2 text-center">
+                            Click to move • ESC to close
+                        </div>
+                    </div>
+                </>
+            );
+        };
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // SIDEBAR DRAG GHOST - Visual feedback while dragging sidebar to new position
+        // Shows a glowing preview that follows your cursor
+        // ═══════════════════════════════════════════════════════════════════════════
+        const SidebarDragGhost = ({ position, targetEdge, isDragging }) => {
+            if (!isDragging) return null;
+
+            const isTargetHorizontal = targetEdge === 'top' || targetEdge === 'bottom';
+
+            // Ghost dimensions based on where it's heading
+            const width = isTargetHorizontal ? 300 : 80;
+            const height = isTargetHorizontal ? 56 : 240;
+
+            return (
+                <div
+                    className="fixed pointer-events-none z-[100] transition-all duration-150 ease-out"
+                    style={{
+                        left: position.x,
+                        top: position.y,
+                        transform: 'translate(-50%, -50%)',
+                    }}
+                >
+                    <div
+                        className="rounded-xl bg-gradient-to-br from-slate-800/95 to-slate-900/95
+                                   border-2 border-purple-500 shadow-[0_0_40px_rgba(168,85,247,0.5)]
+                                   backdrop-blur-sm transition-all duration-200"
+                        style={{ width, height }}
+                    >
+                        {/* Preview content */}
+                        <div className={`w-full h-full flex items-center justify-center gap-2 p-3 ${isTargetHorizontal ? 'flex-row' : 'flex-col'}`}>
+                            {/* Section previews */}
+                            <div className={`flex ${isTargetHorizontal ? 'flex-row gap-3' : 'flex-col gap-2'} items-center`}>
+                                <div className="flex items-center gap-1">
+                                    <div className="w-8 h-8 rounded-lg bg-cyan-500/30 border border-cyan-500/50 flex items-center justify-center">
+                                        <Icon name="LayoutDashboard" size={16} className="text-cyan-400" />
+                                    </div>
+                                    {isTargetHorizontal && (
+                                        <>
+                                            <div className="w-8 h-8 rounded-lg bg-cyan-500/20 border border-cyan-500/30" />
+                                            <div className="w-8 h-8 rounded-lg bg-cyan-500/20 border border-cyan-500/30" />
+                                        </>
+                                    )}
+                                </div>
+                                <div className={`${isTargetHorizontal ? 'w-px h-6' : 'h-px w-10'} bg-slate-600`} />
+                                <div className="flex items-center gap-1">
+                                    <div className="w-8 h-8 rounded-lg bg-purple-500/30 border border-purple-500/50 flex items-center justify-center">
+                                        <Icon name="Rocket" size={16} className="text-purple-400" />
+                                    </div>
+                                    {isTargetHorizontal && (
+                                        <>
+                                            <div className="w-8 h-8 rounded-lg bg-purple-500/20 border border-purple-500/30" />
+                                            <div className="w-8 h-8 rounded-lg bg-purple-500/20 border border-purple-500/30" />
+                                        </>
+                                    )}
+                                </div>
+                                <div className={`${isTargetHorizontal ? 'w-px h-6' : 'h-px w-10'} bg-slate-600`} />
+                                <div className="flex items-center gap-1">
+                                    <div className="w-8 h-8 rounded-lg bg-amber-500/30 border border-amber-500/50 flex items-center justify-center">
+                                        <Icon name="Trash2" size={16} className="text-amber-400" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {/* Target label */}
+                    <div className="absolute -bottom-8 left-1/2 -translate-x-1/2">
+                        <span className="bg-purple-600 text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide shadow-lg">
+                            {targetEdge}
+                        </span>
+                    </div>
+                </div>
+            );
+        };
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // EDGE GLOW INDICATORS - Show which edge the sidebar will snap to
+        // ═══════════════════════════════════════════════════════════════════════════
+        const EdgeGlowIndicators = ({ targetEdge, isDragging }) => {
+            if (!isDragging) return null;
+
+            return (
+                <>
+                    {['left', 'right', 'top', 'bottom'].map(edge => {
+                        const isTarget = edge === targetEdge;
+                        const isHorizontal = edge === 'top' || edge === 'bottom';
+
+                        return (
+                            <div
+                                key={edge}
+                                className={`fixed z-[99] transition-all duration-200 pointer-events-none
+                                    ${edge === 'left' ? 'left-0 top-0 h-full' : ''}
+                                    ${edge === 'right' ? 'right-0 top-0 h-full' : ''}
+                                    ${edge === 'top' ? 'top-0 left-0 w-full' : ''}
+                                    ${edge === 'bottom' ? 'bottom-0 left-0 w-full' : ''}
+                                `}
+                                style={{
+                                    width: isHorizontal ? '100%' : (isTarget ? '6px' : '3px'),
+                                    height: isHorizontal ? (isTarget ? '6px' : '3px') : '100%',
+                                    background: isTarget
+                                        ? 'linear-gradient(90deg, rgba(168,85,247,0.8), rgba(168,85,247,1), rgba(168,85,247,0.8))'
+                                        : 'linear-gradient(90deg, transparent, rgba(100,116,139,0.3), transparent)',
+                                    boxShadow: isTarget ? '0 0 20px rgba(168,85,247,0.8), 0 0 40px rgba(168,85,247,0.4)' : 'none',
+                                }}
+                            />
+                        );
+                    })}
+                </>
+            );
+        };
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // HORIZONTAL MINI-BAR - For top/bottom sidebar positioning
+        // Displays icons in a horizontal strip (collapsed-only mode for top/bottom)
+        // ═══════════════════════════════════════════════════════════════════════════
+        const HorizontalMiniBar = ({ view, setView, onLogout, position = 'top', onOpenPositionPicker, onDragStart }) => {
+            // Same items as CollapsedMiniBar
+            const moduleItems = [
+                { id: 'search', icon: 'Search', label: 'Search' },
+                { id: 'dashboard', icon: 'LayoutDashboard', label: 'Dashboard' },
+                { id: 'holdReport', icon: 'ClipboardList', label: 'Hold Report' },
+                { id: 'availability', icon: 'Calendar', label: 'Availability' },
+                { id: 'riskAnalysis', icon: 'ShieldAlert', label: 'Risk Analysis' },
+                { id: 'master', icon: 'Hammer', label: 'Master Tracker' },
+                { id: 'specialMedia', icon: 'Megaphone', label: 'Special Media' },
+                { id: 'popGallery', icon: 'Camera', label: 'POP Gallery' },
+                { id: 'materialReceivers', icon: 'Package', label: 'Materials' },
+                { id: 'performanceReport', icon: 'FileText', label: 'Performance' },
+            ];
+
+            const pipelineItems = [
+                { id: 'delayedFlights', icon: 'Flame', label: 'Delayed' },
+                { id: 'onHoldCampaigns', icon: 'Pause', label: 'On Hold' },
+                { id: 'inProgressFlights', icon: 'Rocket', label: 'In Progress' },
+                { id: 'fullyInstalledThisWeek', icon: 'Medal', label: 'Installed This Week' },
+                { id: 'rotations', icon: 'Repeat', label: 'Rotations' },
+                { id: 'thisWeek', icon: 'Calendar', label: 'This Week' },
+                { id: 'upcoming', icon: 'Sun', label: 'Upcoming' },
+                { id: 'materialReadyFuture', icon: 'Archive', label: 'Material Ready' },
+                { id: 'nextMonth', icon: 'Clock', label: 'Next Month' },
+                { id: 'pipelineSummary', icon: 'BarChart', label: 'Pipeline Summary' },
+            ];
+
+            const historyItems = [
+                { id: 'pendingRemovals', icon: 'Trash2', label: 'Pending Removals' },
+                { id: 'activeInstalls', icon: 'Hammer', label: 'Active Installs' },
+                { id: 'awaitingPop', icon: 'Camera', label: 'Awaiting POP' },
+                { id: 'completedCampaigns', icon: 'CheckCircle', label: 'Completed' },
+                { id: 'lostOpportunities', icon: 'XCircle', label: 'Lost Opportunities' },
+                { id: 'impressions', icon: 'MapPin', label: 'Impressions' },
+            ];
+
+            // Fluid icon button - fills available space evenly
+            const HorizontalIconButton = ({ item, colorClass, bgClass, borderClass }) => (
+                <button
+                    onClick={() => setView(item.id)}
+                    className={`flex-1 min-w-[40px] max-w-[52px] h-11 rounded-lg flex items-center justify-center transition-all duration-200 ${
+                        view === item.id
+                            ? `${bgClass} ${borderClass} shadow-lg scale-105`
+                            : 'border border-slate-700/50 hover:border-slate-500 hover:bg-slate-800/50'
+                    }`}
+                    title={item.label || item.id}
+                >
+                    <Icon
+                        name={item.icon}
+                        size={20}
+                        className={view === item.id ? colorClass : 'text-slate-400'}
+                    />
+                </button>
+            );
+
+            // Section component for consistent styling
+            const Section = ({ label, items, colorClass, bgClass, borderClass, labelColor }) => (
+                <div className="flex-1 flex items-center h-full">
+                    {/* Vertical label on left edge */}
+                    <div className={`h-full w-8 flex items-center justify-center bg-gradient-to-r from-slate-900 to-transparent`}>
+                        <span className={`text-[10px] ${labelColor} font-bold tracking-widest transform -rotate-90 whitespace-nowrap`}>
+                            {label}
+                        </span>
+                    </div>
+                    {/* Icons - evenly distributed */}
+                    <div className="flex-1 flex items-center justify-evenly gap-1 px-1">
+                        {items.map(item => (
+                            <HorizontalIconButton
+                                key={item.id}
+                                item={item}
+                                colorClass={colorClass}
+                                bgClass={bgClass}
+                                borderClass={borderClass}
+                            />
+                        ))}
+                    </div>
+                </div>
+            );
+
+            return (
+                <div className="w-full h-full bg-gradient-to-r from-slate-800 via-slate-900 to-slate-800 flex items-stretch">
+                    {/* Drag Handle - left edge */}
+                    <div
+                        className="w-10 flex items-center justify-center cursor-grab active:cursor-grabbing hover:bg-slate-700/50 border-r border-slate-700"
+                        onMouseDown={onDragStart}
+                        title="Drag to reposition sidebar"
+                    >
+                        <Icon name="GripVertical" size={18} className="text-slate-500" />
+                    </div>
+
+                    {/* MODULES section */}
+                    <Section
+                        label="MOD"
+                        items={moduleItems}
+                        colorClass="text-cyan-400"
+                        bgClass="bg-cyan-500/20"
+                        borderClass="border border-cyan-400"
+                        labelColor="text-cyan-500"
+                    />
+
+                    {/* Divider */}
+                    <div className="w-px bg-gradient-to-b from-transparent via-slate-600 to-transparent" />
+
+                    {/* PIPELINE section */}
+                    <Section
+                        label="PIPE"
+                        items={pipelineItems}
+                        colorClass="text-purple-400"
+                        bgClass="bg-purple-500/20"
+                        borderClass="border border-purple-400"
+                        labelColor="text-purple-500"
+                    />
+
+                    {/* Divider */}
+                    <div className="w-px bg-gradient-to-b from-transparent via-slate-600 to-transparent" />
+
+                    {/* HISTORY section */}
+                    <Section
+                        label="HIST"
+                        items={historyItems}
+                        colorClass="text-amber-400"
+                        bgClass="bg-amber-500/20"
+                        borderClass="border border-amber-400"
+                        labelColor="text-amber-500"
+                    />
+
+                    {/* Divider */}
+                    <div className="w-px bg-gradient-to-b from-transparent via-slate-600 to-transparent" />
+
+                    {/* Actions - right edge */}
+                    <div className="w-24 flex items-center justify-evenly border-l border-slate-700">
+                        {onOpenPositionPicker && (
+                            <button
+                                onClick={onOpenPositionPicker}
+                                className="w-11 h-11 border border-slate-700 rounded-lg flex items-center justify-center text-slate-500 hover:text-purple-400 hover:border-purple-400 hover:bg-purple-500/10 transition-colors"
+                                title="Change sidebar position"
+                            >
+                                <Icon name="Move" size={20} />
+                            </button>
+                        )}
+                        <button
+                            onClick={onLogout}
+                            className="w-11 h-11 border border-slate-700 rounded-lg flex items-center justify-center text-slate-500 hover:text-red-400 hover:border-red-400 hover:bg-red-500/10 transition-colors"
+                            title="Logout"
+                        >
+                            <Icon name="LogOut" size={20} />
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // SIDEBAR - Wrapper that handles collapse state + position (left/right/top/bottom)
+        // ═══════════════════════════════════════════════════════════════════════════
+        const Sidebar = ({ view, setView, onReset, onOpenDigest, onResetEmailLogs, onOpenSheetSettings, onLogout, ghostCount = 0, isCollapsed: externalCollapsed, setIsCollapsed: externalSetCollapsed, position = 'left', onOpenPositionPicker, isDragging = false, dragTarget = null, onDragStart, ghostPosition = { x: 0, y: 0 } }) => {
             const [internalCollapsed, setInternalCollapsed] = useState(false);
             const isCollapsed = externalCollapsed !== undefined ? externalCollapsed : internalCollapsed;
             const setIsCollapsed = externalSetCollapsed || setInternalCollapsed;
-            
+
+            // Position helpers
+            const isHorizontal = position === 'top' || position === 'bottom';
+            const isRight = position === 'right';
+            const isBottom = position === 'bottom';
+
+            // Position-based classes
+            const getPositionClasses = () => {
+                switch (position) {
+                    case 'left': return 'left-0 top-0 h-screen';
+                    case 'right': return 'right-0 top-0 h-screen';
+                    case 'top': return 'top-0 left-0 w-screen';
+                    case 'bottom': return 'bottom-0 left-0 w-screen';
+                    default: return 'left-0 top-0 h-screen';
+                }
+            };
+
+            // Dimensions based on position
+            const getDimensions = () => {
+                if (isHorizontal) {
+                    return { height: 56 }; // Horizontal: 56px height for larger icons
+                }
+                return { width: isCollapsed ? 64 : 320 }; // Vertical: 64/320px width
+            };
+
             return (
                 <>
-                    <div 
-                        className={`fixed left-0 top-0 h-screen z-20 hidden md:block transition-all duration-500 ease-in-out overflow-hidden`}
-                        style={{ width: isCollapsed ? 64 : 320 }}
+                    {/* Edge glow indicators during drag */}
+                    <EdgeGlowIndicators targetEdge={dragTarget} isDragging={isDragging} />
+
+                    {/* Ghost that follows cursor during drag */}
+                    <SidebarDragGhost
+                        position={ghostPosition}
+                        targetEdge={dragTarget}
+                        isDragging={isDragging}
+                    />
+
+                    {/* Main Sidebar Container - Fades during drag */}
+                    <div
+                        className={`fixed ${getPositionClasses()} z-20 hidden md:block transition-all duration-300 ease-in-out overflow-hidden`}
+                        style={{
+                            ...getDimensions(),
+                            opacity: isDragging ? 0.3 : 1,
+                            transform: isDragging ? 'scale(0.98)' : 'scale(1)',
+                            transition: 'opacity 0.2s ease, transform 0.2s ease, width 0.3s ease, height 0.3s ease',
+                        }}
                     >
-                        {!isCollapsed && (
+                        {/* HORIZONTAL MODE (top/bottom) - Always use HorizontalMiniBar */}
+                        {isHorizontal && (
+                            <HorizontalMiniBar
+                                view={view}
+                                setView={setView}
+                                onLogout={onLogout}
+                                position={position}
+                                onOpenPositionPicker={onOpenPositionPicker}
+                                onDragStart={onDragStart}
+                            />
+                        )}
+
+                        {/* VERTICAL MODE (left/right) - Canvas gears or collapsed mini-bar */}
+                        {!isHorizontal && !isCollapsed && (
                             <CanvasGearSidebar
                                 view={view}
                                 setView={setView}
@@ -5332,23 +5835,51 @@
                                 onOpenSheetSettings={onOpenSheetSettings}
                                 isCollapsed={isCollapsed}
                                 setIsCollapsed={setIsCollapsed}
+                                position={position}
+                                onOpenPositionPicker={onOpenPositionPicker}
                             />
                         )}
-                        
-                        {/* Collapsed mini-bar with waterfall cascade */}
-                        {isCollapsed && (
-                            <CollapsedMiniBar view={view} setView={setView} onLogout={onLogout} />
+
+                        {/* Collapsed vertical mini-bar */}
+                        {!isHorizontal && isCollapsed && (
+                            <CollapsedMiniBar
+                                view={view}
+                                setView={setView}
+                                onLogout={onLogout}
+                                position={position}
+                                onOpenPositionPicker={onOpenPositionPicker}
+                                onDragStart={onDragStart}
+                            />
                         )}
                     </div>
-                    
-                    {/* Toggle button */}
-                    <button
-                        onClick={() => setIsCollapsed(!isCollapsed)}
-                        className="fixed z-30 hidden md:flex items-center justify-center w-6 h-12 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-r-lg transition-all duration-300"
-                        style={{ left: isCollapsed ? 64 : 320, top: '50%', transform: 'translateY(-50%)' }}
-                    >
-                        <Icon name={isCollapsed ? 'ChevronRight' : 'ChevronLeft'} size={14} className="text-slate-400" />
-                    </button>
+
+                    {/* Toggle collapse button — only for vertical (left/right) positions */}
+                    {!isHorizontal && (
+                        <button
+                            onClick={() => setIsCollapsed(!isCollapsed)}
+                            className={`fixed z-30 hidden md:flex items-center justify-center w-6 h-12 bg-slate-800 hover:bg-slate-700 border border-slate-600 ${isRight ? 'rounded-l-lg' : 'rounded-r-lg'} transition-all duration-300`}
+                            style={{ [isRight ? 'right' : 'left']: isCollapsed ? 64 : 320, top: '50%', transform: 'translateY(-50%)' }}
+                        >
+                            <Icon name={isRight ? (isCollapsed ? 'ChevronLeft' : 'ChevronRight') : (isCollapsed ? 'ChevronRight' : 'ChevronLeft')} size={14} className="text-slate-400" />
+                        </button>
+                    )}
+
+                    {/* Drag handle for horizontal mode - show at edge */}
+                    {isHorizontal && (
+                        <div
+                            className={`fixed z-30 hidden md:flex items-center justify-center h-6 w-12 bg-slate-800 hover:bg-slate-700 border border-slate-600 cursor-grab active:cursor-grabbing ${isBottom ? 'rounded-t-lg' : 'rounded-b-lg'} transition-all duration-300`}
+                            style={{
+                                [isBottom ? 'bottom' : 'top']: 56,
+                                left: '50%',
+                                transform: 'translateX(-50%)'
+                            }}
+                            onMouseDown={onDragStart}
+                            title="Drag to reposition sidebar"
+                        >
+                            <Icon name="GripHorizontal" size={14} className="text-slate-400" />
+                        </div>
+                    )}
+
                 </>
             );
         };
@@ -5890,16 +6421,15 @@
 
 
         const AuthorizedDashboard = ({ onLogout }) => {
-            // Initialize view from localStorage, defaulting to 'upload' or 'dashboard' if data exists
+            // Initialize view - always start at dashboard if data exists (consistent UX on app open)
             const [view, setView] = useState(() => {
                 try {
-                    const savedView = localStorage.getItem('stap_current_view');
                     const savedData = localStorage.getItem('stap_csv_data');
-                    // If we have saved data, restore to saved view or default to dashboard
+                    // If we have saved data, always start at dashboard for predictable UX
                     if (savedData) {
                         const parsed = JSON.parse(savedData);
                         if ((parsed.holds?.length > 0) || (parsed.installs?.length > 0)) {
-                            return savedView || 'dashboard';
+                            return 'dashboard';
                         }
                     }
                     return 'upload';
@@ -5972,8 +6502,9 @@
                     const saved = localStorage.getItem('stap_csv_data');
                     if (saved) {
                         const parsed = JSON.parse(saved);
-                        console.log('📂 Loaded persisted CSV data:', parsed.holds?.length || 0, 'holds,', parsed.installs?.length || 0, 'installs');
-
+                        const source = parsed._source || 'unknown';
+                        const savedAt = parsed._savedAt || null;
+                        console.log(`📂 Loaded persisted data (source: ${source}${savedAt ? ', saved: ' + savedAt : ''}):`, parsed.holds?.length || 0, 'holds,', parsed.installs?.length || 0, 'installs');
                         return parsed;
                     }
                 } catch (e) {
@@ -6045,9 +6576,12 @@
                         try {
                             // Optimize data by removing redundant fields for storage
                             const optimizedData = {
+                                // Tag with source so we know on resume where data came from
+                                _source: dataSource.type || 'unknown',
+                                _savedAt: new Date().toISOString(),
                                 holds: baseData.holds?.map(item => {
                                     // Keep essential fields only, remove computed/display fields
-                                    const { 
+                                    const {
                                         // Keep these
                                         id, date, endDate, productEndDate, programEndDate,
                                         advertiser, name, rawName, owner, market, product, media,
@@ -6055,7 +6589,7 @@
                                         isGhost, ghostReason, isComplete, hasBonus, bonusNote,
                                         // Skip dateObj - we'll reconstruct from date string
                                         dateObj, endDateObj, productEndDateObj, programEndDateObj,
-                                        ...rest 
+                                        ...rest
                                     } = item;
                                     return {
                                         id, date, endDate, productEndDate, programEndDate,
@@ -6077,7 +6611,7 @@
                                     return rest;
                                 }) || []
                             };
-                            
+
                             const jsonString = JSON.stringify(optimizedData);
                             const sizeInMB = (jsonString.length / (1024 * 1024)).toFixed(2);
                             
@@ -6136,19 +6670,7 @@
                 }
             }, [dataSource]);
 
-            // Persist current view to localStorage whenever it changes
-            useEffect(() => {
-                try {
-                    // Don't persist 'upload' view - we want to go to dashboard if data exists
-                    if (view !== 'upload') {
-                        localStorage.setItem('stap_current_view', view);
-                    }
-                } catch (e) {
-                    console.warn('Could not persist view:', e);
-                }
-            }, [view]);
-
-            // Note: We no longer auto-navigate to dashboard on login.
+            // Note: View is no longer persisted - app always starts at dashboard for consistent UX.
             // Instead, we show a "Resume Previous Session" card on the upload screen
             // This gives users explicit control over whether to use cached data.
             
@@ -6190,14 +6712,14 @@
                         'stap_material_webhook',
                         'stap_pop_sheet_url',
                         'stap_mobile_sheet_url',
-                        'stap_proof_webhook'
+                        'stap_proof_webhook',
+                        'stap_sidebar_position'
                     ];
 
                     // Keys to CLEAR (all data/state)
                     const clearKeys = [
                         'stap_csv_data',
                         'stap_data_source',
-                        'stap_current_view',
                         'stap_manual_overrides',
                         'stap_materials_data',
                         'stap_materials_sheet',
@@ -6242,6 +6764,90 @@
             
             // SIDEBAR COLLAPSE STATE - for magical appear/vanish
             const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+            // SIDEBAR POSITION — 'left'|'right'|'top'|'bottom' (persisted, like macOS Dock)
+            const VALID_POSITIONS = ['left', 'right', 'top', 'bottom'];
+            const [sidebarPosition, setSidebarPosition] = useState(() => {
+                const saved = localStorage.getItem('stap_sidebar_position');
+                return VALID_POSITIONS.includes(saved) ? saved : 'left';
+            });
+            // Helper: is the sidebar in horizontal mode (top/bottom)?
+            const isHorizontalSidebar = sidebarPosition === 'top' || sidebarPosition === 'bottom';
+
+            // Position picker popup state (for click-to-select)
+            const [showPositionPicker, setShowPositionPicker] = useState(false);
+
+            // DRAG STATE - Ghost follows cursor, snaps to nearest edge
+            const [isDraggingSidebar, setIsDraggingSidebar] = useState(false);
+            const [dragTarget, setDragTarget] = useState(null);
+            const [ghostPosition, setGhostPosition] = useState({ x: 0, y: 0 });
+
+            // Set sidebar position (shared by drag and picker)
+            const setSidebarPositionAndPersist = (newPosition) => {
+                if (!VALID_POSITIONS.includes(newPosition)) return;
+                setSidebarPosition(newPosition);
+                localStorage.setItem('stap_sidebar_position', newPosition);
+                setShowPositionPicker(false);
+                // Auto-collapse when switching to horizontal (top/bottom)
+                if (newPosition === 'top' || newPosition === 'bottom') {
+                    setSidebarCollapsed(true);
+                }
+            };
+
+            // DRAG HANDLERS - Start drag from grip handle
+            const handleSidebarDragStart = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setGhostPosition({ x: e.clientX, y: e.clientY });
+                setIsDraggingSidebar(true);
+                setDragTarget(sidebarPosition); // Start with current position
+            };
+
+            // Global mouse listeners for drag (attached when dragging)
+            useEffect(() => {
+                if (!isDraggingSidebar) return;
+
+                const handleMouseMove = (e) => {
+                    // Update ghost position to follow cursor
+                    setGhostPosition({ x: e.clientX, y: e.clientY });
+
+                    // Calculate nearest edge
+                    const { innerWidth: vw, innerHeight: vh } = window;
+                    const { clientX: x, clientY: y } = e;
+                    const distances = {
+                        left: x,
+                        right: vw - x,
+                        top: y,
+                        bottom: vh - y
+                    };
+                    const nearest = Object.entries(distances)
+                        .sort((a, b) => a[1] - b[1])[0][0];
+                    setDragTarget(nearest);
+                };
+
+                const handleMouseUp = () => {
+                    // Apply the position change
+                    if (dragTarget && dragTarget !== sidebarPosition) {
+                        setSidebarPositionAndPersist(dragTarget);
+                    }
+                    // Clean up drag state
+                    setIsDraggingSidebar(false);
+                    setDragTarget(null);
+                };
+
+                // Prevent text selection and set cursor
+                document.body.style.userSelect = 'none';
+                document.body.style.cursor = 'grabbing';
+
+                window.addEventListener('mousemove', handleMouseMove);
+                window.addEventListener('mouseup', handleMouseUp);
+
+                return () => {
+                    document.body.style.userSelect = '';
+                    document.body.style.cursor = '';
+                    window.removeEventListener('mousemove', handleMouseMove);
+                    window.removeEventListener('mouseup', handleMouseUp);
+                };
+            }, [isDraggingSidebar, dragTarget, sidebarPosition]);
 
             // LIVE MODE - Set to true when real data is uploaded
             const [isLiveMode, setIsLiveMode] = useState(false);
@@ -6869,6 +7475,18 @@
             // ----------------------------------
 
             const processData = async () => {
+                // Warn if overwriting live Google Sheet data with a static CSV
+                const isSheetActive = dataSource.type === 'google_sheet' || baseData._source === 'google_sheet';
+                if (isSheetActive) {
+                    const proceed = confirm(
+                        '⚠️ You have a live Google Sheet connection.\n\n' +
+                        'Uploading a CSV will replace the live data with a static snapshot.\n' +
+                        'Your Google Sheet URL is still saved — you can re-sync anytime.\n\n' +
+                        'Continue with CSV upload?'
+                    );
+                    if (!proceed) return;
+                }
+
                 setProcessing(true);
                 await new Promise(r => setTimeout(r, 800));
 
@@ -6884,9 +7502,9 @@
                         const text = await files.holds.text();
                         rawHolds = parseCSV(text);
                     }
-                    
+
                     runProcessingLogic(rawHolds, rawInstalls);
-                    
+
                     // Track data source as CSV upload
                     setDataSource({
                         type: 'csv_upload',
@@ -7508,56 +8126,7 @@ As Senior Director of Operations, provide an operational briefing using THIS EXA
 
 Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Use ✅ for green, 🟡 for caution, 🔴 for critical.`;
 
-                // DEBUG: Comprehensive special media detection logging
-                const debugSpecialMediaRegex = /wrap|domination|takeover|special|custom/i;
-
-                // Get ALL unique products in dataset
-                const allUniqueProducts = [...new Set(safeCampaigns.map(c => c.product || c.media || 'NO PRODUCT'))];
-
-                // Test each unique product against regex
-                const productRegexTests = allUniqueProducts.map(prod => ({
-                    product: prod,
-                    matches: debugSpecialMediaRegex.test(prod.toLowerCase()),
-                    lowercase: prod.toLowerCase()
-                }));
-
-                const potentialSpecialMedia = safeCampaigns.filter(c => {
-                    const prod = (c.product || c.media || '').toLowerCase();
-                    return debugSpecialMediaRegex.test(prod);
-                }).map(c => ({ advertiser: c.advertiser, product: c.product || c.media, stage: c.stage }));
-
-                console.log('🔍 SPECIAL MEDIA DEBUG - All unique products:', allUniqueProducts);
-                console.log('🔍 SPECIAL MEDIA DEBUG - Regex test results:', productRegexTests);
-                console.log('🔍 SPECIAL MEDIA DEBUG - Matching campaigns:', potentialSpecialMedia);
-                console.log('🔍 SPECIAL MEDIA DEBUG - Metrics object:', specialMediaMetrics);
-
-                console.log('🎯 AI Analysis Debug:', {
-                    filters: filterNote,
-                    totalCampaigns: safeCampaigns.length,
-                    allUniqueProducts: allUniqueProducts,
-                    specialMedia: {
-                        total: specialMediaMetrics.total.count,
-                        inProgress: specialMediaMetrics.inProgress.count,
-                        completed: specialMediaMetrics.completed.count,
-                        campaigns: specialMediaMetrics.inProgress.campaigns,
-                        potentialMatches: potentialSpecialMedia,
-                        regexTests: productRegexTests.filter(p => p.matches)
-                    },
-                    holds: {
-                        count: holdMetrics.count,
-                        qty: holdMetrics.totalQty,
-                        campaigns: holdMetrics.campaigns
-                    },
-                    materials: {
-                        awaiting: materialMetrics.awaitingMaterial.count,
-                        campaigns: materialMetrics.awaitingMaterial.campaigns.slice(0, 5)
-                    },
-                    sampleProducts: safeCampaigns.slice(0, 10).map(c => ({
-                        advertiser: c.advertiser,
-                        product: c.product || c.media || 'NO PRODUCT',
-                        stage: c.stage
-                    }))
-                });
+                // Loop 5: Removed verbose SPECIAL MEDIA DEBUG logging (50 lines)
 
                 try {
                     const text = await callGroq(prompt, 2000);
@@ -7857,10 +8426,8 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                         const uniqueKey = `${item.id}_${item.date}_${item.product || item.media}`;
                         const override = manualOverrides[uniqueKey];
                         if (override) {
-                            console.log('📋 Applying override for:', uniqueKey, override);
                             // Apply stage override
                             if (override.stage) {
-                                console.log('  → Stage override:', item.stage, '→', override.stage);
                                 item.stage = override.stage;
                                 item.isOverridden = true;
                                 // Recalculate isComplete based on stage hierarchy
@@ -7873,8 +8440,8 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                             if (override.previousStage) {
                                 item.previousStage = override.previousStage;
                             }
-                            // Apply adjusted quantity override (charted qty)
-                            if (override.adjustedQty && override.adjustedQty > 0) {
+                            // Apply adjusted quantity override (charted qty) — allow 0 for ghost bookings
+                            if (override.adjustedQty !== undefined && override.adjustedQty !== null) {
                                 item.adjustedQty = override.adjustedQty;
                                 item.hasQtyAdjustment = true;
                                 item.isOverridden = true;
@@ -7883,8 +8450,8 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                             if (override.installed !== undefined) {
                                 item.totalInstalled = override.installed;
                                 item.installed = override.installed;
-                                // Recalculate pending using adjustedQty if set, else original qty
-                                const targetQty = item.adjustedQty || item.totalQty || item.quantity || 0;
+                                // Recalculate pending — use adjustedQty when explicitly set (even 0), else original qty
+                                const targetQty = (item.hasQtyAdjustment && item.adjustedQty !== undefined) ? item.adjustedQty : (item.totalQty || item.quantity || 0);
                                 item.pending = Math.max(0, targetQty - override.installed);
                                 // Update progress
                                 if (targetQty > 0) {
@@ -8031,6 +8598,10 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                         if (isMaterialReady && !isFiller && hasStarted && isWithinInProgressWindow) {
                             categories.inProgressFlights.push(item);
                         }
+                        // Also include "Installed" campaigns with outstanding work (rotation/copy change)
+                        if (hasOutstandingWork && hasStarted && isWithinInProgressWindow && !isFiller) {
+                            categories.inProgressFlights.push(item);
+                        }
                         
                         // --- MATERIAL READY - FUTURE 📦 ---
                         // Material Ready but start date is in the future (upcoming installs)
@@ -8055,7 +8626,9 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                                                 campId.includes("filler campaign") ||
                                                 isFiller;
                         
-                        const isCompletedStage = ['installed', 'photos taken', 'pop completed', 'takedown complete', 'canceled', 'lost opportunity'].includes(stageLower);
+                        // "Installed" is NOT completed if there's still pending work (rotation/copy change scenario)
+                        const hasOutstandingWork = item.needsReview || (stageLower === 'installed' && (item.pending > 0 || (item.adjustedQty && item.adjustedQty > (item.totalInstalled || item.installed || 0))));
+                        const isCompletedStage = ['installed', 'photos taken', 'pop completed', 'takedown complete', 'canceled', 'cancelled', 'lost opportunity'].includes(stageLower) && !hasOutstandingWork;
                         const isPastStartDate = item.dateObj < today;
 
                         // 7-day grace period - only consider delayed if 7+ days past start date
@@ -8116,7 +8689,7 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                         if (item.dateObj >= nextMonthStart && item.dateObj <= nextMonthEnd) { categories.nextMonth.push(item); }
                         
                         // UPCOMING
-                        if (item.dateObj >= nextWeekStart && item.dateObj <= nextWeekEnd && item.stage && !stageLower.includes('canceled')) {
+                        if (item.dateObj >= nextWeekStart && item.dateObj <= nextWeekEnd && item.stage && !stageLower.includes('canceled') && !stageLower.includes('cancelled')) {
                             categories.upcoming.push(item);
                         }
 
@@ -8155,9 +8728,12 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                     // 45-day deadline for removal, sorted by urgency
                     const REMOVAL_DEADLINE_DAYS = 45;
                     categories.pendingRemovals = Array.from(expiredMap.values()).map(item => {
+                        // Use contract/program end date for deadline when available, else flight end date
                         const endDate = item.endDateObj || new Date(item.endDate);
+                        const contractEndDate = item.programEndDateObj || null;
+                        const deadlineBaseDate = contractEndDate || endDate;
                         const daysSinceExpired = Math.floor((today - endDate) / (1000 * 60 * 60 * 24));
-                        const daysUntilDeadline = REMOVAL_DEADLINE_DAYS - daysSinceExpired;
+                        const daysUntilDeadline = REMOVAL_DEADLINE_DAYS - Math.floor((today - deadlineBaseDate) / (1000 * 60 * 60 * 24));
 
                         // Check for removal overrides in manualOverrides
                         const uniqueKey = `${item.id}_${item.date}_${item.product || item.media}`;
@@ -8171,7 +8747,7 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                         const removedCount = override.removedCount || 0;
                         const removalPending = Math.max(0, removalQty - removedCount);
                         const removalPct = removalQty > 0 ? Math.round((removedCount / removalQty) * 100) : 0;
-                        const removalStatus = override.removalStatus || 'scheduled'; // scheduled, in_progress, complete
+                        const removalStatus = override.removalStatus || 'scheduled'; // scheduled, in_progress, removed, blocked
                         const removalAssignee = override.removalAssignee || '';
                         const removalPhotosLink = override.removalPhotosLink || '';
                         const hasReplacement = override.hasReplacement || false;
@@ -8209,13 +8785,13 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                     const allRemovals = categories.pendingRemovals;
                     categories.pendingRemovals = allRemovals.filter(item => {
                         const stageLower = (item.stage || '').toLowerCase();
-                        const isComplete = stageLower === 'takedown complete' || item.removalStatus === 'complete';
+                        const isComplete = stageLower === 'takedown complete' || item.removalStatus === 'removed' || item.removalStatus === 'complete';
                         return !isComplete;
                     }).sort((a, b) => b.removalRiskScore - a.removalRiskScore); // Highest risk first
 
                     categories.completedRemovals = allRemovals.filter(item => {
                         const stageLower = (item.stage || '').toLowerCase();
-                        return stageLower === 'takedown complete' || item.removalStatus === 'complete';
+                        return stageLower === 'takedown complete' || item.removalStatus === 'removed' || item.removalStatus === 'complete';
                     }).map(item => ({ ...item, isRemovalComplete: true }))
                     .sort((a, b) => b.removalRiskScore - a.removalRiskScore);
 
@@ -8275,39 +8851,6 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                 categories.completedCampaigns.sort((a,b) => b.endDateObj - a.endDateObj); // Most recently completed first
                 categories.awaitingPop.sort((a,b) => a.dateObj - b.dateObj); // Oldest first (longest waiting for POP)
 
-                // 🐛 DEBUG: Log stage values and installed filter results
-                if (categories.all && categories.all.length > 0) {
-                    const stageValues = {};
-                    const installedItems = [];
-                    const startOfWeekDebug = new Date(today);
-                    startOfWeekDebug.setDate(today.getDate() - today.getDay());
-                    startOfWeekDebug.setHours(0,0,0,0);
-
-                    categories.all.forEach(item => {
-                        const stage = (item.stage || 'EMPTY').trim();
-                        stageValues[stage] = (stageValues[stage] || 0) + 1;
-
-                        if (stage.toLowerCase() === 'installed') {
-                            installedItems.push({
-                                name: item.name?.substring(0, 30),
-                                stage: item.stage,
-                                date: item.date,
-                                dateObj: item.dateObj,
-                                inThisWeek: item.dateObj >= startOfWeekDebug && item.dateObj <= today
-                            });
-                        }
-                    });
-
-                    console.log('🐛 DEBUG: Stage Values in Data:', stageValues);
-                    console.log('🐛 DEBUG: Items with "Installed" stage:', installedItems.length);
-                    console.log('🐛 DEBUG: Week range:', startOfWeekDebug.toDateString(), 'to', today.toDateString());
-                    if (installedItems.length > 0) {
-                        console.log('🐛 DEBUG: First 5 Installed items:', installedItems.slice(0, 5));
-                        console.log('🐛 DEBUG: Items in this week:', installedItems.filter(i => i.inThisWeek).length);
-                    }
-                    console.log('🐛 DEBUG: fullyInstalledThisWeek count:', categories.fullyInstalledThisWeek.length);
-                }
-
                 // 2. Master Tracking: Everything EXCEPT Lost Opportunities and Ghosts (unless included)
                 if (baseData.installs) {
                     categories.masterTracking = [...baseData.installs]
@@ -8360,9 +8903,10 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                         .filter(i => {
                             // Exclude ghosts unless explicitly included
                             if (i.isGhost && !includeGhosts) return false;
-                            // Exclude Lost Opportunities (includes -none- stage)
+                            // Exclude Lost Opportunities, Cancelled, and empty stages
                             const stageLower = (i.stage || '').toLowerCase().trim();
                             if (stageLower === 'lost opportunity' || stageLower === '- none -' || stageLower === '-none-') return false;
+                            if (stageLower === 'canceled' || stageLower === 'cancelled') return false;
                             return true;
                         });
                     // Ensure sorting consistency
@@ -8537,7 +9081,7 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
 
                     // Filter to only flights that have STARTED (past or today start date)
                     // and are NOT fully complete
-                    const completedStages = ['installed', 'photos taken', 'pop completed', 'takedown complete', 'canceled', 'lost opportunity'];
+                    const completedStages = ['installed', 'photos taken', 'pop completed', 'takedown complete', 'canceled', 'cancelled', 'lost opportunity'];
                     const startedFlights = combined.filter(item => {
                         const startDate = item.dateObj || new Date(item.date);
                         const hasStarted = startDate <= today;
@@ -8810,48 +9354,88 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                             </div>
 
                             {/* --- RESTORE PREVIOUS SESSION (if persisted data exists) --- */}
-                            {baseData.holds?.length > 0 && (
-                                <div className={`mb-4 p-3 rounded-lg border ${storageWarning ? 'bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200' : 'bg-gradient-to-r from-purple-50 to-indigo-50 border-purple-200'}`}>
-                                    <div className="flex items-center justify-between gap-3">
-                                        <div className="flex items-center gap-2 min-w-0">
-                                            <div className={`p-1.5 rounded-lg flex-shrink-0 ${storageWarning ? 'bg-amber-100' : 'bg-purple-100'}`}>
-                                                <Icon name={storageWarning ? "AlertTriangle" : "Database"} size={16} className={storageWarning ? 'text-amber-600' : 'text-purple-600'} />
+                            {baseData.holds?.length > 0 && (() => {
+                                const cachedSource = baseData._source || 'unknown';
+                                const cachedAt = baseData._savedAt ? new Date(baseData._savedAt) : null;
+                                const isSheetData = cachedSource === 'google_sheet';
+                                const hasSheetUrl = !!localStorage.getItem('stap_google_sheet_url');
+                                const isStale = cachedAt && (Date.now() - cachedAt.getTime()) > 4 * 60 * 60 * 1000; // >4 hours old
+
+                                return (
+                                    <div className={`mb-4 p-3 rounded-lg border ${
+                                        storageWarning ? 'bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200' :
+                                        isSheetData ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-200' :
+                                        'bg-gradient-to-r from-purple-50 to-indigo-50 border-purple-200'
+                                    }`}>
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <div className={`p-1.5 rounded-lg flex-shrink-0 ${
+                                                    storageWarning ? 'bg-amber-100' :
+                                                    isSheetData ? 'bg-green-100' : 'bg-purple-100'
+                                                }`}>
+                                                    <Icon name={storageWarning ? "AlertTriangle" : isSheetData ? "Wifi" : "Database"} size={16} className={
+                                                        storageWarning ? 'text-amber-600' :
+                                                        isSheetData ? 'text-green-600' : 'text-purple-600'
+                                                    } />
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <h4 className={`font-bold text-sm ${
+                                                        storageWarning ? 'text-amber-900' :
+                                                        isSheetData ? 'text-green-900' : 'text-purple-900'
+                                                    }`}>
+                                                        {storageWarning ? 'Session (Limited)' :
+                                                         isSheetData ? (isStale ? 'Google Sheet (Stale)' : 'Google Sheet Data') :
+                                                         'Previous Session (CSV)'}
+                                                    </h4>
+                                                    <p className={`text-xs truncate ${
+                                                        storageWarning ? 'text-amber-600' :
+                                                        isSheetData ? 'text-green-600' : 'text-purple-600'
+                                                    }`}>
+                                                        {baseData.holds.length.toLocaleString()} campaigns
+                                                        {cachedAt && ` • saved ${cachedAt.toLocaleDateString()} ${cachedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
+                                                        {isSheetData && isStale && ' • may be outdated'}
+                                                    </p>
+                                                </div>
                                             </div>
-                                            <div className="min-w-0">
-                                                <h4 className={`font-bold text-sm ${storageWarning ? 'text-amber-900' : 'text-purple-900'}`}>
-                                                    {storageWarning ? 'Session (Limited)' : 'Previous Session'}
-                                                </h4>
-                                                <p className={`text-xs truncate ${storageWarning ? 'text-amber-600' : 'text-purple-600'}`}>
-                                                    {baseData.holds.length.toLocaleString()} campaigns
-                                                    {dataSource.timestamp && ` • ${new Date(dataSource.timestamp).toLocaleDateString()}`}
-                                                </p>
+                                            <div className="flex gap-1.5 flex-shrink-0">
+                                                {/* If sheet data is stale, show Re-sync as primary action */}
+                                                {isSheetData && isStale && hasSheetUrl && (
+                                                    <button
+                                                        onClick={() => handleLiveSync()}
+                                                        className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold text-xs transition-colors flex items-center gap-1.5"
+                                                    >
+                                                        <Icon name="RefreshCw" size={12} /> Re-sync
+                                                    </button>
+                                                )}
+                                                <button
+                                                    onClick={() => {
+                                                        setView('dashboard');
+                                                        setDataSource(prev => ({ ...prev, type: isSheetData ? 'google_sheet' : 'persisted_csv', autoRestored: true }));
+                                                    }}
+                                                    className={`px-3 py-1.5 text-white rounded-lg font-bold text-xs transition-colors flex items-center gap-1.5 ${
+                                                        storageWarning ? 'bg-amber-600 hover:bg-amber-700' :
+                                                        isSheetData ? 'bg-green-600 hover:bg-green-700' :
+                                                        'bg-purple-600 hover:bg-purple-700'
+                                                    }`}
+                                                >
+                                                    <Icon name="Play" size={12} /> Resume
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        if (confirm('Clear all cached data?')) {
+                                                            handleResetData(true);
+                                                        }
+                                                    }}
+                                                    className="p-1.5 bg-white text-red-500 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
+                                                    title="Clear cache"
+                                                >
+                                                    <Icon name="Trash2" size={12} />
+                                                </button>
                                             </div>
-                                        </div>
-                                        <div className="flex gap-1.5 flex-shrink-0">
-                                            <button 
-                                                onClick={() => {
-                                                    setView('dashboard');
-                                                    setDataSource(prev => ({ ...prev, type: 'persisted_csv', autoRestored: true }));
-                                                }}
-                                                className={`px-3 py-1.5 text-white rounded-lg font-bold text-xs transition-colors flex items-center gap-1.5 ${storageWarning ? 'bg-amber-600 hover:bg-amber-700' : 'bg-purple-600 hover:bg-purple-700'}`}
-                                            >
-                                                <Icon name="Play" size={12} /> Resume
-                                            </button>
-                                            <button 
-                                                onClick={() => {
-                                                    if (confirm('Clear all cached data?')) {
-                                                        handleResetData(true);
-                                                    }
-                                                }}
-                                                className="p-1.5 bg-white text-red-500 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
-                                                title="Clear cache"
-                                            >
-                                                <Icon name="Trash2" size={12} />
-                                            </button>
                                         </div>
                                     </div>
-                                </div>
-                            )}
+                                );
+                            })()}
 
                             {/* --- ✄ DEBUG CONSOLE UI (Hidden by Default) --- */}
                             {showDebug && (
@@ -8919,6 +9503,19 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                         ghostCount={processedData?.ghostBookings?.length || 0}
                         isCollapsed={sidebarCollapsed}
                         setIsCollapsed={setSidebarCollapsed}
+                        position={sidebarPosition}
+                        onOpenPositionPicker={() => setShowPositionPicker(true)}
+                        isDragging={isDraggingSidebar}
+                        dragTarget={dragTarget}
+                        onDragStart={handleSidebarDragStart}
+                        ghostPosition={ghostPosition}
+                    />
+                    {/* Position Picker Popup */}
+                    <PositionPicker
+                        isOpen={showPositionPicker}
+                        onClose={() => setShowPositionPicker(false)}
+                        currentPosition={sidebarPosition}
+                        onSelectPosition={setSidebarPositionAndPersist}
                     />
                     <DetailModal
                         item={selectedItem}
@@ -8990,7 +9587,14 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                     />
                     
                     <div
-                        className={`flex-1 flex flex-col transition-all duration-500 ease-in-out ${sidebarCollapsed ? 'main-content-collapsed' : 'main-content-expanded'}`}
+                        className={`flex-1 flex flex-col transition-all duration-300 ease-in-out ${
+                            // 4-way sidebar margin logic
+                            sidebarPosition === 'top' ? 'main-content-top-collapsed' :
+                            sidebarPosition === 'bottom' ? 'main-content-bottom-collapsed' :
+                            sidebarCollapsed
+                                ? (sidebarPosition === 'right' ? 'main-content-collapsed-right' : 'main-content-collapsed')
+                                : (sidebarPosition === 'right' ? 'main-content-expanded-right' : 'main-content-expanded')
+                        }`}
                     >
                         <header className="bg-white border-b border-gray-200 px-8 py-4 flex flex-col sticky top-0 z-20 gap-3">
                             {/* Simplified header for Availability, Risk Analysis, and Impressions views */}
@@ -9500,12 +10104,6 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
 
                                             <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Weekly Overview</h3>
                                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                                                {/* Debug: Log what's being rendered */}
-                                                {console.log('🎯 Dashboard rendering:', { 
-                                                    visibleStatKeys, 
-                                                    hasFilteredStats: !!filteredStats,
-                                                    categories: filteredStats ? Object.keys(filteredStats).filter(k => Array.isArray(filteredStats[k]) && filteredStats[k].length > 0) : []
-                                                })}
                                                 {visibleStatKeys.map(key => {
                                                     const config = STAT_CARD_CONFIG[key];
                                                     let data = filteredStats[key];
