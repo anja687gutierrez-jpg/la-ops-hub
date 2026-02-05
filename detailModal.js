@@ -492,16 +492,17 @@
             }
         };
 
-        // Template router effect
+        // Template router effect — uses live edited stage (newStage) for auto-detection
         useEffect(() => {
             if (!item) return;
             let mode = selectedTemplate;
+            const currentStage = newStage || item.stage || '';
 
             if (mode === 'auto') {
-                if (item.stage === "Installed") mode = 'complete';
-                else if (item.stage === "Material Ready For Install") mode = 'material_received';
-                else if (item.stage.includes("Pending")) mode = 'missing';
-                else if (item.stage.includes("Expired") || item.stage.includes("Completed") || item.stage === "Takedown Complete") mode = 'removal';
+                if (currentStage === "Installed") mode = 'complete';
+                else if (currentStage === "Material Ready For Install") mode = 'material_received';
+                else if (currentStage.includes("Pending")) mode = 'missing';
+                else if (currentStage.includes("Expired") || currentStage.includes("Completed") || currentStage === "Takedown Complete") mode = 'removal';
                 else mode = 'schedule';
             }
 
@@ -515,7 +516,7 @@
             else if (mode === 'delay') setEmailDraft(generateDelayTemplate());
             else if (mode === 'maintenance') setEmailDraft(generateMaintenanceTemplate());
             else if (mode === 'removal') setEmailDraft(generateRemovalTemplate());
-        }, [customQty, emailInstalledQty, selectedTemplate, item, materialBreakdown, customDesigns, customPhotosLink, customReceiverLink, issueReason, newEta, missingType, deadlineDate]);
+        }, [customQty, emailInstalledQty, selectedTemplate, item, newStage, materialBreakdown, customDesigns, customPhotosLink, customReceiverLink, issueReason, newEta, missingType, deadlineDate]);
 
         const handleCopyToWebmail = async () => {
             try {
