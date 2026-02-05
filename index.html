@@ -1339,9 +1339,9 @@
                         if (settings.showProductColumn) row.push(formatProduct(item.product || item.media));
                         if (settings.showOwnerColumn) row.push(item.owner);
                         
-                        // Show installed count with checkmark
-                        const totalQty = item.quantity || item.totalQty || 0;
-                        const installedQty = item.installed || item.totalInstalled || totalQty;
+                        // Show installed count with checkmark (use charted qty when available)
+                        const totalQty = item.adjustedQty || item.quantity || item.totalQty || 0;
+                        const installedQty = item.installed || item.totalInstalled || 0;
                         const unitsHtml = totalQty > 0 ? `
                             <span style="color: #4caf50; font-weight: bold;">✓ ${installedQty}</span>
                             <span style="color: #666; font-size: 11px;">/ ${totalQty}</span>
@@ -4921,9 +4921,13 @@
                 if (widgetConfig.displayValue === 'count') {
                     return filtered.length;
                 } else if (widgetConfig.displayValue === 'qty') {
-                    return filtered.reduce((sum, d) => sum + (d.quantity || d.totalQty || 0), 0);
+                    return filtered.reduce((sum, d) => sum + (d.adjustedQty || d.quantity || d.totalQty || 0), 0);
                 } else if (widgetConfig.displayValue === 'pending') {
-                    return filtered.reduce((sum, d) => sum + (d.pending || 0), 0);
+                    return filtered.reduce((sum, d) => {
+                        const eq = d.adjustedQty || d.quantity || d.totalQty || 0;
+                        const ei = d.totalInstalled || d.installed || 0;
+                        return sum + Math.max(0, eq - ei);
+                    }, 0);
                 } else if (widgetConfig.displayValue === 'installed') {
                     return filtered.reduce((sum, d) => sum + (d.totalInstalled || d.installed || 0), 0);
                 }
@@ -5927,7 +5931,7 @@
             // Calculate summary stats with impressions
             const stats = useMemo(() => {
                 const totalCampaigns = filteredData.length;
-                const totalUnits = filteredData.reduce((sum, d) => sum + (parseInt(d.quantity) || parseInt(d.totalQty) || 0), 0);
+                const totalUnits = filteredData.reduce((sum, d) => sum + (parseInt(d.adjustedQty) || parseInt(d.quantity) || parseInt(d.totalQty) || 0), 0);
                 
                 // Calculate impressions (use existing impressions field or estimate)
                 const calculateImpressions = (campaign) => {
@@ -5943,7 +5947,7 @@
                     const rate = dailyRates[mediaType] || Object.values(dailyRates).find((v, i) => 
                         mediaType.toLowerCase().includes(Object.keys(dailyRates)[i]?.toLowerCase())
                     ) || 10000;
-                    const qty = parseInt(campaign.quantity) || parseInt(campaign.totalQty) || 1;
+                    const qty = parseInt(campaign.adjustedQty) || parseInt(campaign.quantity) || parseInt(campaign.totalQty) || 1;
                     const days = 28; // Default campaign duration
                     return Math.round(rate * qty * days);
                 };
@@ -5965,7 +5969,7 @@
                         byMarket[market] = { campaigns: 0, units: 0, photos: 0, popComplete: 0, impressions: 0 };
                     }
                     byMarket[market].campaigns++;
-                    byMarket[market].units += parseInt(d.quantity) || parseInt(d.totalQty) || 0;
+                    byMarket[market].units += parseInt(d.adjustedQty) || parseInt(d.quantity) || parseInt(d.totalQty) || 0;
                     byMarket[market].impressions += calculateImpressions(d);
                     if (d.stage === 'Photos Taken' || d.stage === 'POP Completed') byMarket[market].photos++;
                     if (d.stage === 'POP Completed') byMarket[market].popComplete++;
@@ -8702,7 +8706,11 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                                                 isFiller;
                         
                         // "Installed" is NOT completed if there's still pending work (rotation/copy change scenario)
-                        const hasOutstandingWork = item.needsReview || (stageLower === 'installed' && (item.pending > 0 || (item.adjustedQty && item.adjustedQty > (item.totalInstalled || item.installed || 0))));
+                        // Use adjustedQty (charted) as effective target when present — booked=100, charted=50, installed=50 is COMPLETE
+                        const effectiveQty = item.adjustedQty || item.totalQty || item.quantity || 0;
+                        const effectiveInstalled = item.totalInstalled || item.installed || 0;
+                        const effectivePending = Math.max(0, effectiveQty - effectiveInstalled);
+                        const hasOutstandingWork = item.needsReview || (stageLower === 'installed' && effectivePending > 0);
                         const isCompletedStage = ['installed', 'photos taken', 'pop completed', 'takedown complete', 'canceled', 'cancelled', 'lost opportunity'].includes(stageLower) && !hasOutstandingWork;
                         const isPastStartDate = item.dateObj < today;
 
@@ -10225,7 +10233,7 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                                                     // Installed widget: show sum of Qty (faces), not campaign count
                                                     let displayValue = data.length;
                                                     if (key === 'recentInstalls' && data) {
-                                                        displayValue = data.reduce((sum, item) => sum + (item.quantity || item.totalQty || 0), 0);
+                                                        displayValue = data.reduce((sum, item) => sum + (item.adjustedQty || item.quantity || item.totalQty || 0), 0);
                                                     }
 
                                                     // Current week install count: show campaign count this week
@@ -10300,9 +10308,13 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                                                     const widgetData = getCustomWidgetData();
                                                     let displayValue = widgetData.length;
                                                     if (widget.displayValue === 'qty') {
-                                                        displayValue = widgetData.reduce((sum, d) => sum + (d.quantity || d.totalQty || 0), 0);
+                                                        displayValue = widgetData.reduce((sum, d) => sum + (d.adjustedQty || d.quantity || d.totalQty || 0), 0);
                                                     } else if (widget.displayValue === 'pending') {
-                                                        displayValue = widgetData.reduce((sum, d) => sum + (d.pending || 0), 0);
+                                                        displayValue = widgetData.reduce((sum, d) => {
+                                                            const eq = d.adjustedQty || d.quantity || d.totalQty || 0;
+                                                            const ei = d.totalInstalled || d.installed || 0;
+                                                            return sum + Math.max(0, eq - ei);
+                                                        }, 0);
                                                     } else if (widget.displayValue === 'installed') {
                                                         displayValue = widgetData.reduce((sum, d) => sum + (d.totalInstalled || d.installed || 0), 0);
                                                     }
