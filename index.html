@@ -8268,8 +8268,8 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                         if (override) {
                             const stale = isOverrideStale(override);
 
-                            // ALWAYS apply: adjustedQty (charted qty is workflow data)
-                            if (override.adjustedQty && override.adjustedQty > 0) {
+                            // ALWAYS apply: adjustedQty (charted qty is workflow data, 0 = ghost booking clearance)
+                            if (override.adjustedQty !== undefined && override.adjustedQty !== null) {
                                 newItem.adjustedQty = override.adjustedQty;
                                 newItem.hasQtyAdjustment = true;
                                 newItem.isOverridden = true;
@@ -8291,7 +8291,7 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                                 if (override.installed !== undefined) {
                                     newItem.totalInstalled = override.installed;
                                     newItem.installed = override.installed;
-                                    const targetQty = newItem.adjustedQty || newItem.totalQty || newItem.quantity || 0;
+                                    const targetQty = newItem.hasQtyAdjustment ? newItem.adjustedQty : (newItem.totalQty || newItem.quantity || 0);
                                     newItem.pending = Math.max(0, targetQty - override.installed);
                                     newItem.isOverridden = true;
                                 }
@@ -8314,8 +8314,8 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                             }
                         }
                         // RECONCILE: Recalculate isComplete and needsReview from final state after overrides
-                        const specFinalQty = newItem.adjustedQty || newItem.totalQty || newItem.quantity || 0;
-                        newItem.isComplete = newItem.pending === 0 && specFinalQty > 0;
+                        const specFinalQty = newItem.hasQtyAdjustment ? newItem.adjustedQty : (newItem.totalQty || newItem.quantity || 0);
+                        newItem.isComplete = newItem.pending === 0 && (specFinalQty > 0 || newItem.hasQtyAdjustment);
                         const specCompletedStages = ['installed', 'photos taken', 'pop completed', 'takedown complete'];
                         if (specCompletedStages.includes((newItem.stage || '').toLowerCase())) {
                             newItem.isComplete = true;
@@ -8362,8 +8362,8 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                         if (override) {
                             const stale = isOverrideStale(override);
 
-                            // ALWAYS apply: adjustedQty (charted qty is workflow data)
-                            if (override.adjustedQty && override.adjustedQty > 0) {
+                            // ALWAYS apply: adjustedQty (charted qty is workflow data, 0 = ghost booking clearance)
+                            if (override.adjustedQty !== undefined && override.adjustedQty !== null) {
                                 newItem.adjustedQty = override.adjustedQty;
                                 newItem.hasQtyAdjustment = true;
                                 newItem.isOverridden = true;
@@ -8385,7 +8385,7 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                                 if (override.installed !== undefined) {
                                     newItem.totalInstalled = override.installed;
                                     newItem.installed = override.installed;
-                                    const targetQty = newItem.adjustedQty || newItem.totalQty || newItem.quantity || 0;
+                                    const targetQty = newItem.hasQtyAdjustment ? newItem.adjustedQty : (newItem.totalQty || newItem.quantity || 0);
                                     newItem.pending = Math.max(0, targetQty - override.installed);
                                     newItem.isOverridden = true;
                                 }
@@ -8408,8 +8408,8 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                             }
                         }
                         // RECONCILE: Recalculate isComplete and needsReview from final state after overrides
-                        const lostFinalQty = newItem.adjustedQty || newItem.totalQty || newItem.quantity || 0;
-                        newItem.isComplete = newItem.pending === 0 && lostFinalQty > 0;
+                        const lostFinalQty = newItem.hasQtyAdjustment ? newItem.adjustedQty : (newItem.totalQty || newItem.quantity || 0);
+                        newItem.isComplete = newItem.pending === 0 && (lostFinalQty > 0 || newItem.hasQtyAdjustment);
                         const lostCompletedStages = ['installed', 'photos taken', 'pop completed', 'takedown complete'];
                         if (lostCompletedStages.includes((newItem.stage || '').toLowerCase())) {
                             newItem.isComplete = true;
@@ -8532,6 +8532,8 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                                 if (item.adjustedQty > 0) {
                                     const pct = Math.round((installed / item.adjustedQty) * 100);
                                     item.progress = `${installed}/${item.adjustedQty} (${pct}%)`;
+                                } else if (item.adjustedQty === 0) {
+                                    item.progress = `0/0 (cleared)`;
                                 }
                             }
 
@@ -8570,8 +8572,8 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
 
                         // RECONCILE: Always recalculate isComplete and needsReview from final pending after ALL overrides
                         // This prevents contradictions (e.g., "Done" checkmark + "31 pending" in red)
-                        const finalQty = item.adjustedQty || item.totalQty || item.quantity || 0;
-                        item.isComplete = item.pending === 0 && finalQty > 0;
+                        const finalQty = item.hasQtyAdjustment ? item.adjustedQty : (item.totalQty || item.quantity || 0);
+                        item.isComplete = item.pending === 0 && (finalQty > 0 || item.hasQtyAdjustment);
                         // Also respect completed stages even if pending > 0 (stage override takes priority)
                         const completedStagesCheck = ['installed', 'photos taken', 'pop completed', 'takedown complete'];
                         if (completedStagesCheck.includes((item.stage || '').toLowerCase())) {
@@ -8579,7 +8581,7 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                             // If stage says completed but pending is stale, recalculate pending too
                             if (item.pending > 0 && item.isOverridden) {
                                 const reconciledInstalled = item.totalInstalled || item.installed || 0;
-                                const reconciledQty = item.adjustedQty || item.totalQty || item.quantity || 0;
+                                const reconciledQty = item.hasQtyAdjustment ? item.adjustedQty : (item.totalQty || item.quantity || 0);
                                 item.pending = Math.max(0, reconciledQty - reconciledInstalled);
                             }
                         }
@@ -8707,7 +8709,7 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                         
                         // "Installed" is NOT completed if there's still pending work (rotation/copy change scenario)
                         // Use adjustedQty (charted) as effective target when present — booked=100, charted=50, installed=50 is COMPLETE
-                        const effectiveQty = item.adjustedQty || item.totalQty || item.quantity || 0;
+                        const effectiveQty = item.hasQtyAdjustment ? item.adjustedQty : (item.totalQty || item.quantity || 0);
                         const effectiveInstalled = item.totalInstalled || item.installed || 0;
                         const effectivePending = Math.max(0, effectiveQty - effectiveInstalled);
                         const hasOutstandingWork = item.needsReview || (stageLower === 'installed' && effectivePending > 0);
@@ -8956,8 +8958,8 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                             if (override) {
                                 const stale = isOverrideStale(override);
 
-                                // ALWAYS apply: adjustedQty (charted qty is workflow data)
-                                if (override.adjustedQty && override.adjustedQty > 0) {
+                                // ALWAYS apply: adjustedQty (charted qty is workflow data, 0 = ghost booking clearance)
+                                if (override.adjustedQty !== undefined && override.adjustedQty !== null) {
                                     newItem.adjustedQty = override.adjustedQty;
                                     newItem.hasQtyAdjustment = true;
                                     newItem.isOverridden = true;
@@ -8976,7 +8978,7 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                                     if (override.installed !== undefined) {
                                         newItem.totalInstalled = override.installed;
                                         newItem.installed = override.installed;
-                                        const targetQty = newItem.adjustedQty || newItem.totalQty || newItem.quantity || 0;
+                                        const targetQty = newItem.hasQtyAdjustment ? newItem.adjustedQty : (newItem.totalQty || newItem.quantity || 0);
                                         newItem.pending = Math.max(0, targetQty - override.installed);
                                         newItem.isOverridden = true;
                                     }
@@ -8996,14 +8998,14 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                             }
 
                             // RECONCILE: Always recalculate isComplete and needsReview from final pending after ALL overrides
-                            const finalQty = newItem.adjustedQty || newItem.totalQty || newItem.quantity || 0;
-                            newItem.isComplete = newItem.pending === 0 && finalQty > 0;
+                            const finalQty = newItem.hasQtyAdjustment ? newItem.adjustedQty : (newItem.totalQty || newItem.quantity || 0);
+                            newItem.isComplete = newItem.pending === 0 && (finalQty > 0 || newItem.hasQtyAdjustment);
                             const completedStagesCheck = ['installed', 'photos taken', 'pop completed', 'takedown complete'];
                             if (completedStagesCheck.includes((newItem.stage || '').toLowerCase())) {
                                 newItem.isComplete = true;
                                 if (newItem.pending > 0 && newItem.isOverridden) {
                                     const reconciledInstalled = newItem.totalInstalled || newItem.installed || 0;
-                                    const reconciledQty = newItem.adjustedQty || newItem.totalQty || newItem.quantity || 0;
+                                    const reconciledQty = newItem.hasQtyAdjustment ? newItem.adjustedQty : (newItem.totalQty || newItem.quantity || 0);
                                     newItem.pending = Math.max(0, reconciledQty - reconciledInstalled);
                                 }
                             }

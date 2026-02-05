@@ -127,7 +127,7 @@
                 const origQty = item.quantity || item.totalQty || 0;
                 setOriginalQty(origQty);
                 // Check if item has an adjustedQty override
-                setAdjustedQty(item.adjustedQty || null);
+                setAdjustedQty(item.adjustedQty != null ? item.adjustedQty : null);
                 setEditingAdjustedQty(false);
 
                 // Load saved material data
@@ -186,7 +186,8 @@
 
         // Sync email template values with INSTALL PROGRESS values
         useEffect(() => {
-            const effectiveQty = parseInt(adjustedQty) || item?.adjustedQty || originalQty || 0;
+            const parsed = parseInt(adjustedQty);
+            const effectiveQty = !isNaN(parsed) ? parsed : (item?.adjustedQty != null ? item.adjustedQty : originalQty || 0);
             setCustomQty(effectiveQty.toString());
         }, [adjustedQty, originalQty, item?.adjustedQty]);
 
@@ -593,10 +594,11 @@
         // Save adjusted quantity override
         const handleSaveAdjustedQty = () => {
             const uniqueKey = `${item.id}_${item.date}_${item.product || item.media}`;
-            const adjQty = parseInt(adjustedQty) || null;
-            // Validate: adjusted qty must be >= installed count
+            const parsedAdj = parseInt(adjustedQty);
+            const adjQty = !isNaN(parsedAdj) ? parsedAdj : null;
+            // Validate: adjusted qty must be >= installed count (0 is valid for ghost booking clearance)
             const installed = newInstalledCount || 0;
-            if (adjQty !== null && adjQty < installed) {
+            if (adjQty !== null && adjQty > 0 && adjQty < installed) {
                 alert(`Adjusted quantity (${adjQty}) cannot be less than installed count (${installed})`);
                 return;
             }
@@ -893,7 +895,8 @@
                                 <h4 className="font-bold text-xs text-gray-500 mb-2">INSTALL PROGRESS</h4>
                                 {/* Progress Bar and Stats */}
                                 {(() => {
-                                    const targetQty = parseInt(adjustedQty) || item.adjustedQty || originalQty || 0;
+                                    const parsedTargetQty = parseInt(adjustedQty);
+                                    const targetQty = !isNaN(parsedTargetQty) ? parsedTargetQty : (item.adjustedQty != null ? item.adjustedQty : originalQty || 0);
                                     const installed = newInstalledCount || 0;
                                     const pending = Math.max(0, targetQty - installed);
                                     const pct = targetQty > 0 ? Math.round((installed / targetQty) * 100) : 0;
