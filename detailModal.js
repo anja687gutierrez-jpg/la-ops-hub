@@ -710,28 +710,36 @@
                 }
             ] : existingHistory;
 
-            // Collect ALL save data
-            const saveData = {
-                // Quantity tracking
-                adjustedQty: adjQty,
-                installed: installed,
-                pending: pending,
-                // Material info
-                materialBreakdown: materialBreakdown.filter(row => row.code || row.qty),
-                photosLink: customPhotosLink || null,
-                receiverLink: customReceiverLink || null,
-                mediaType: customDesigns || null,
-                totalQty: customQty || null,
-                // Removal tracking
-                removalQty: removalQty,
-                removedCount: removedCount,
-                removalStatus: effectiveRemovalStatusValue,
-                removalAssignee: removalAssignee || null,
-                removalPhotosLink: removalPhotosLink || null,
-                hasReplacement: hasReplacement,
-                // History
-                history: newHistory
-            };
+            // Only save fields that actually changed (prevents phantom overrides)
+            const saveData = {};
+            const originalInstalled = item.totalInstalled || item.installed || 0;
+
+            // Quantity tracking — only include if changed
+            if (adjQty !== (item.adjustedQty || null)) {
+                saveData.adjustedQty = adjQty;
+            }
+            if (installed !== originalInstalled) {
+                saveData.installed = installed;
+                saveData.pending = pending;
+            }
+            // Material info — only include if changed
+            const filteredBreakdown = materialBreakdown.filter(row => row.code || row.qty);
+            if (JSON.stringify(filteredBreakdown) !== JSON.stringify(item.materialBreakdown || [])) {
+                saveData.materialBreakdown = filteredBreakdown;
+            }
+            if ((customPhotosLink || null) !== (item.photosLink || null)) saveData.photosLink = customPhotosLink || null;
+            if ((customReceiverLink || null) !== (item.receiverLink || null)) saveData.receiverLink = customReceiverLink || null;
+            if ((customDesigns || null) !== (item.mediaType || null)) saveData.mediaType = customDesigns || null;
+            if ((customQty || null) !== (item.totalQty || null)) saveData.totalQty = customQty || null;
+            // Removal tracking — only include if changed
+            if (removalQty !== (item.removalQty || 0)) saveData.removalQty = removalQty;
+            if (removedCount !== (item.removedCount || 0)) saveData.removedCount = removedCount;
+            if (effectiveRemovalStatusValue !== (item.removalStatus || 'scheduled')) saveData.removalStatus = effectiveRemovalStatusValue;
+            if ((removalAssignee || null) !== (item.removalAssignee || null)) saveData.removalAssignee = removalAssignee || null;
+            if ((removalPhotosLink || null) !== (item.removalPhotosLink || null)) saveData.removalPhotosLink = removalPhotosLink || null;
+            if (hasReplacement !== (item.hasReplacement || false)) saveData.hasReplacement = hasReplacement;
+            // History — always include if there were changes
+            if (newHistory.length > 0) saveData.history = newHistory;
 
             onSave(uniqueKey, finalStage, saveData);
 
