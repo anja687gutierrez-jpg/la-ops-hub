@@ -169,6 +169,7 @@
     <!-- CRITICAL: icon.js must load FIRST - other modules depend on window.STAP_Icon -->
     <script src="icon.js"></script>
     <script src="idb.js"></script>
+    <script src="creativeHub.js"></script>
     <script src="demo.js"></script>
     <script src="impressionsDashboard.js"></script>
 
@@ -3154,6 +3155,9 @@
 
         // --- DETAIL MODAL (External - loaded from detailModal.js) ---
         const DetailModal = (window.STAPDetailModal && window.STAPDetailModal.DetailModal) || (props => null);
+
+        // --- CREATIVE HUB (External - loaded from creativeHub.js) ---
+        const CreativeHub = (window.STAPCreativeHub && window.STAPCreativeHub.CreativeHub) || (() => null);
 
 
         const FileUploader = ({ title, onFileSelect, status }) => (
@@ -10466,6 +10470,12 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                                         <RemovalsTable data={filteredData} completedData={filteredStats.completedRemovals} onRowClick={setSelectedItem} onBack={() => setView('dashboard')} />
                                     ) : view === 'ghostBookings' ? (
                                         <GhostBookingsTable data={filteredData} onRowClick={setSelectedItem} onBack={() => setView('dashboard')} />
+                                    ) : view === 'creativeHub' ? (
+                                        <CreativeHub
+                                            proofData={proofData}
+                                            onUpdateProofs={setProofData}
+                                            onBack={() => setView('dashboard')}
+                                        />
                                     ) : view === 'materialReceivers' ? (
                                         <MaterialReceivers
                                             data={processedData.all}
