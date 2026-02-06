@@ -65,7 +65,7 @@
         const [showInstallControls, setShowInstallControls] = useState(false);
 
         // Material breakdown for inventory
-        const [materialBreakdown, setMaterialBreakdown] = useState([{ code: '', qty: '', link: '' }]);
+        const [materialBreakdown, setMaterialBreakdown] = useState([{ code: '', qty: '', scheduled: '', scheduledLocked: false, link: '' }]);
 
         // Removal tracking state
         const [removalQty, setRemovalQty] = useState(0);
@@ -83,16 +83,90 @@
             return { currentTotal, isSufficient: currentTotal >= required };
         };
 
+        // Auto-distribute scheduled qty across unlocked rows
+        const autoDistributeScheduled = (rows, charted) => {
+            const target = parseFloat(charted) || 0;
+            if (target <= 0) return rows;
+
+            const activeIndices = rows.reduce((acc, row, i) => {
+                if (row.code || row.qty) acc.push(i);
+                return acc;
+            }, []);
+            if (activeIndices.length === 0) return rows;
+
+            // Sum locked rows
+            let lockedTotal = 0;
+            const unlockedIndices = [];
+            activeIndices.forEach(i => {
+                if (rows[i].scheduledLocked) {
+                    lockedTotal += parseFloat(rows[i].scheduled) || 0;
+                } else {
+                    unlockedIndices.push(i);
+                }
+            });
+
+            const remaining = Math.max(0, target - lockedTotal);
+            if (unlockedIndices.length === 0) return rows;
+
+            const base = Math.floor(remaining / unlockedIndices.length);
+            let remainder = remaining - base * unlockedIndices.length;
+
+            const updated = rows.map((row, i) => {
+                if (!unlockedIndices.includes(i)) return row;
+                const extra = remainder > 0 ? 1 : 0;
+                if (extra) remainder--;
+                return { ...row, scheduled: (base + extra).toString() };
+            });
+            return updated;
+        };
+
+        // Reconciliation status for scheduled vs charted
+        const getReconciliationStatus = () => {
+            const charted = parseFloat(customQty) || 0;
+            const totalScheduled = materialBreakdown.reduce((acc, row) => {
+                if (row.code || row.qty) acc += parseFloat(row.scheduled) || 0;
+                return acc;
+            }, 0);
+            if (charted <= 0) return { totalScheduled, charted, status: 'none', color: 'gray' };
+            if (totalScheduled === charted) return { totalScheduled, charted, status: 'matched', color: 'green' };
+            if (totalScheduled > charted) return { totalScheduled, charted, status: 'over', color: 'red' };
+            return { totalScheduled, charted, status: 'under', color: 'amber' };
+        };
+
+        // Update a row's scheduled value and lock it
+        const updateScheduled = (index, value) => {
+            const newRows = [...materialBreakdown];
+            newRows[index] = { ...newRows[index], scheduled: value, scheduledLocked: true };
+            setMaterialBreakdown(newRows);
+        };
+
+        // Unlock a row's scheduled value (returns to auto-distribution)
+        const unlockScheduled = (index) => {
+            const newRows = [...materialBreakdown];
+            newRows[index] = { ...newRows[index], scheduledLocked: false };
+            const redistributed = autoDistributeScheduled(newRows, customQty);
+            setMaterialBreakdown(redistributed);
+        };
+
         // Row handlers
-        const addRow = () => setMaterialBreakdown([...materialBreakdown, { code: '', qty: '', link: '' }]);
+        const addRow = () => {
+            const newRows = [...materialBreakdown, { code: '', qty: '', scheduled: '', scheduledLocked: false, link: '' }];
+            setMaterialBreakdown(autoDistributeScheduled(newRows, customQty));
+        };
         const removeRow = (index) => {
-            const newRows = materialBreakdown.filter((_, i) => i !== index);
-            setMaterialBreakdown(newRows.length ? newRows : [{ code: '', qty: '', link: '' }]);
+            let newRows = materialBreakdown.filter((_, i) => i !== index);
+            if (!newRows.length) newRows = [{ code: '', qty: '', scheduled: '', scheduledLocked: false, link: '' }];
+            setMaterialBreakdown(autoDistributeScheduled(newRows, customQty));
         };
         const updateRow = (index, field, value) => {
             const newRows = [...materialBreakdown];
-            newRows[index][field] = value;
-            setMaterialBreakdown(newRows);
+            newRows[index] = { ...newRows[index], [field]: value };
+            // Re-distribute when received qty or code changes (affects active row set)
+            if (field === 'qty' || field === 'code') {
+                setMaterialBreakdown(autoDistributeScheduled(newRows, customQty));
+            } else {
+                setMaterialBreakdown(newRows);
+            }
         };
 
         // Track the current item key to avoid re-initializing state when the same item is updated (e.g., after save)
@@ -135,15 +209,26 @@
                 const savedData = savedMaterialData[uniqueKey];
 
                 if (savedData) {
-                    setCustomQty(savedData.totalQty || item.quantity || item.totalQty || '0');
+                    const loadedQty = savedData.totalQty || item.quantity || item.totalQty || '0';
+                    setCustomQty(loadedQty);
                     setEmailInstalledQty(savedData.installed || item.totalInstalled || item.installed || '0');
                     setCustomDesigns(savedData.mediaType || item.media || item.product || '');
                     setCustomPhotosLink(savedData.photosLink || '');
                     setCustomReceiverLink(savedData.receiverLink || '');
                     if (savedData.materialBreakdown && savedData.materialBreakdown.length > 0) {
-                        setMaterialBreakdown(savedData.materialBreakdown);
+                        // Migrate legacy rows: add scheduled/scheduledLocked defaults if missing
+                        const migrated = savedData.materialBreakdown.map(row => ({
+                            code: row.code || '',
+                            qty: row.qty || '',
+                            scheduled: row.scheduled !== undefined ? row.scheduled : '',
+                            scheduledLocked: row.scheduledLocked || false,
+                            link: row.link || ''
+                        }));
+                        // Auto-distribute if no rows have scheduled values yet
+                        const hasScheduled = migrated.some(r => r.scheduled !== '' && r.scheduled !== undefined);
+                        setMaterialBreakdown(hasScheduled ? migrated : autoDistributeScheduled(migrated, loadedQty));
                     } else {
-                        setMaterialBreakdown([{ code: '', qty: '', link: '' }]);
+                        setMaterialBreakdown([{ code: '', qty: '', scheduled: '', scheduledLocked: false, link: '' }]);
                     }
                 } else {
                     setCustomQty(item.quantity || item.totalQty || '0');
@@ -151,7 +236,7 @@
                     setCustomDesigns(item.media || item.product || '');
                     setCustomPhotosLink('');
                     setCustomReceiverLink('');
-                    setMaterialBreakdown([{ code: '', qty: '', link: '' }]);
+                    setMaterialBreakdown([{ code: '', qty: '', scheduled: '', scheduledLocked: false, link: '' }]);
                 }
 
                 setIssueReason('');
@@ -190,6 +275,16 @@
             const effectiveQty = !isNaN(parsed) ? parsed : (item?.adjustedQty != null ? item.adjustedQty : originalQty || 0);
             setCustomQty(effectiveQty.toString());
         }, [adjustedQty, originalQty, item?.adjustedQty]);
+
+        // Re-distribute scheduled qty when charted qty changes
+        useEffect(() => {
+            if (parseFloat(customQty) > 0) {
+                setMaterialBreakdown(prev => {
+                    const hasActiveRows = prev.some(r => r.code || r.qty);
+                    return hasActiveRows ? autoDistributeScheduled(prev, customQty) : prev;
+                });
+            }
+        }, [customQty]);
 
         useEffect(() => {
             setEmailInstalledQty(newInstalledCount.toString());
@@ -235,8 +330,13 @@
             if (removalPhotosLink !== (item.removalPhotosLink || '')) return true;
             if (hasReplacement !== (item.hasReplacement || false)) return true;
 
+            // Check material breakdown changes (scheduled values, lock state, or row data)
+            const currentBreakdown = materialBreakdown.filter(r => r.code || r.qty);
+            const itemBreakdown = (item.materialBreakdown || []).filter(r => r.code || r.qty);
+            if (JSON.stringify(currentBreakdown) !== JSON.stringify(itemBreakdown)) return true;
+
             return false;
-        }, [item, newStage, adjustedQty, newInstalledCount, removalQty, removedCount, removalStatus, removalAssignee, removalPhotosLink, hasReplacement]);
+        }, [item, newStage, adjustedQty, newInstalledCount, removalQty, removedCount, removalStatus, removalAssignee, removalPhotosLink, hasReplacement, materialBreakdown]);
 
         // Helper functions for templates
         const formatMediaType = (media) => {
@@ -403,11 +503,12 @@
         const generateMaterialReceivedTemplate = () => {
             // Bug 3 fix: Only include rows that have actual data (code or qty)
             const validRows = materialBreakdown.filter(row => row.code || row.qty);
+            const totalScheduled = validRows.reduce((acc, r) => acc + (parseFloat(r.scheduled) || 0), 0);
             const breakdownRows = validRows.map(row => {
                 const codeDisplay = row.link
                     ? `<a href="${row.link}" style="color: #6f42c1; font-weight: bold; text-decoration: underline;" target="_blank">${row.code || 'N/A'}</a>`
                     : (row.code || 'N/A');
-                return `<tr><td style='padding:6px 10px; border-bottom:1px solid #eee;'>${codeDisplay}</td><td style='padding:6px 10px; border-bottom:1px solid #eee; text-align:right;'>${row.qty || 0}</td></tr>`;
+                return `<tr><td style='padding:6px 10px; border-bottom:1px solid #eee;'>${codeDisplay}</td><td style='padding:6px 10px; border-bottom:1px solid #eee; text-align:right;'>${row.qty || 0}</td><td style='padding:6px 10px; border-bottom:1px solid #eee; text-align:right;'>${row.scheduled || 0}</td></tr>`;
             }).join('');
 
             const { isSufficient, currentTotal } = getInventoryStatus();
@@ -446,8 +547,9 @@
                     </p>
                     ${noOverageNote}
                     ${validRows.length > 0 ? `<table style='width:100%; font-size:12px; border-collapse:collapse; margin:0 0 15px; background:#faf8ff;'>
-                        <tr style='background:#6f42c1; color:white;'><th style='padding:8px 10px; text-align:left;'>Design Code</th><th style='padding:8px 10px; text-align:right;'>Qty</th></tr>
+                        <tr style='background:#6f42c1; color:white;'><th style='padding:8px 10px; text-align:left;'>Design Code</th><th style='padding:8px 10px; text-align:right;'>Received</th><th style='padding:8px 10px; text-align:right;'>Scheduled</th></tr>
                         ${breakdownRows}
+                        <tr style='background:#f3f0ff; font-weight:bold;'><td style='padding:8px 10px; border-top:2px solid #6f42c1;'>TOTAL</td><td style='padding:8px 10px; border-top:2px solid #6f42c1; text-align:right;'>${getInventoryStatus().currentTotal}</td><td style='padding:8px 10px; border-top:2px solid #6f42c1; text-align:right;'>${totalScheduled} / ${customQty || 0}</td></tr>
                     </table>` : ''}
                     <table style='width:100%; font-size:13px; border-collapse:collapse; background:#f8f9fa; border-radius:4px;'>
                         <tr><td style='padding:8px 10px; color:#666; width:120px; border-bottom:1px solid #eee;'>Advertiser</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${item.advertiser || 'N/A'}</strong></td></tr>
@@ -698,6 +800,11 @@
             if (finalStage !== item.stage) changes.push(`Stage: ${item.stage} → ${finalStage}`);
             if (adjQty !== (item.adjustedQty || null)) changes.push(`Charted: ${item.adjustedQty || 'none'} → ${adjQty || 'none'}`);
             if (installed !== (item.totalInstalled || item.installed || 0)) changes.push(`Installed: ${item.totalInstalled || item.installed || 0} → ${installed}`);
+            // Track scheduled total changes
+            const newScheduledTotal = materialBreakdown.reduce((acc, r) => (r.code || r.qty) ? acc + (parseFloat(r.scheduled) || 0) : acc, 0);
+            const oldBreakdown = item.materialBreakdown || [];
+            const oldScheduledTotal = oldBreakdown.reduce((acc, r) => (r.code || r.qty) ? acc + (parseFloat(r.scheduled) || 0) : acc, 0);
+            if (newScheduledTotal !== oldScheduledTotal) changes.push(`Scheduled: ${oldScheduledTotal} → ${newScheduledTotal}`);
             if (removalQty !== (item.removalQty || 0)) changes.push(`Removal Qty: ${item.removalQty || 0} → ${removalQty}`);
             if (removedCount !== (item.removedCount || 0)) changes.push(`Removed: ${item.removedCount || 0} → ${removedCount}`);
             if (effectiveRemovalStatusValue !== (item.removalStatus || 'scheduled')) changes.push(`Removal Status: ${item.removalStatus || 'scheduled'} → ${effectiveRemovalStatusValue}`);
@@ -1191,15 +1298,44 @@
                                                 <input type="text" value={customDesigns} onChange={(e)=>setCustomDesigns(e.target.value)} className="w-full text-sm border rounded px-2 py-1"/>
                                             </div>
                                         </div>
-                                        <div className="flex justify-between items-center mb-2">
+                                        <div className="flex justify-between items-center mb-1">
                                             <label className="text-xs font-bold text-gray-500">Inventory Breakdown</label>
                                             <span className={`text-xs font-bold ${getInventoryStatus().isSufficient ? 'text-green-600' : 'text-red-500'}`}>
                                                 Received: {getInventoryStatus().currentTotal} / {customQty || 0}
                                             </span>
                                         </div>
+                                        {/* Reconciliation status bar */}
+                                        {(() => {
+                                            const recon = getReconciliationStatus();
+                                            if (recon.status === 'none') return null;
+                                            const colorMap = { matched: 'text-green-600', under: 'text-amber-600', over: 'text-red-600' };
+                                            const iconMap = { matched: '✓', under: '⚠', over: '🚫' };
+                                            const labelMap = { matched: 'Matched', under: 'Under-scheduled', over: 'Over-scheduled' };
+                                            return React.createElement('div', {
+                                                className: `flex justify-between items-center mb-2 text-xs font-bold ${colorMap[recon.status]}`
+                                            },
+                                                React.createElement('span', null, `${iconMap[recon.status]} Scheduled: ${recon.totalScheduled} / ${recon.charted} (${labelMap[recon.status]})`),
+                                                recon.status === 'over' ? React.createElement('span', {
+                                                    className: 'bg-red-100 text-red-700 px-2 py-0.5 rounded text-xs'
+                                                }, `+${recon.totalScheduled - recon.charted} over charted`) : null
+                                            );
+                                        })()}
+                                        {/* Column headers */}
+                                        <div className="flex gap-2 mb-1 text-xs font-bold text-gray-400 uppercase tracking-wide">
+                                            <span className="flex-1">Design Code</span>
+                                            <span className="w-16 text-center">Recv</span>
+                                            <span className="w-20 text-center">Sched</span>
+                                            <span className="w-12 text-center">+/−</span>
+                                            <span className="flex-1">Drive Link</span>
+                                            <span className="w-6"></span>
+                                        </div>
                                         <div className="space-y-2 mb-2">
-                                            {materialBreakdown.map((row, idx) => (
-                                                <div key={idx} className="flex gap-2">
+                                            {materialBreakdown.map((row, idx) => {
+                                                const recv = parseFloat(row.qty) || 0;
+                                                const sched = parseFloat(row.scheduled) || 0;
+                                                const overage = recv - sched;
+                                                return (
+                                                <div key={idx} className="flex gap-2 items-center">
                                                     <input
                                                         placeholder="Design Code"
                                                         value={row.code}
@@ -1207,12 +1343,30 @@
                                                         className="flex-1 text-sm border rounded px-2 py-1"
                                                     />
                                                     <input
-                                                        placeholder="Qty"
+                                                        placeholder="Recv"
                                                         type="number"
                                                         value={row.qty}
                                                         onChange={e => updateRow(idx, 'qty', e.target.value)}
-                                                        className="w-16 text-sm border rounded px-2 py-1"
+                                                        className="w-16 text-sm border rounded px-2 py-1 text-center"
                                                     />
+                                                    <div className="w-20 flex items-center gap-0.5">
+                                                        <input
+                                                            placeholder="Sched"
+                                                            type="number"
+                                                            value={row.scheduled}
+                                                            onChange={e => updateScheduled(idx, e.target.value)}
+                                                            className={`w-14 text-sm border rounded px-1 py-1 text-center ${row.scheduledLocked ? 'border-amber-400 bg-amber-50' : ''}`}
+                                                            title={row.scheduledLocked ? 'Manually set (click lock to auto-distribute)' : 'Auto-distributed from charted qty'}
+                                                        />
+                                                        {row.scheduledLocked && (
+                                                            <button onClick={() => unlockScheduled(idx)} className="text-amber-500 hover:text-amber-700" title="Unlock for auto-distribution">
+                                                                <Icon name="Lock" size={12} />
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                    <span className={`w-12 text-xs font-bold text-center ${overage > 0 ? 'text-green-600' : overage < 0 ? 'text-red-500' : 'text-gray-400'}`}>
+                                                        {(row.code || row.qty) ? (overage > 0 ? `+${overage}` : overage < 0 ? `${overage}` : '—') : ''}
+                                                    </span>
                                                     <input
                                                         placeholder="Google Drive Link"
                                                         value={row.link}
@@ -1222,7 +1376,8 @@
                                                     />
                                                     <button onClick={() => removeRow(idx)} className="text-red-400"><Icon name="X" size={16} /></button>
                                                 </div>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
                                         <button onClick={addRow} className="text-xs text-blue-600 font-bold hover:underline">+ Add Row</button>
                                     </div>
