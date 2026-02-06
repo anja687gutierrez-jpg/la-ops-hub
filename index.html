@@ -3218,42 +3218,43 @@
             // Calculate visible column count for colSpan
             const visibleColCount = Object.values(visibleCols).filter(Boolean).length;
 
-            // Calculate summary stats
+            // Calculate summary stats (5-tier: review, scheduled, inProgress, planned, pending)
             const stats = useMemo(() => {
-                const needsReview = data.filter(r => r.needsReview).length;
-                const inProgress = data.filter(r => {
-                    const stage = (r.stage || '').toLowerCase();
-                    return stage === 'material ready for install' && r.pending > 0;
-                }).length;
-                const installed = data.filter(r => {
-                    const stage = (r.stage || '').toLowerCase();
-                    return stage === 'installed' && !r.needsReview;
-                }).length;
+                const needsReview = data.filter(r => r.installTier === 'review').length;
+                const scheduled = data.filter(r => r.installTier === 'scheduled').length;
+                const inProgress = data.filter(r => r.installTier === 'inProgress').length;
+                const planned = data.filter(r => r.installTier === 'planned').length;
                 const pending = data.reduce((sum, r) => sum + (r.pending || 0), 0);
-                return { needsReview, inProgress, installed, pending, total: data.length };
+                return { needsReview, scheduled, inProgress, planned, pending, total: data.length };
             }, [data]);
 
-            // Group data by priority
+            // Group data by install tier (5 groups)
             const groupedData = useMemo(() => {
                 if (viewMode === 'flat') return { all: data };
 
                 const groups = {
                     needsReview: [],
+                    scheduled: [],
                     inProgress: [],
-                    upcoming: [],
+                    planned: [],
                     complete: []
                 };
 
                 data.forEach(row => {
-                    const stage = (row.stage || '').toLowerCase();
-                    if (row.needsReview) {
+                    const tier = row.installTier || 'pipeline';
+                    if (tier === 'review') {
                         groups.needsReview.push(row);
-                    } else if (stage === 'material ready for install' || stage.includes('pending')) {
+                    } else if (tier === 'scheduled') {
+                        groups.scheduled.push(row);
+                    } else if (tier === 'inProgress') {
                         groups.inProgress.push(row);
-                    } else if (['installed', 'photos taken', 'pop completed', 'takedown complete'].includes(stage)) {
+                    } else if (tier === 'planned') {
+                        groups.planned.push(row);
+                    } else if (tier === 'complete') {
                         groups.complete.push(row);
                     } else {
-                        groups.upcoming.push(row);
+                        // pipeline and other tiers go to inProgress
+                        groups.inProgress.push(row);
                     }
                 });
 
@@ -3347,14 +3348,37 @@
                 );
             };
 
+            // Tier-based row background styling
+            const getTierRowClass = (row) => {
+                if (row.isGhost) return 'bg-orange-50';
+                const tier = row.installTier;
+                if (tier === 'review') return 'bg-amber-50/70 border-l-4 border-l-amber-400';
+                if (tier === 'scheduled') return 'bg-blue-50/40 border-l-4 border-l-blue-300';
+                if (tier === 'planned') return 'bg-slate-50/40 border-l-4 border-l-slate-200';
+                if (row.urgentMaterial) return 'bg-blue-50/50 border-l-4 border-l-blue-400 border-dashed';
+                if (row.hasQtyAdjustment) return 'bg-blue-50/50';
+                if (row.isComplete || tier === 'complete') return 'bg-green-50/30';
+                return '';
+            };
+            const getTierCellBg = (row) => {
+                if (row.isGhost) return 'bg-orange-50';
+                const tier = row.installTier;
+                if (tier === 'review') return 'bg-amber-50/70';
+                if (tier === 'scheduled') return 'bg-blue-50/40';
+                if (tier === 'planned') return 'bg-slate-50/40';
+                if (row.hasQtyAdjustment) return 'bg-blue-50/50';
+                if (row.isComplete || tier === 'complete') return 'bg-green-50/30';
+                return 'bg-white';
+            };
+
             // Render a single row (extracted for reuse)
             const renderTableRow = (row, idx) => (
                 <tr
                     key={`${row.id}-${row.date}-${idx}`}
                     onClick={() => onRowClick(row)}
-                    className={`hover:bg-gray-50 transition-colors cursor-pointer ${row.needsReview ? 'bg-amber-50/70 border-l-4 border-l-amber-400' : ''} ${row.hasQtyAdjustment && !row.needsReview ? 'bg-blue-50/50' : ''} ${row.isComplete && !row.needsReview ? 'bg-green-50/30' : ''} ${row.isGhost ? 'bg-orange-50' : ''}`}
+                    className={`hover:bg-gray-50 transition-colors cursor-pointer ${getTierRowClass(row)}`}
                 >
-                    {visibleCols.date && <td className={`${cellPad} ${fontSize} text-gray-600 whitespace-nowrap ${row.needsReview ? 'bg-amber-50/70' : row.hasQtyAdjustment ? 'bg-blue-50/50' : row.isComplete ? 'bg-green-50/30' : row.isGhost ? 'bg-orange-50' : 'bg-white'}`}>
+                    {visibleCols.date && <td className={`${cellPad} ${fontSize} text-gray-600 whitespace-nowrap ${getTierCellBg(row)}`}>
                         {row.rawDate || row.date}
                     </td>}
                     {visibleCols.id && <td className={`${cellPad} text-[10px] font-mono text-gray-500`}>{row.id}</td>}
@@ -3404,9 +3428,19 @@
                                     <span className={`inline-flex items-center px-1.5 py-0.5 rounded ${compactMode ? 'text-[10px]' : 'text-xs'} bg-gray-100 text-gray-600`}>Active</span>
                                 );
                             })()}
-                            {row.needsReview && (
-                                <span title="⚠️ Stage mismatch" className="text-amber-500 ml-0.5">
+                            {row.installTier === 'review' && (
+                                <span title="⚠️ Needs review — within 7-day posting window" className="text-amber-500 ml-0.5">
                                     <Icon name="AlertTriangle" size={compactMode ? 10 : 12} />
+                                </span>
+                            )}
+                            {row.installTier === 'scheduled' && (
+                                <span title="📅 Scheduled — 7-14 days out" className="text-blue-400 ml-0.5">
+                                    <Icon name="CalendarClock" size={compactMode ? 10 : 12} />
+                                </span>
+                            )}
+                            {row.installTier === 'planned' && (
+                                <span title="📋 Planned — 14+ days out" className="text-slate-400 ml-0.5">
+                                    <Icon name="CalendarDays" size={compactMode ? 10 : 12} />
                                 </span>
                             )}
                             {row.productionProof && (
@@ -3419,24 +3453,34 @@
 
             return (
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                {/* Summary Stats Strip */}
-                <div className="grid grid-cols-4 gap-px bg-gray-200 border-b">
-                    <div className={`px-4 py-3 text-center ${stats.needsReview > 0 ? 'bg-amber-50' : 'bg-white'}`}>
+                {/* Summary Stats Strip — 5 columns */}
+                <div className="grid grid-cols-5 gap-px bg-gray-200 border-b">
+                    <div className={`px-3 py-3 text-center ${stats.needsReview > 0 ? 'bg-amber-50' : 'bg-white'}`}>
                         <div className={`text-2xl font-bold ${stats.needsReview > 0 ? 'text-amber-600' : 'text-gray-400'}`}>{stats.needsReview}</div>
                         <div className="text-xs text-gray-500 flex items-center justify-center gap-1">
                             {stats.needsReview > 0 && <Icon name="AlertTriangle" size={10} className="text-amber-500" />}
-                            Needs Review
+                            Review
                         </div>
                     </div>
-                    <div className="px-4 py-3 bg-white text-center">
+                    <div className={`px-3 py-3 text-center ${stats.scheduled > 0 ? 'bg-blue-50' : 'bg-white'}`}>
+                        <div className={`text-2xl font-bold ${stats.scheduled > 0 ? 'text-blue-500' : 'text-gray-400'}`}>{stats.scheduled}</div>
+                        <div className="text-xs text-gray-500 flex items-center justify-center gap-1">
+                            {stats.scheduled > 0 && <Icon name="CalendarClock" size={10} className="text-blue-400" />}
+                            Scheduled
+                        </div>
+                    </div>
+                    <div className="px-3 py-3 bg-white text-center">
                         <div className="text-2xl font-bold text-blue-600">{stats.inProgress}</div>
                         <div className="text-xs text-gray-500">In Progress</div>
                     </div>
-                    <div className="px-4 py-3 bg-white text-center">
-                        <div className="text-2xl font-bold text-green-600">{stats.installed}</div>
-                        <div className="text-xs text-gray-500">Installed</div>
+                    <div className={`px-3 py-3 text-center ${stats.planned > 0 ? 'bg-slate-50' : 'bg-white'}`}>
+                        <div className={`text-2xl font-bold ${stats.planned > 0 ? 'text-slate-500' : 'text-gray-400'}`}>{stats.planned}</div>
+                        <div className="text-xs text-gray-500 flex items-center justify-center gap-1">
+                            {stats.planned > 0 && <Icon name="CalendarDays" size={10} className="text-slate-400" />}
+                            Planned
+                        </div>
                     </div>
-                    <div className="px-4 py-3 bg-white text-center">
+                    <div className="px-3 py-3 bg-white text-center">
                         <div className="text-2xl font-bold text-gray-700">{stats.pending}</div>
                         <div className="text-xs text-gray-500">Total Pending</div>
                     </div>
@@ -3455,7 +3499,7 @@
                     <span className="text-xs text-gray-500 font-normal ml-1">— Click any row to update</span>
                     <span className="bg-purple-100 text-purple-700 text-xs py-0.5 px-2 rounded-full">{data.length}</span>
                     {(() => {
-                        const reviewCount = data.filter(r => r.needsReview).length;
+                        const reviewCount = data.filter(r => r.installTier === 'review').length;
                         return reviewCount > 0 ? (
                             <span className="bg-amber-100 text-amber-700 text-xs py-0.5 px-2 rounded-full flex items-center gap-1">
                                 <Icon name="AlertTriangle" size={10} />
@@ -3552,10 +3596,10 @@
                         </tr>
                     </thead>
 
-                    {/* GROUPED VIEW - Priority-based sections */}
+                    {/* GROUPED VIEW - 5-tier install status sections */}
                     {viewMode === 'grouped' ? (
                         <tbody>
-                            {/* NEEDS REVIEW - Amber section */}
+                            {/* NEEDS REVIEW — ≤7 days / past due (Amber) */}
                             {groupedData.needsReview?.length > 0 && (
                                 <>
                                 <tr>
@@ -3564,13 +3608,30 @@
                                             <Icon name="AlertTriangle" size={14} />
                                             <span className="font-semibold text-sm">Needs Review</span>
                                             <span className="text-xs opacity-75 bg-amber-200 px-1.5 py-0.5 rounded-full">{groupedData.needsReview.length}</span>
+                                            <span className="text-[10px] text-amber-500 ml-1">within 7 days</span>
                                         </div>
                                     </td>
                                 </tr>
                                 {groupedData.needsReview.map((row, idx) => renderTableRow(row, `review-${idx}`))}
                                 </>
                             )}
-                            {/* IN PROGRESS - Blue section */}
+                            {/* SCHEDULED — 7-14 days out (Blue) */}
+                            {groupedData.scheduled?.length > 0 && (
+                                <>
+                                <tr>
+                                    <td colSpan={visibleColCount} className="px-4 py-2 bg-blue-50 border-l-4 border-l-blue-400">
+                                        <div className="flex items-center gap-2 text-blue-700">
+                                            <Icon name="CalendarClock" size={14} />
+                                            <span className="font-semibold text-sm">Scheduled</span>
+                                            <span className="text-xs opacity-75 bg-blue-200 px-1.5 py-0.5 rounded-full">{groupedData.scheduled.length}</span>
+                                            <span className="text-[10px] text-blue-500 ml-1">7–14 days</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {groupedData.scheduled.map((row, idx) => renderTableRow(row, `scheduled-${idx}`))}
+                                </>
+                            )}
+                            {/* IN PROGRESS — Material Ready / Active Install (Blue) */}
                             {groupedData.inProgress?.length > 0 && (
                                 <>
                                 <tr>
@@ -3585,22 +3646,23 @@
                                 {groupedData.inProgress.map((row, idx) => renderTableRow(row, `progress-${idx}`))}
                                 </>
                             )}
-                            {/* UPCOMING - Gray section */}
-                            {groupedData.upcoming?.length > 0 && (
+                            {/* PLANNED — 14+ days out (Slate/Gray) */}
+                            {groupedData.planned?.length > 0 && (
                                 <>
                                 <tr>
-                                    <td colSpan={visibleColCount} className="px-4 py-2 bg-gray-50 border-l-4 border-l-gray-400">
-                                        <div className="flex items-center gap-2 text-gray-600">
-                                            <Icon name="Clock" size={14} />
-                                            <span className="font-semibold text-sm">Upcoming / Other</span>
-                                            <span className="text-xs opacity-75 bg-gray-200 px-1.5 py-0.5 rounded-full">{groupedData.upcoming.length}</span>
+                                    <td colSpan={visibleColCount} className="px-4 py-2 bg-slate-50 border-l-4 border-l-slate-300">
+                                        <div className="flex items-center gap-2 text-slate-600">
+                                            <Icon name="CalendarDays" size={14} />
+                                            <span className="font-semibold text-sm">Planned</span>
+                                            <span className="text-xs opacity-75 bg-slate-200 px-1.5 py-0.5 rounded-full">{groupedData.planned.length}</span>
+                                            <span className="text-[10px] text-slate-400 ml-1">14+ days</span>
                                         </div>
                                     </td>
                                 </tr>
-                                {groupedData.upcoming.map((row, idx) => renderTableRow(row, `upcoming-${idx}`))}
+                                {groupedData.planned.map((row, idx) => renderTableRow(row, `planned-${idx}`))}
                                 </>
                             )}
-                            {/* COMPLETE - Green section */}
+                            {/* COMPLETE — Installed (no pending) + completed stages (Green) */}
                             {groupedData.complete?.length > 0 && (
                                 <>
                                 <tr>
@@ -3617,96 +3679,9 @@
                             )}
                         </tbody>
                     ) : (
-                    /* FLAT VIEW - Original chronological list */
+                    /* FLAT VIEW - Chronological list with tier-based styling */
                     <tbody className="divide-y divide-gray-100">
-                        {data.map((row, idx) => (
-                        <tr
-                            key={idx}
-                            onClick={() => onRowClick(row)}
-                            className={`hover:bg-gray-50 transition-colors cursor-pointer ${row.needsReview ? 'bg-amber-50/70 border-l-4 border-l-amber-400' : ''} ${row.hasQtyAdjustment && !row.needsReview ? 'bg-blue-50/50' : ''} ${row.isComplete && !row.needsReview ? 'bg-green-50/30' : ''} ${row.isGhost ? 'bg-orange-50' : ''}`}
-                        >
-                            {visibleCols.date && <td className={`${cellPad} ${fontSize} text-gray-600 whitespace-nowrap sticky left-0 ${row.needsReview ? 'bg-amber-50/70' : row.hasQtyAdjustment ? 'bg-blue-50/50' : row.isComplete ? 'bg-green-50/30' : row.isGhost ? 'bg-orange-50' : 'bg-white'}`}>
-                                {row.rawDate || row.date}
-                            </td>}
-                            {visibleCols.id && <td className={`${cellPad} text-[10px] font-mono text-gray-500 ${!visibleCols.date ? 'sticky left-0 bg-white' : ''}`}>{row.id}</td>}
-                            {visibleCols.market && <td className={`${cellPad} ${fontSize}`}>
-                                {row.market ? (
-                                    <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px]">{row.market.split(',')[0]}</span>
-                                ) : (
-                                    <span className="text-gray-300">-</span>
-                                )}
-                            </td>}
-                            {visibleCols.advertiser && <td className={`${cellPad} ${fontSize} max-w-[200px]`}>
-                                <div className="font-medium text-gray-900 truncate" title={row.advertiser}>
-                                    {row.advertiser}
-                                    {row.isGhost && <span className="ml-1" title={row.ghostReason || 'Ghost Booking'}>👻</span>}
-                                </div>
-                                <div className="text-gray-500 truncate text-[10px]" title={row.name}>
-                                    {row.name}
-                                    {row.isOverridden && <span className="ml-1 text-blue-500">✎</span>}
-                                    {row.hasBonus && <span className="ml-1 px-1 bg-purple-100 text-purple-700 rounded text-[9px]" title={row.bonusNote}>+B</span>}
-                                </div>
-                            </td>}
-                            {visibleCols.product && <td className={`${cellPad} ${fontSize} text-center`} title={row.product}>
-                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${row.isPremium ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-purple-50 text-purple-700'}`}>
-                                    {row.isPremium && <span className="mr-0.5">⭐</span>}
-                                    {abbreviateProduct(row.product)}
-                                </span>
-                            </td>}
-                            {visibleCols.stage && <td className={cellPad}>
-                                <span className={`px-1.5 py-0.5 rounded text-[10px] border ${getStatusColor(row.stage, row.dateObj)}`}>
-                                    {row.stage}
-                                </span>
-                            </td>}
-                            {visibleCols.progress && <td className={`${cellPad} ${fontSize} font-mono`}>{row.progress}</td>}
-                            {visibleCols.charted && <td className={`${cellPad} text-center ${fontSize}`}>
-                                {row.adjustedQty ? (
-                                    <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-medium" title="Charted qty verified">
-                                        {row.adjustedQty}
-                                    </span>
-                                ) : (
-                                    <span className="text-gray-300">-</span>
-                                )}
-                            </td>}
-                            {visibleCols.pending && <td className={`${cellPad} text-center font-bold ${fontSize}`}>
-                                {row.pending > 0 ? <span className="text-orange-600">{row.pending}</span> : <span className="text-gray-300">-</span>}
-                            </td>}
-                            {visibleCols.firstInstall && <td className={`${cellPad} ${fontSize} font-mono text-gray-600 whitespace-nowrap`}>{row.firstInstall || '-'}</td>}
-                            {visibleCols.completion && <td className={`${cellPad} ${fontSize} font-mono text-gray-600 whitespace-nowrap`}>{row.completion || '-'}</td>}
-                            {visibleCols.status && <td className={`${cellPad} text-right`}>
-                                <div className="flex items-center justify-end gap-1">
-                                    {(() => {
-                                        // Check both isComplete flag AND stage hierarchy for Done status
-                                        const completedStages = ['installed', 'photos taken', 'pop completed', 'takedown complete'];
-                                        const stageLower = (row.stage || '').toLowerCase();
-                                        const isDone = row.isComplete || completedStages.includes(stageLower);
-                                        return isDone ? (
-                                            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${compactMode ? 'text-[10px]' : 'text-xs'} bg-green-100 text-green-700 font-medium`}>
-                                                <Icon name="CheckCircle" size={compactMode ? 10 : 12} /> Done
-                                            </span>
-                                        ) : (
-                                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded ${compactMode ? 'text-[10px]' : 'text-xs'} bg-gray-100 text-gray-600`}>
-                                                Active
-                                            </span>
-                                        );
-                                    })()}
-                                    {/* Stage Mismatch Warning Icon - shows when stage is "Installed" but pending > 0 */}
-                                    {row.needsReview && (
-                                        <span
-                                            title="⚠️ Stage mismatch: Stage is 'Installed' but pending > 0. Verify install count."
-                                            className="text-amber-500 ml-0.5"
-                                        >
-                                            <Icon name="AlertTriangle" size={compactMode ? 10 : 12} />
-                                        </span>
-                                    )}
-                                    {/* Production Proof Icon - only show if set */}
-                                    {row.productionProof && (
-                                        <ProductionIcon type={row.productionProof} size={12} compact />
-                                    )}
-                                </div>
-                            </td>}
-                        </tr>
-                        ))}
+                        {data.map((row, idx) => renderTableRow(row, `flat-${idx}`))}
                     </tbody>
                     )}
                     </table>
