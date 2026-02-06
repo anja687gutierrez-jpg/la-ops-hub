@@ -6,7 +6,7 @@
 (function(window) {
     'use strict';
 
-    const { useState, useEffect } = React;
+    const { useState, useEffect, useMemo } = React;
 
     // Dependencies will be injected from main app
     let ALL_STAGES = [];
@@ -29,9 +29,32 @@
         getStatusColor = window.STAP_getStatusColor || (() => 'bg-gray-100 text-gray-700');
     };
 
-    const DetailModal = ({ item, onClose, onSave, onLogEmail }) => {
+    const DetailModal = ({ item, onClose, onSave, onLogEmail, materialReceiverData = [], proofData = [], onOpenCreativeHub, onOpenMaterialReceivers }) => {
         // Initialize dependencies on first render
         useEffect(() => { initDependencies(); }, []);
+
+        // Linked data: filter materials/proofs for this campaign
+        const campaignId = item?.id || '';
+        const campaignName = (item?.name || '').toLowerCase();
+        const advertiser = (item?.advertiser || '').toLowerCase();
+
+        const linkedMaterials = useMemo(() => {
+            if (!materialReceiverData.length || !campaignId) return [];
+            return materialReceiverData.filter(m => {
+                const mCampId = (m.campaignId || m.campaign_id || '').toLowerCase();
+                const mClient = (m.client || m.advertiser || '').toLowerCase();
+                return mCampId === campaignId.toLowerCase() || (mClient && advertiser && mClient.includes(advertiser));
+            });
+        }, [materialReceiverData, campaignId, advertiser]);
+
+        const linkedProofs = useMemo(() => {
+            if (!proofData.length || !campaignId) return [];
+            return proofData.filter(p => {
+                const pCampId = (p.campaignId || p.campaign_id || '').toLowerCase();
+                const pClient = (p.client || p.advertiser || '').toLowerCase();
+                return pCampId === campaignId.toLowerCase() || (pClient && advertiser && pClient.includes(advertiser));
+            });
+        }, [proofData, campaignId, advertiser]);
 
         const [editMode, setEditMode] = useState(false);
         const [newStage, setNewStage] = useState(item?.stage || '');
@@ -1412,6 +1435,48 @@
                             <div dangerouslySetInnerHTML={{ __html: emailDraft }} />
                         </div>
                     </div>
+
+                    {/* LINKED DATA SECTIONS */}
+                    {(linkedMaterials.length > 0 || linkedProofs.length > 0) && (
+                        <div className="px-8 py-3 border-t bg-green-50/50 space-y-2">
+                            {linkedMaterials.length > 0 && (
+                                <div className="flex items-center justify-between p-2 bg-green-100/60 border border-green-200 rounded-lg">
+                                    <div className="flex items-center gap-2">
+                                        <Icon name="Package" size={14} className="text-green-600" />
+                                        <span className="text-xs font-medium text-green-800">
+                                            {linkedMaterials.length} material{linkedMaterials.length !== 1 ? 's' : ''} linked from Material Receivers
+                                        </span>
+                                    </div>
+                                    {onOpenMaterialReceivers && (
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); onClose(); onOpenMaterialReceivers(); }}
+                                            className="text-[10px] text-green-700 hover:text-green-900 underline"
+                                        >
+                                            View →
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+                            {linkedProofs.length > 0 && (
+                                <div className="flex items-center justify-between p-2 bg-green-100/60 border border-green-200 rounded-lg">
+                                    <div className="flex items-center gap-2">
+                                        <Icon name="Sparkles" size={14} className="text-green-600" />
+                                        <span className="text-xs font-medium text-green-800">
+                                            {linkedProofs.length} proof{linkedProofs.length !== 1 ? 's' : ''} linked from Creative Hub
+                                        </span>
+                                    </div>
+                                    {onOpenCreativeHub && (
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); onClose(); onOpenCreativeHub(); }}
+                                            className="text-[10px] text-green-700 hover:text-green-900 underline"
+                                        >
+                                            View →
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     {/* HISTORY FOOTER */}
                     {item.history && item.history.length > 0 && (
