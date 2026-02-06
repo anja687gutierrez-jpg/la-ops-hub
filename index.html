@@ -6779,9 +6779,16 @@
                     setDataSource({ type: 'none', timestamp: null, error: null });
                     setManualOverrides({});
                     setMaterialReceiverData([]);
+                    setProofData([]);
                     setGhostBookings([]);
                     setEmailStats({ totalSent: 0, totalClicks: 0, sentHistory: [] });
                     setView('upload');
+
+                    // Clear IDB stores
+                    if (window.STAP_IDB) {
+                        window.STAP_IDB.clear('materials');
+                        window.STAP_IDB.clear('proofs');
+                    }
 
                     console.log('🗑️ Full reset complete - all data cleared, settings preserved');
                     console.log('📋 Preserved settings:', preserveKeys.filter(k => localStorage.getItem(k)).join(', ') || 'none');
@@ -6890,20 +6897,10 @@
             const [isLiveMode, setIsLiveMode] = useState(false);
 
             // Material Receivers data (lifted to parent to persist across navigation)
-            // Initialize from localStorage if available
-            const [materialReceiverData, setMaterialReceiverData] = useState(() => {
-                try {
-                    const saved = localStorage.getItem('stap_materials_data');
-                    if (saved) {
-                        const parsed = JSON.parse(saved);
-                        console.log('📦 Loaded', parsed.length, 'materials from localStorage');
-                        return parsed;
-                    }
-                } catch (e) {
-                    console.error('Failed to load materials from localStorage:', e);
-                }
-                return [];
-            });
+            // Initialized empty — IDB hydrates on mount
+            const [materialReceiverData, setMaterialReceiverData] = useState([]);
+            const [proofData, setProofData] = useState([]);
+            const [storageHealth, setStorageHealth] = useState(null);
             const [materialReceiverLinkedSheet, setMaterialReceiverLinkedSheet] = useState(() => {
                 try {
                     const saved = localStorage.getItem('stap_materials_sheet');
@@ -6912,22 +6909,61 @@
                     return null;
                 }
             });
-            
-            // Save materials to localStorage whenever they change
+
+            // IDB: Migrate localStorage → IDB on first load, then hydrate state
             React.useEffect(() => {
-                if (materialReceiverData.length > 0) {
-                    localStorage.setItem('stap_materials_data', JSON.stringify(materialReceiverData));
-                    console.log('💾 Saved', materialReceiverData.length, 'materials to localStorage');
+                if (!window.STAP_IDB) {
+                    // Fallback: load from localStorage if IDB unavailable
+                    try {
+                        const saved = localStorage.getItem('stap_materials_data');
+                        if (saved) setMaterialReceiverData(JSON.parse(saved));
+                    } catch (e) { /* ignore */ }
+                    return;
+                }
+
+                // Migrate localStorage materials → IDB (runs once, removes localStorage key)
+                window.STAP_IDB.migrateFromLocalStorage('materials', 'stap_materials_data')
+                    .then(() => window.STAP_IDB.getAll('materials'))
+                    .then(materials => {
+                        if (materials.length > 0) {
+                            setMaterialReceiverData(materials);
+                            console.log('📦 Hydrated', materials.length, 'materials from IDB');
+                        }
+                    });
+
+                // Load proofs from IDB
+                window.STAP_IDB.getAll('proofs').then(proofs => {
+                    if (proofs.length > 0) {
+                        setProofData(proofs);
+                        console.log('📋 Hydrated', proofs.length, 'proofs from IDB');
+                    }
+                });
+
+                // Check storage health
+                window.STAP_IDB.checkStorageHealth().then(setStorageHealth);
+            }, []);
+
+            // IDB write-through: persist materials to IDB on change
+            React.useEffect(() => {
+                if (materialReceiverData.length > 0 && window.STAP_IDB) {
+                    window.STAP_IDB.putAll('materials', materialReceiverData);
                 }
             }, [materialReceiverData]);
-            
+
+            // IDB write-through: persist proofs to IDB on change
+            React.useEffect(() => {
+                if (proofData.length > 0 && window.STAP_IDB) {
+                    window.STAP_IDB.putAll('proofs', proofData);
+                }
+            }, [proofData]);
+
             // Save linked sheet info to localStorage
             React.useEffect(() => {
                 if (materialReceiverLinkedSheet) {
                     localStorage.setItem('stap_materials_sheet', JSON.stringify(materialReceiverLinkedSheet));
                 }
             }, [materialReceiverLinkedSheet]);
-            
+
             // Auto-sync isLiveMode when materials data changes
             React.useEffect(() => {
                 if (materialReceiverData.length > 0) {
@@ -9677,11 +9713,24 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                         currentPosition={sidebarPosition}
                         onSelectPosition={setSidebarPositionAndPersist}
                     />
+                    {/* Storage Health Banner */}
+                    {storageHealth && storageHealth.warning && (
+                        <div className={`fixed top-0 left-0 right-0 z-50 px-4 py-2 text-center text-sm font-medium ${storageHealth.critical ? 'bg-red-500 text-white' : 'bg-amber-400 text-amber-900'}`}>
+                            {storageHealth.critical
+                                ? `⚠️ Storage critical: ${storageHealth.usageMB}MB / ${storageHealth.quotaMB}MB (${storageHealth.percent}%). Consider clearing old data.`
+                                : `💾 Storage ${storageHealth.percent}% full (${storageHealth.usageMB}MB / ${storageHealth.quotaMB}MB)`
+                            }
+                        </div>
+                    )}
                     <DetailModal
                         item={selectedItem}
                         onClose={() => setSelectedItem(null)}
                         onSave={handleUpdateStage}
                         onLogEmail={handleLogEmail}
+                        materialReceiverData={materialReceiverData}
+                        proofData={proofData}
+                        onOpenCreativeHub={() => setView('creativeHub')}
+                        onOpenMaterialReceivers={() => setView('materialReceivers')}
                     />
                     {/* Fullscreen Search Overlay (External Component) */}
                     {window.STAPSearchOverlay && (
