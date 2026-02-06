@@ -76,17 +76,18 @@
             textDim: '#475569',
         };
 
-        // MAIN GEAR - Navigation nodes (10 items)
+        // MAIN GEAR - Navigation nodes (11 items, ~33° apart)
         const navNodes = [
-            { id: 'search', label: 'SEARCH', angle: -126 },  // Global campaign search
-            { id: 'dashboard', label: 'DASHBOARD', angle: -90 },
-            { id: 'master', label: 'INSTALLATIONS', angle: -54 },  // Hidden admin feature - access via triple-click logo
-            { id: 'holdReport', label: 'HOLD REPORT', angle: -18 },
-            { id: 'availability', label: 'AVAILABILITY', angle: 18 },
-            { id: 'riskAnalysis', label: 'RISK CENTER', angle: 54 },
-            { id: 'specialMedia', label: 'SPECIALTY', angle: 90 },
-            { id: 'popGallery', label: 'POP GALLERY', angle: 126 },
-            { id: 'materialReceivers', label: 'MATERIALS', angle: 162 },
+            { id: 'search', label: 'SEARCH', angle: -132 },
+            { id: 'dashboard', label: 'DASHBOARD', angle: -99 },
+            { id: 'master', label: 'INSTALLATIONS', angle: -66 },
+            { id: 'holdReport', label: 'HOLD REPORT', angle: -33 },
+            { id: 'availability', label: 'AVAILABILITY', angle: 0 },
+            { id: 'riskAnalysis', label: 'RISK CENTER', angle: 33 },
+            { id: 'specialMedia', label: 'SPECIALTY', angle: 66 },
+            { id: 'popGallery', label: 'POP GALLERY', angle: 99 },
+            { id: 'materialReceivers', label: 'MATERIALS', angle: 132 },
+            { id: 'creativeHub', label: 'CREATIVE HUB', angle: 165 },
             { id: 'performanceReport', label: 'PERFORMANCE', angle: 198 },
         ];
 
@@ -125,6 +126,7 @@
             specialMedia: 'M3 11l18-5v12L3 13v-2z M11.6 16.8a3 3 0 11-5.8-1.6',
             popGallery: 'M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z M12 17a4 4 0 100-8 4 4 0 000 8z',
             materialReceivers: 'M16.5 9.4l-9-5.19M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12',
+            creativeHub: 'M12 3l1.5 3.7 3.9.6-2.8 2.8.7 3.9-3.3-1.8-3.3 1.8.7-3.9L6.6 7.3l3.9-.6L12 3z M5 16l.8 1.9 2 .3-1.4 1.4.4 2L5 20.5l-1.8 1.1.4-2-1.4-1.4 2-.3L5 16z M19 16l.8 1.9 2 .3-1.4 1.4.4 2-1.8-1.1-1.8 1.1.4-2-1.4-1.4 2-.3L19 16z',
             performanceReport: 'M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8',
             // Pipeline gear icons
             delayedFlights: 'M8.5 14.5A2.5 2.5 0 0011 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 11-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 002.5 2.5z',
