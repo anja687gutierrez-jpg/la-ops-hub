@@ -1730,6 +1730,61 @@
         // Export for external components
         window.STAP_getStatusColor = getStatusColor;
 
+        // ═══════════════════════════════════════════════════════════════════
+        // TIME-GATED INSTALL STATUS CLASSIFICATION
+        // OOH industry standard: only flag campaigns within posting window (T-7 days).
+        // Campaigns further out sit in "Scheduled" or "Planned" states since charting
+        // hasn't confirmed holds and production hasn't ordered materials.
+        // ═══════════════════════════════════════════════════════════════════
+        const computeInstallStatus = (item) => {
+            const stageLower = (item.stage || '').toLowerCase().trim();
+            const pending = item.pending || 0;
+            const qty = item.hasQtyAdjustment ? item.adjustedQty : (item.totalQty || item.quantity || 0);
+            const installed = item.totalInstalled || item.installed || 0;
+
+            // Completed stages with no pending work
+            const completedStages = ['photos taken', 'pop completed', 'takedown complete'];
+            if (completedStages.includes(stageLower) || (stageLower === 'installed' && pending === 0 && qty > 0)) {
+                return { needsReview: false, installTier: 'complete', urgentMaterial: false };
+            }
+
+            // Material Ready + within posting window = in progress
+            if (stageLower === 'material ready for install') {
+                const today = new Date();
+                today.setHours(0,0,0,0);
+                const daysOut = item.dateObj ? Math.ceil((item.dateObj - today) / 86400000) : 0;
+                const urgent = daysOut <= 7;
+                return { needsReview: false, installTier: 'inProgress', urgentMaterial: urgent };
+            }
+
+            // Installed but still has pending work — classify by date proximity
+            if (stageLower === 'installed' && pending > 0) {
+                const today = new Date();
+                today.setHours(0,0,0,0);
+
+                // No date = treat as urgent (review)
+                if (!item.dateObj) {
+                    return { needsReview: true, installTier: 'review', urgentMaterial: false };
+                }
+
+                const daysOut = Math.ceil((item.dateObj - today) / 86400000);
+
+                if (daysOut <= 7) {
+                    // Within 7 days (or past) — needs review (amber)
+                    return { needsReview: true, installTier: 'review', urgentMaterial: false };
+                } else if (daysOut <= 14) {
+                    // 7-14 days out — scheduled (blue)
+                    return { needsReview: false, installTier: 'scheduled', urgentMaterial: false };
+                } else {
+                    // 14+ days out — planned (gray)
+                    return { needsReview: false, installTier: 'planned', urgentMaterial: false };
+                }
+            }
+
+            // All other stages — pipeline
+            return { needsReview: false, installTier: 'pipeline', urgentMaterial: false };
+        };
+
         const findCol = (headers, keywords, exclude = []) => headers.find(h => {
             const low = h.toLowerCase();
             if (!keywords.some(k => low.includes(k))) return false;
@@ -2135,10 +2190,12 @@
 
                 const stageLower = (finalItem.stage || '').toLowerCase().trim();
 
-                // 🔍 NEEDS REVIEW FLAG: Detect stage/numbers mismatch
-                // When stage is "Installed" but there's still pending work (rotation/copy change scenario)
-                // This flags campaigns for user review without changing the workflow
-                finalItem.needsReview = stageLower === 'installed' && finalItem.pending > 0;
+                // 🔍 TIME-GATED INSTALL STATUS: Classify by date proximity
+                // Within 7 days = review (amber), 7-14 = scheduled (blue), 14+ = planned (gray)
+                const installStatus = computeInstallStatus(finalItem);
+                finalItem.needsReview = installStatus.needsReview;
+                finalItem.installTier = installStatus.installTier;
+                finalItem.urgentMaterial = installStatus.urgentMaterial;
 
                 // Check if this is a premium/specialty product
                 const isPremium = SPECIALTY_KEYWORDS.some(k => (finalItem.product || '').toLowerCase().includes(k));
@@ -8324,7 +8381,10 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                                 newItem.pending = Math.max(0, specFinalQty - reconciledInst);
                             }
                         }
-                        newItem.needsReview = (newItem.stage || '').toLowerCase() === 'installed' && newItem.pending > 0;
+                        const specInstallStatus = computeInstallStatus(newItem);
+                        newItem.needsReview = specInstallStatus.needsReview;
+                        newItem.installTier = specInstallStatus.installTier;
+                        newItem.urgentMaterial = specInstallStatus.urgentMaterial;
                         categories.specialMedia.push(newItem);
                     });
                 }
@@ -8418,7 +8478,10 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                                 newItem.pending = Math.max(0, lostFinalQty - reconciledInst);
                             }
                         }
-                        newItem.needsReview = (newItem.stage || '').toLowerCase() === 'installed' && newItem.pending > 0;
+                        const lostInstallStatus = computeInstallStatus(newItem);
+                        newItem.needsReview = lostInstallStatus.needsReview;
+                        newItem.installTier = lostInstallStatus.installTier;
+                        newItem.urgentMaterial = lostInstallStatus.urgentMaterial;
                         categories.lostOpportunities.push(newItem);
                     });
                 }
@@ -8586,7 +8649,10 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                             }
                         }
                         // Recalculate needsReview from final pending (not stale CSV value)
-                        item.needsReview = (item.stage || '').toLowerCase() === 'installed' && item.pending > 0;
+                        const mainInstallStatus = computeInstallStatus(item);
+                        item.needsReview = mainInstallStatus.needsReview;
+                        item.installTier = mainInstallStatus.installTier;
+                        item.urgentMaterial = mainInstallStatus.urgentMaterial;
 
                         // INJECT EMAIL STATS
                         item.emailSentCount = emailStats[uniqueKey] || 0;
@@ -8712,7 +8778,9 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                         const effectiveQty = item.hasQtyAdjustment ? item.adjustedQty : (item.totalQty || item.quantity || 0);
                         const effectiveInstalled = item.totalInstalled || item.installed || 0;
                         const effectivePending = Math.max(0, effectiveQty - effectiveInstalled);
-                        const hasOutstandingWork = item.needsReview || (stageLower === 'installed' && effectivePending > 0);
+                        const hasOutstandingWork = item.needsReview ||
+                            item.installTier === 'scheduled' || item.installTier === 'planned' ||
+                            (stageLower === 'installed' && effectivePending > 0);
                         const isCompletedStage = ['installed', 'photos taken', 'pop completed', 'takedown complete', 'canceled', 'cancelled', 'lost opportunity'].includes(stageLower) && !hasOutstandingWork;
                         const isPastStartDate = item.dateObj < today;
 
@@ -9009,7 +9077,10 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                                     newItem.pending = Math.max(0, reconciledQty - reconciledInstalled);
                                 }
                             }
-                            newItem.needsReview = (newItem.stage || '').toLowerCase() === 'installed' && newItem.pending > 0;
+                            const filtInstallStatus = computeInstallStatus(newItem);
+                            newItem.needsReview = filtInstallStatus.needsReview;
+                            newItem.installTier = filtInstallStatus.installTier;
+                            newItem.urgentMaterial = filtInstallStatus.urgentMaterial;
 
                             return newItem;
                         })
