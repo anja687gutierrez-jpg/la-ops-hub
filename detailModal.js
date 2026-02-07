@@ -1085,6 +1085,51 @@
                                             {pending === 0 && installed > 0 && (
                                                 <div className="text-[10px] text-green-600 font-medium mt-1">✓ Complete</div>
                                             )}
+                                            {/* INSTALL VELOCITY — SLA tracking */}
+                                            {item.firstInstall && (() => {
+                                                const firstDate = item.firstInstallDate || (item.firstInstall ? new Date(item.firstInstall) : null);
+                                                if (!firstDate) return null;
+                                                const endDate = item.completionDate || (item.completion ? new Date(item.completion) : null);
+                                                const now = new Date();
+                                                const isComplete = pending === 0 && installed > 0;
+                                                const refDate = isComplete && endDate ? endDate : now;
+                                                const startNorm = new Date(firstDate); startNorm.setHours(0,0,0,0);
+                                                const endNorm = new Date(refDate); endNorm.setHours(0,0,0,0);
+                                                const duration = Math.floor((endNorm - startNorm) / 86400000);
+                                                const isOverdue = duration > 7 && !isComplete;
+                                                const wasOverdue = duration > 7 && isComplete;
+                                                const fmtDate = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                                                return (
+                                                    <div className={`mt-2 pt-2 border-t border-dashed ${isOverdue ? 'border-red-200' : 'border-gray-200'}`}>
+                                                        <div className="flex items-center justify-between text-[11px]">
+                                                            <span className="text-gray-500">1st Install:</span>
+                                                            <span className="font-mono text-gray-700">{fmtDate(firstDate)}</span>
+                                                        </div>
+                                                        {isComplete ? (
+                                                            <div className="flex items-center justify-between text-[11px] mt-0.5">
+                                                                <span className="text-gray-500">Completed:</span>
+                                                                <span className={`font-mono font-bold ${wasOverdue ? 'text-amber-600' : 'text-green-600'}`}>
+                                                                    {endDate ? fmtDate(endDate) : 'Now'} ({duration}d)
+                                                                </span>
+                                                            </div>
+                                                        ) : isOverdue ? (
+                                                            <div className="flex items-center justify-between text-[11px] mt-0.5">
+                                                                <span className="text-red-500 font-medium flex items-center gap-0.5">
+                                                                    <Icon name="Clock" size={10} /> Duration:
+                                                                </span>
+                                                                <span className="font-mono font-bold text-red-600">
+                                                                    {duration}d <span className="text-[9px]">(SLA exceeded)</span>
+                                                                </span>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="flex items-center justify-between text-[11px] mt-0.5">
+                                                                <span className="text-gray-500">Duration:</span>
+                                                                <span className="font-mono text-gray-600">{duration}d ongoing</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })()}
                                         </>
                                     );
                                 })()}

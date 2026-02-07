@@ -46,6 +46,7 @@ LA STAP Operations Portal - A single-page React application for managing out-of-
 
 **Documentation:**
 - `GROQ_AI_CONFIG.md` - AI analysis configuration documentation
+- `kloudgin.md` - Future vision: custom field ops module to replace KloudGin (exploration only, not started)
 
 ### Key Architectural Patterns
 

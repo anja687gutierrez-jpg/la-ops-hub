@@ -1744,10 +1744,38 @@
             const qty = item.hasQtyAdjustment ? item.adjustedQty : (item.totalQty || item.quantity || 0);
             const installed = item.totalInstalled || item.installed || 0;
 
+            // Helper: calculate days since first install (for SLA velocity tracking)
+            const calcInstallDuration = () => {
+                if (!item.firstInstallDate) return null;
+                const today = new Date();
+                today.setHours(0,0,0,0);
+                const firstDate = new Date(item.firstInstallDate);
+                firstDate.setHours(0,0,0,0);
+                return Math.floor((today - firstDate) / 86400000);
+            };
+
             // Completed stages with no pending work
             const completedStages = ['photos taken', 'pop completed', 'takedown complete'];
             if (completedStages.includes(stageLower) || (stageLower === 'installed' && pending === 0 && qty > 0)) {
-                return { needsReview: false, installTier: 'complete', urgentMaterial: false };
+                // Calculate install duration for completed campaigns (firstInstall → completion or now)
+                let installDuration = null;
+                if (item.firstInstallDate) {
+                    const endPoint = item.completionDate ? new Date(item.completionDate) : new Date();
+                    const startPoint = new Date(item.firstInstallDate);
+                    endPoint.setHours(0,0,0,0);
+                    startPoint.setHours(0,0,0,0);
+                    installDuration = Math.floor((endPoint - startPoint) / 86400000);
+                }
+                return { needsReview: false, installTier: 'complete', urgentMaterial: false, installDuration };
+            }
+
+            // OVERDUE: Install running >7 days with pending work remaining (SLA breach)
+            // Priority over date-proximity tiers — active SLA violation is most urgent
+            if (item.firstInstallDate && pending > 0) {
+                const daysSinceFirstInstall = calcInstallDuration();
+                if (daysSinceFirstInstall !== null && daysSinceFirstInstall > 7) {
+                    return { needsReview: true, installTier: 'overdue', urgentMaterial: false, installDuration: daysSinceFirstInstall };
+                }
             }
 
             // Material Ready + within posting window = in progress
@@ -1756,7 +1784,7 @@
                 today.setHours(0,0,0,0);
                 const daysOut = item.dateObj ? Math.ceil((item.dateObj - today) / 86400000) : 0;
                 const urgent = daysOut <= 7;
-                return { needsReview: false, installTier: 'inProgress', urgentMaterial: urgent };
+                return { needsReview: false, installTier: 'inProgress', urgentMaterial: urgent, installDuration: calcInstallDuration() };
             }
 
             // Installed but still has pending work — classify by date proximity
@@ -1766,25 +1794,25 @@
 
                 // No date = treat as urgent (review)
                 if (!item.dateObj) {
-                    return { needsReview: true, installTier: 'review', urgentMaterial: false };
+                    return { needsReview: true, installTier: 'review', urgentMaterial: false, installDuration: calcInstallDuration() };
                 }
 
                 const daysOut = Math.ceil((item.dateObj - today) / 86400000);
 
                 if (daysOut <= 7) {
                     // Within 7 days (or past) — needs review (amber)
-                    return { needsReview: true, installTier: 'review', urgentMaterial: false };
+                    return { needsReview: true, installTier: 'review', urgentMaterial: false, installDuration: calcInstallDuration() };
                 } else if (daysOut <= 14) {
                     // 7-14 days out — scheduled (blue)
-                    return { needsReview: false, installTier: 'scheduled', urgentMaterial: false };
+                    return { needsReview: false, installTier: 'scheduled', urgentMaterial: false, installDuration: calcInstallDuration() };
                 } else {
                     // 14+ days out — planned (gray)
-                    return { needsReview: false, installTier: 'planned', urgentMaterial: false };
+                    return { needsReview: false, installTier: 'planned', urgentMaterial: false, installDuration: calcInstallDuration() };
                 }
             }
 
             // All other stages — pipeline
-            return { needsReview: false, installTier: 'pipeline', urgentMaterial: false };
+            return { needsReview: false, installTier: 'pipeline', urgentMaterial: false, installDuration: null };
         };
 
         const findCol = (headers, keywords, exclude = []) => headers.find(h => {
@@ -2198,6 +2226,7 @@
                 finalItem.needsReview = installStatus.needsReview;
                 finalItem.installTier = installStatus.installTier;
                 finalItem.urgentMaterial = installStatus.urgentMaterial;
+                finalItem.installDuration = installStatus.installDuration;
 
                 // Check if this is a premium/specialty product
                 const isPremium = SPECIALTY_KEYWORDS.some(k => (finalItem.product || '').toLowerCase().includes(k));
@@ -3223,21 +3252,23 @@
             // Calculate visible column count for colSpan
             const visibleColCount = Object.values(visibleCols).filter(Boolean).length;
 
-            // Calculate summary stats (5-tier: review, scheduled, inProgress, planned, pending)
+            // Calculate summary stats (6-tier: overdue, review, scheduled, inProgress, planned, pending)
             const stats = useMemo(() => {
+                const overdue = data.filter(r => r.installTier === 'overdue').length;
                 const needsReview = data.filter(r => r.installTier === 'review').length;
                 const scheduled = data.filter(r => r.installTier === 'scheduled').length;
                 const inProgress = data.filter(r => r.installTier === 'inProgress').length;
                 const planned = data.filter(r => r.installTier === 'planned').length;
                 const pending = data.reduce((sum, r) => sum + (r.pending || 0), 0);
-                return { needsReview, scheduled, inProgress, planned, pending, total: data.length };
+                return { overdue, needsReview, scheduled, inProgress, planned, pending, total: data.length };
             }, [data]);
 
-            // Group data by install tier (5 groups)
+            // Group data by install tier (6 groups)
             const groupedData = useMemo(() => {
                 if (viewMode === 'flat') return { all: data };
 
                 const groups = {
+                    overdue: [],
                     needsReview: [],
                     scheduled: [],
                     inProgress: [],
@@ -3247,7 +3278,9 @@
 
                 data.forEach(row => {
                     const tier = row.installTier || 'pipeline';
-                    if (tier === 'review') {
+                    if (tier === 'overdue') {
+                        groups.overdue.push(row);
+                    } else if (tier === 'review') {
                         groups.needsReview.push(row);
                     } else if (tier === 'scheduled') {
                         groups.scheduled.push(row);
@@ -3357,6 +3390,7 @@
             const getTierRowClass = (row) => {
                 if (row.isGhost) return 'bg-orange-50';
                 const tier = row.installTier;
+                if (tier === 'overdue') return 'bg-red-50/70 border-l-4 border-l-red-500';
                 if (tier === 'review') return 'bg-amber-50/70 border-l-4 border-l-amber-400';
                 if (tier === 'scheduled') return 'bg-blue-50/40 border-l-4 border-l-blue-300';
                 if (tier === 'planned') return 'bg-slate-50/40 border-l-4 border-l-slate-200';
@@ -3368,6 +3402,7 @@
             const getTierCellBg = (row) => {
                 if (row.isGhost) return 'bg-orange-50';
                 const tier = row.installTier;
+                if (tier === 'overdue') return 'bg-red-50/70';
                 if (tier === 'review') return 'bg-amber-50/70';
                 if (tier === 'scheduled') return 'bg-blue-50/40';
                 if (tier === 'planned') return 'bg-slate-50/40';
@@ -3417,7 +3452,18 @@
                     {visibleCols.pending && <td className={`${cellPad} text-center font-bold ${fontSize}`}>
                         {row.pending > 0 ? <span className="text-orange-600">{row.pending}</span> : <span className="text-gray-300">-</span>}
                     </td>}
-                    {visibleCols.firstInstall && <td className={`${cellPad} ${fontSize} font-mono text-gray-600`}>{row.firstInstall || '-'}</td>}
+                    {visibleCols.firstInstall && <td className={`${cellPad} ${fontSize} font-mono text-gray-600`}>
+                        {row.firstInstall || '-'}
+                        {row.installTier === 'overdue' && row.installDuration && (
+                            <span className="ml-1 px-1 py-0.5 bg-red-100 text-red-700 rounded text-[9px] font-bold">{row.installDuration}d</span>
+                        )}
+                        {row.installTier === 'complete' && row.installDuration != null && row.installDuration > 7 && (
+                            <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-700 rounded text-[9px] font-bold">{row.installDuration}d</span>
+                        )}
+                        {row.installTier === 'complete' && row.installDuration != null && row.installDuration <= 7 && (
+                            <span className="ml-1 px-1 py-0.5 bg-green-100 text-green-700 rounded text-[9px] font-bold">{row.installDuration}d</span>
+                        )}
+                    </td>}
                     {visibleCols.completion && <td className={`${cellPad} ${fontSize} font-mono text-gray-600`}>{row.completion || '-'}</td>}
                     {visibleCols.status && <td className={`${cellPad} text-right`}>
                         <div className="flex items-center justify-end gap-1">
@@ -3433,6 +3479,11 @@
                                     <span className={`inline-flex items-center px-1.5 py-0.5 rounded ${compactMode ? 'text-[10px]' : 'text-xs'} bg-gray-100 text-gray-600`}>Active</span>
                                 );
                             })()}
+                            {row.installTier === 'overdue' && (
+                                <span title={`⏰ Overdue — install running ${row.installDuration || '?'}d (SLA: 7d)`} className="text-red-500 ml-0.5">
+                                    <Icon name="Clock" size={compactMode ? 10 : 12} />
+                                </span>
+                            )}
                             {row.installTier === 'review' && (
                                 <span title="⚠️ Needs review — within 7-day posting window" className="text-amber-500 ml-0.5">
                                     <Icon name="AlertTriangle" size={compactMode ? 10 : 12} />
@@ -3458,8 +3509,15 @@
 
             return (
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                {/* Summary Stats Strip — 5 columns */}
-                <div className="grid grid-cols-5 gap-px bg-gray-200 border-b">
+                {/* Summary Stats Strip — 6 columns */}
+                <div className="grid grid-cols-6 gap-px bg-gray-200 border-b">
+                    <div className={`px-3 py-3 text-center ${stats.overdue > 0 ? 'bg-red-50' : 'bg-white'}`}>
+                        <div className={`text-2xl font-bold ${stats.overdue > 0 ? 'text-red-600' : 'text-gray-400'}`}>{stats.overdue}</div>
+                        <div className="text-xs text-gray-500 flex items-center justify-center gap-1">
+                            {stats.overdue > 0 && <Icon name="Clock" size={10} className="text-red-500" />}
+                            Overdue
+                        </div>
+                    </div>
                     <div className={`px-3 py-3 text-center ${stats.needsReview > 0 ? 'bg-amber-50' : 'bg-white'}`}>
                         <div className={`text-2xl font-bold ${stats.needsReview > 0 ? 'text-amber-600' : 'text-gray-400'}`}>{stats.needsReview}</div>
                         <div className="text-xs text-gray-500 flex items-center justify-center gap-1">
@@ -3503,6 +3561,15 @@
                     Installations
                     <span className="text-xs text-gray-500 font-normal ml-1">— Click any row to update</span>
                     <span className="bg-purple-100 text-purple-700 text-xs py-0.5 px-2 rounded-full">{data.length}</span>
+                    {(() => {
+                        const overdueCount = data.filter(r => r.installTier === 'overdue').length;
+                        return overdueCount > 0 ? (
+                            <span className="bg-red-100 text-red-700 text-xs py-0.5 px-2 rounded-full flex items-center gap-1">
+                                <Icon name="Clock" size={10} />
+                                {overdueCount} Overdue
+                            </span>
+                        ) : null;
+                    })()}
                     {(() => {
                         const reviewCount = data.filter(r => r.installTier === 'review').length;
                         return reviewCount > 0 ? (
@@ -3601,9 +3668,25 @@
                         </tr>
                     </thead>
 
-                    {/* GROUPED VIEW - 5-tier install status sections */}
+                    {/* GROUPED VIEW - 6-tier install status sections */}
                     {viewMode === 'grouped' ? (
                         <tbody>
+                            {/* OVERDUE — Install SLA exceeded >7 days (Red) */}
+                            {groupedData.overdue?.length > 0 && (
+                                <>
+                                <tr>
+                                    <td colSpan={visibleColCount} className="px-4 py-2 bg-red-50 border-l-4 border-l-red-500">
+                                        <div className="flex items-center gap-2 text-red-700">
+                                            <Icon name="Clock" size={14} />
+                                            <span className="font-semibold text-sm">Overdue (&gt;7 Days)</span>
+                                            <span className="text-xs opacity-75 bg-red-200 px-1.5 py-0.5 rounded-full">{groupedData.overdue.length}</span>
+                                            <span className="text-[10px] text-red-500 ml-1">install SLA exceeded</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {groupedData.overdue.map((row, idx) => renderTableRow(row, `overdue-${idx}`))}
+                                </>
+                            )}
                             {/* NEEDS REVIEW — ≤7 days / past due (Amber) */}
                             {groupedData.needsReview?.length > 0 && (
                                 <>
@@ -6630,6 +6713,7 @@
                                         advertiser, name, rawName, owner, market, product, media,
                                         stage, quantity, totalQty, installed, totalInstalled, pending,
                                         isGhost, ghostReason, isComplete, hasBonus, bonusNote,
+                                        firstInstall, completion,
                                         // Skip dateObj - we'll reconstruct from date string
                                         dateObj, endDateObj, productEndDateObj, programEndDateObj,
                                         ...rest
@@ -6638,7 +6722,8 @@
                                         id, date, endDate, productEndDate, programEndDate,
                                         advertiser, name, rawName, owner, market, product, media,
                                         stage, quantity, totalQty, installed, totalInstalled, pending,
-                                        isGhost, ghostReason, isComplete, hasBonus, bonusNote
+                                        isGhost, ghostReason, isComplete, hasBonus, bonusNote,
+                                        firstInstall, completion
                                     };
                                 }) || [],
                                 installs: baseData.installs?.map(item => {
@@ -8324,6 +8409,13 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                         if (!newItem.dateObj && newItem.date) {
                             newItem.dateObj = new Date(newItem.date);
                         }
+                        // Rehydrate install velocity dates from localStorage strings
+                        if (newItem.firstInstall && !newItem.firstInstallDate) {
+                            newItem.firstInstallDate = parseDate(newItem.firstInstall);
+                        }
+                        if (newItem.completion && !newItem.completionDate) {
+                            newItem.completionDate = parseDate(newItem.completion);
+                        }
 
                         // FIX: ALWAYS recalculate pending from qty/installed
                         const baseQty = newItem.totalQty || newItem.quantity || 0;
@@ -8403,6 +8495,7 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                         newItem.needsReview = specInstallStatus.needsReview;
                         newItem.installTier = specInstallStatus.installTier;
                         newItem.urgentMaterial = specInstallStatus.urgentMaterial;
+                        newItem.installDuration = specInstallStatus.installDuration;
                         categories.specialMedia.push(newItem);
                     });
                 }
@@ -8421,6 +8514,13 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                         }
                         if (!newItem.dateObj && newItem.date) {
                             newItem.dateObj = new Date(newItem.date);
+                        }
+                        // Rehydrate install velocity dates from localStorage strings
+                        if (newItem.firstInstall && !newItem.firstInstallDate) {
+                            newItem.firstInstallDate = parseDate(newItem.firstInstall);
+                        }
+                        if (newItem.completion && !newItem.completionDate) {
+                            newItem.completionDate = parseDate(newItem.completion);
                         }
 
                         // FIX: ALWAYS recalculate pending from qty/installed
@@ -8500,6 +8600,7 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                         newItem.needsReview = lostInstallStatus.needsReview;
                         newItem.installTier = lostInstallStatus.installTier;
                         newItem.urgentMaterial = lostInstallStatus.urgentMaterial;
+                        newItem.installDuration = lostInstallStatus.installDuration;
                         categories.lostOpportunities.push(newItem);
                     });
                 }
@@ -8545,6 +8646,13 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                         }
                         if (!item.endDateObj && item.endDate) {
                             item.endDateObj = new Date(item.endDate);
+                        }
+                        // Rehydrate install velocity dates from localStorage strings
+                        if (item.firstInstall && !item.firstInstallDate) {
+                            item.firstInstallDate = parseDate(item.firstInstall);
+                        }
+                        if (item.completion && !item.completionDate) {
+                            item.completionDate = parseDate(item.completion);
                         }
 
                         // FIX: ALWAYS recalculate pending from qty/installed
@@ -8671,6 +8779,7 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                         item.needsReview = mainInstallStatus.needsReview;
                         item.installTier = mainInstallStatus.installTier;
                         item.urgentMaterial = mainInstallStatus.urgentMaterial;
+                        item.installDuration = mainInstallStatus.installDuration;
 
                         // INJECT EMAIL STATS
                         item.emailSentCount = emailStats[uniqueKey] || 0;
@@ -8797,7 +8906,7 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                         const effectiveInstalled = item.totalInstalled || item.installed || 0;
                         const effectivePending = Math.max(0, effectiveQty - effectiveInstalled);
                         const hasOutstandingWork = item.needsReview ||
-                            item.installTier === 'scheduled' || item.installTier === 'planned' ||
+                            item.installTier === 'overdue' || item.installTier === 'scheduled' || item.installTier === 'planned' ||
                             (stageLower === 'installed' && effectivePending > 0);
                         const isCompletedStage = ['installed', 'photos taken', 'pop completed', 'takedown complete', 'canceled', 'cancelled', 'lost opportunity'].includes(stageLower) && !hasOutstandingWork;
                         const isPastStartDate = item.dateObj < today;
@@ -9037,6 +9146,13 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                             if (!newItem.dateObj && newItem.date) {
                                 newItem.dateObj = new Date(newItem.date);
                             }
+                            // Rehydrate install velocity dates from localStorage strings
+                            if (newItem.firstInstall && !newItem.firstInstallDate) {
+                                newItem.firstInstallDate = parseDate(newItem.firstInstall);
+                            }
+                            if (newItem.completion && !newItem.completionDate) {
+                                newItem.completionDate = parseDate(newItem.completion);
+                            }
 
                             // APPLY MANUAL OVERRIDES (stage, installed count, etc.) - includes product for uniqueness
                             const uniqueKey = `${newItem.id}_${newItem.date}_${newItem.product || newItem.media}`;
@@ -9099,6 +9215,7 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                             newItem.needsReview = filtInstallStatus.needsReview;
                             newItem.installTier = filtInstallStatus.installTier;
                             newItem.urgentMaterial = filtInstallStatus.urgentMaterial;
+                            newItem.installDuration = filtInstallStatus.installDuration;
 
                             return newItem;
                         })
