@@ -1289,7 +1289,7 @@
 
                         // Build visual progress bar - use adjustedQty if set for charted qty override
                         const totalQty = item.adjustedQty || item.quantity || item.totalQty || 0;
-                        const installedQty = item.installed || item.totalInstalled || 0;
+                        const installedQty = item.totalInstalled || item.installed || 0;
                         const pendingQty = item.pending || item.totalPending || (totalQty - installedQty);
                         const pct = totalQty > 0 ? Math.round((installedQty / totalQty) * 100) : 0;
                         const barColor = pct >= 75 ? '#4caf50' : pct >= 50 ? '#ff9800' : '#f44336';
@@ -1343,7 +1343,7 @@
                         
                         // Show installed count with checkmark (use charted qty when available)
                         const totalQty = item.adjustedQty || item.quantity || item.totalQty || 0;
-                        const installedQty = item.installed || item.totalInstalled || 0;
+                        const installedQty = item.totalInstalled || item.installed || 0;
                         const unitsHtml = totalQty > 0 ? `
                             <span style="color: #4caf50; font-weight: bold;">✓ ${installedQty}</span>
                             <span style="color: #666; font-size: 11px;">/ ${totalQty}</span>
@@ -6589,16 +6589,16 @@
             │                            │                                       │
             │                            ▼                                       │
             │   ┌─────────────────────────────────────────────────────────┐      │
-            │   │              manualOverrides (State)                     │      │
+            │   │         tempOverrides + metaOverrides (State)            │      │
             │   │   { campaignId: { stage, installed, pending, notes } }   │      │
             │   │                                                          │      │
-            │   │   ✏️ Auto-persisted to localStorage (stap_manual_overrides)│     │
+            │   │   ✏️ Auto-persisted (stap_temp_overrides + stap_meta_overrides)│  │
             │   └────────────────────────┬────────────────────────────────┘      │
             │                            │                                       │
             │                            ▼                                       │
             │   ┌─────────────────────────────────────────────────────────┐      │
             │   │              processedData (useMemo)                     │      │
-            │   │   Combines baseData + manualOverrides                    │      │
+            │   │   Combines baseData + tempOverrides + metaOverrides      │      │
             │   │   Categorizes into: delayed, inProgress, installed, etc. │      │
             │   └────────────────────────┬────────────────────────────────┘      │
             │                            │                                       │
@@ -6639,46 +6639,117 @@
                 return { holds: [], installs: [] };
             });
             
-            // Extended manual overrides: { campaignId: { stage?, installed?, pending?, notes? } }
-            const [manualOverrides, setManualOverrides] = useState(() => {
+            // TEMP overrides: working adjustments to sheet-native fields (installed, stage, previousStage)
+            // Wiped on every sync/CSV import — these are between-sync edits only
+            const [tempOverrides, setTempOverrides] = useState(() => {
                 try {
-                    const saved = localStorage.getItem('stap_manual_overrides');
+                    const saved = localStorage.getItem('stap_temp_overrides');
                     if (saved) {
                         const parsed = JSON.parse(saved);
                         const count = Object.keys(parsed).length;
-                        if (count > 0) {
-                            console.log(`✏️ Loaded ${count} manual override(s) from localStorage`);
-                        }
+                        if (count > 0) console.log(`✏️ Loaded ${count} temp override(s)`);
                         return parsed;
                     }
                     return {};
                 } catch (e) {
-                    console.warn('Could not load manual overrides:', e);
+                    console.warn('Could not load temp overrides:', e);
                     return {};
                 }
             });
 
-            // One-time migration: Move legacy stap_production_proof data into stap_manual_overrides
+            // META overrides: app-only fields that don't exist in the sheet (persist forever, survive sync)
+            const [metaOverrides, setMetaOverrides] = useState(() => {
+                try {
+                    const saved = localStorage.getItem('stap_meta_overrides');
+                    if (saved) {
+                        const parsed = JSON.parse(saved);
+                        const count = Object.keys(parsed).length;
+                        if (count > 0) console.log(`📋 Loaded ${count} meta override(s)`);
+                        return parsed;
+                    }
+                    return {};
+                } catch (e) {
+                    console.warn('Could not load meta overrides:', e);
+                    return {};
+                }
+            });
+
+            // Fields that belong in each bucket
+            const TEMP_OVERRIDE_FIELDS = new Set(['installed', 'stage', 'previousStage']);
+            const META_OVERRIDE_FIELDS = new Set([
+                'adjustedQty', 'materialBreakdown', 'photosLink', 'receiverLink',
+                'mediaType', 'removalQty', 'removedCount', 'removalStatus',
+                'removalAssignee', 'removalPhotosLink', 'hasReplacement',
+                'productionProof', 'history', 'notes'
+            ]);
+
+            // One-time migration: Split legacy stap_manual_overrides into temp + meta buckets
             useEffect(() => {
                 try {
+                    // Migrate legacy production proofs first
                     const legacyProofs = localStorage.getItem('stap_production_proof');
-                    if (legacyProofs) {
+
+                    // Migrate old unified overrides into split buckets
+                    const legacyOverrides = localStorage.getItem('stap_manual_overrides');
+                    if (legacyOverrides) {
+                        const oldData = JSON.parse(legacyOverrides);
+                        // Also fold in legacy production proofs
+                        if (legacyProofs) {
+                            const proofData = JSON.parse(legacyProofs);
+                            Object.entries(proofData).forEach(([key, value]) => {
+                                oldData[key] = { ...(oldData[key] || {}), productionProof: value };
+                            });
+                        }
+
+                        const newTemp = {};
+                        const newMeta = {};
+                        let tempCount = 0, metaCount = 0;
+
+                        Object.entries(oldData).forEach(([campaignKey, fields]) => {
+                            const tempFields = {};
+                            const metaFields = {};
+                            Object.entries(fields).forEach(([field, value]) => {
+                                if (field === 'lastModified' || field === 'pending') return; // Drop pending & lastModified
+                                if (TEMP_OVERRIDE_FIELDS.has(field)) {
+                                    tempFields[field] = value;
+                                } else if (META_OVERRIDE_FIELDS.has(field)) {
+                                    metaFields[field] = value;
+                                }
+                                // Unknown fields are dropped during migration
+                            });
+                            if (Object.keys(tempFields).length > 0) {
+                                newTemp[campaignKey] = tempFields;
+                                tempCount++;
+                            }
+                            if (Object.keys(metaFields).length > 0) {
+                                newMeta[campaignKey] = metaFields;
+                                metaCount++;
+                            }
+                        });
+
+                        setTempOverrides(prev => ({ ...prev, ...newTemp }));
+                        setMetaOverrides(prev => ({ ...prev, ...newMeta }));
+                        localStorage.removeItem('stap_manual_overrides');
+                        if (legacyProofs) localStorage.removeItem('stap_production_proof');
+                        console.log(`🔄 Migrated overrides: ${tempCount} temp, ${metaCount} meta (old key removed)`);
+                    } else if (legacyProofs) {
+                        // Only production proofs to migrate (no old overrides)
                         const proofData = JSON.parse(legacyProofs);
                         const migratedCount = Object.keys(proofData).length;
                         if (migratedCount > 0) {
-                            setManualOverrides(prev => {
+                            setMetaOverrides(prev => {
                                 const merged = { ...prev };
                                 Object.entries(proofData).forEach(([key, value]) => {
                                     merged[key] = { ...(merged[key] || {}), productionProof: value };
                                 });
                                 return merged;
                             });
-                            localStorage.removeItem('stap_production_proof'); // Clean up legacy key
-                            console.log(`🔄 Migrated ${migratedCount} production proof(s) to unified storage`);
+                            localStorage.removeItem('stap_production_proof');
+                            console.log(`🔄 Migrated ${migratedCount} production proof(s) to meta overrides`);
                         }
                     }
                 } catch (e) {
-                    console.warn('Could not migrate production proofs:', e);
+                    console.warn('Could not migrate overrides:', e);
                 }
             }, []);
 
@@ -6780,14 +6851,23 @@
                 }
             }, [baseData]);
             
-            // Persist manual overrides to localStorage
+            // Persist temp overrides to localStorage
             useEffect(() => {
                 try {
-                    localStorage.setItem('stap_manual_overrides', JSON.stringify(manualOverrides));
+                    localStorage.setItem('stap_temp_overrides', JSON.stringify(tempOverrides));
                 } catch (e) {
-                    console.warn('Could not persist manual overrides:', e);
+                    console.warn('Could not persist temp overrides:', e);
                 }
-            }, [manualOverrides]);
+            }, [tempOverrides]);
+
+            // Persist meta overrides to localStorage
+            useEffect(() => {
+                try {
+                    localStorage.setItem('stap_meta_overrides', JSON.stringify(metaOverrides));
+                } catch (e) {
+                    console.warn('Could not persist meta overrides:', e);
+                }
+            }, [metaOverrides]);
             
             // Persist data source info
             useEffect(() => {
@@ -6798,34 +6878,66 @@
                 }
             }, [dataSource]);
 
+            // Auto-sync pause toggle (persisted)
+            const [syncPaused, setSyncPaused] = useState(() => {
+                return localStorage.getItem('stap_sync_paused') === 'true';
+            });
+            useEffect(() => {
+                localStorage.setItem('stap_sync_paused', syncPaused ? 'true' : 'false');
+            }, [syncPaused]);
+
+            // Auto-sync schedule: 9:00 AM, 12:00 PM, 4:00 PM
+            const lastAutoSyncRef = useRef(null);
+            const handleLiveSyncRef = useRef(null); // Ref to avoid stale closure in interval
+
             // Note: View is no longer persisted - app always starts at dashboard for consistent UX.
             // Instead, we show a "Resume Previous Session" card on the upload screen
             // This gives users explicit control over whether to use cached data.
             
-            // Function to update manual override for a campaign
+            // Function to update override for a campaign — routes fields to correct bucket
             const updateManualOverride = (campaignId, updates) => {
-                setManualOverrides(prev => ({
-                    ...prev,
-                    [campaignId]: {
-                        ...(prev[campaignId] || {}),
-                        ...updates,
-                        lastModified: new Date().toISOString()
+                const tempUpdates = {};
+                const metaUpdates = {};
+                Object.entries(updates).forEach(([field, value]) => {
+                    if (field === 'pending') return; // Never store pending
+                    if (TEMP_OVERRIDE_FIELDS.has(field)) {
+                        tempUpdates[field] = value;
+                    } else if (META_OVERRIDE_FIELDS.has(field)) {
+                        metaUpdates[field] = value;
                     }
-                }));
+                });
+                if (Object.keys(tempUpdates).length > 0) {
+                    setTempOverrides(prev => ({
+                        ...prev,
+                        [campaignId]: { ...(prev[campaignId] || {}), ...tempUpdates }
+                    }));
+                }
+                if (Object.keys(metaUpdates).length > 0) {
+                    setMetaOverrides(prev => ({
+                        ...prev,
+                        [campaignId]: { ...(prev[campaignId] || {}), ...metaUpdates }
+                    }));
+                }
             };
-            
-            // Function to clear a specific override
+
+            // Function to clear a specific override (both buckets)
             const clearManualOverride = (campaignId) => {
-                setManualOverrides(prev => {
+                setTempOverrides(prev => {
+                    const updated = { ...prev };
+                    delete updated[campaignId];
+                    return updated;
+                });
+                setMetaOverrides(prev => {
                     const updated = { ...prev };
                     delete updated[campaignId];
                     return updated;
                 });
             };
-            
-            // Function to clear all overrides
+
+            // Function to clear all overrides (both buckets)
             const clearAllOverrides = () => {
-                setManualOverrides({});
+                setTempOverrides({});
+                setMetaOverrides({});
             };
             
             // Function to explicitly clear persisted CSV (for new upload)
@@ -6849,6 +6961,9 @@
                         'stap_csv_data',
                         'stap_data_source',
                         'stap_manual_overrides',
+                        'stap_temp_overrides',
+                        'stap_meta_overrides',
+                        'stap_sync_paused',
                         'stap_materials_data',
                         'stap_materials_sheet',
                         'stap_material_data',
@@ -6868,7 +6983,8 @@
                     // Reset all state
                     setBaseData({ holds: [], installs: [] });
                     setDataSource({ type: 'none', timestamp: null, error: null });
-                    setManualOverrides({});
+                    setTempOverrides({});
+                    setMetaOverrides({});
                     setMaterialReceiverData([]);
                     setProofData([]);
                     setGhostBookings([]);
@@ -7507,7 +7623,11 @@
                 setProcessing(true);
                 clearLogs();
                 addLog("🚀 Starting Live Sync sequence...");
-                
+
+                // Wipe temp overrides — fresh data from sheet replaces working edits
+                setTempOverrides({});
+                addLog("🧹 Temp overrides cleared — fresh data from Google Sheet");
+
                 // Get fresh config in case it was updated
                 const config = getSavedSheetConfig();
                 const googleUrl = `https://docs.google.com/spreadsheets/d/${config.sheetId}/export?format=csv&gid=${config.gid}`;
@@ -7638,6 +7758,42 @@
             };
             // ----------------------------------
 
+            // Keep ref updated so auto-sync interval uses latest version
+            handleLiveSyncRef.current = handleLiveSync;
+
+            // Auto-sync interval (placed after handleLiveSync is defined)
+            useEffect(() => {
+                const AUTO_SYNC_TIMES = [
+                    { h: 9, m: 0 },
+                    { h: 12, m: 0 },
+                    { h: 16, m: 0 }
+                ];
+
+                const checkAutoSync = () => {
+                    if (syncPaused) return;
+                    if (!baseData.holds?.length && !baseData.installs?.length) return;
+
+                    const now = new Date();
+                    const currentH = now.getHours();
+                    const currentM = now.getMinutes();
+
+                    for (const syncTime of AUTO_SYNC_TIMES) {
+                        if (currentH === syncTime.h && Math.abs(currentM - syncTime.m) <= 1) {
+                            const syncKey = `${currentH}:${syncTime.m}:${now.toDateString()}`;
+                            if (lastAutoSyncRef.current !== syncKey) {
+                                lastAutoSyncRef.current = syncKey;
+                                console.log(`🔄 Auto-sync triggered at ${currentH}:${String(currentM).padStart(2, '0')}`);
+                                if (handleLiveSyncRef.current) handleLiveSyncRef.current();
+                            }
+                            break;
+                        }
+                    }
+                };
+
+                const intervalId = setInterval(checkAutoSync, 60000);
+                return () => clearInterval(intervalId);
+            }, [syncPaused, baseData.holds?.length, baseData.installs?.length]);
+
             const processData = async () => {
                 // Warn if overwriting live Google Sheet data with a static CSV
                 const isSheetActive = dataSource.type === 'google_sheet' || baseData._source === 'google_sheet';
@@ -7653,6 +7809,10 @@
 
                 setProcessing(true);
                 await new Promise(r => setTimeout(r, 800));
+
+                // Wipe temp overrides — fresh CSV data replaces working edits
+                setTempOverrides({});
+                console.log("🧹 Temp overrides cleared — fresh data from CSV upload");
 
                 try {
                     let rawHolds = [], rawInstalls = [];
@@ -8306,17 +8466,9 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
             const formatDateShort = (d) => `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`;
 
             const processedData = useMemo(() => {
-                // This logic runs whenever baseData OR manualOverrides changes
-                // Smart merge: determine if we should prefer fresh CSV data over stale overrides
-                const importTimestamp = dataSource?.timestamp ? new Date(dataSource.timestamp) : null;
-
-                // Helper: check if an override field should be skipped (stale override vs fresh CSV)
-                // Always keeps: adjustedQty, productionProof, notes, materials, removal, history
-                // Smart merges: stage, installed, pending (skip if override is older than import)
-                const isOverrideStale = (override) => {
-                    if (!importTimestamp || !override?.lastModified) return false;
-                    return new Date(override.lastModified) < importTimestamp;
-                };
+                // Dual-bucket override merge:
+                // - tempOverrides: working edits (installed, stage) — wiped on sync/import
+                // - metaOverrides: app-only fields (adjustedQty, removal, materials) — persist forever
 
                 const categories = {
                     pastDue: [], thisWeek: [], nextMonth: [], upcoming: [], recentInstalls: [],
@@ -8429,67 +8581,54 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                             if (!includeGhosts) return; // Skip from specialty view if excluding
                         }
 
-                        // MODIFIED: Check composite key for extended overrides (includes product for uniqueness)
+                        // Apply dual-bucket overrides (temp + meta)
                         const uniqueKey = `${newItem.id}_${newItem.date}_${newItem.product || newItem.media}`;
-                        const override = manualOverrides[uniqueKey];
-                        if (override) {
-                            const stale = isOverrideStale(override);
+                        const tempOvr = tempOverrides[uniqueKey];
+                        const metaOvr = metaOverrides[uniqueKey];
 
-                            // ALWAYS apply: adjustedQty (charted qty is workflow data, 0 = ghost booking clearance)
-                            if (override.adjustedQty !== undefined && override.adjustedQty !== null) {
-                                newItem.adjustedQty = override.adjustedQty;
-                                newItem.hasQtyAdjustment = true;
+                        // META: adjustedQty (charted qty is workflow data, 0 = ghost booking clearance)
+                        if (metaOvr?.adjustedQty !== undefined && metaOvr.adjustedQty !== null) {
+                            newItem.adjustedQty = metaOvr.adjustedQty;
+                            newItem.hasQtyAdjustment = true;
+                            newItem.isOverridden = true;
+                        }
+
+                        // TEMP: stage and installed (working edits between syncs)
+                        if (tempOvr) {
+                            if (tempOvr.stage) {
+                                newItem.stage = tempOvr.stage;
                                 newItem.isOverridden = true;
-                            }
-
-                            // SMART MERGE: skip stage/installed/pending if stale
-                            if (!stale) {
-                                if (override.stage) {
-                                    newItem.stage = override.stage;
-                                    newItem.isOverridden = true;
-                                    const completedStages = ['installed', 'photos taken', 'pop completed', 'takedown complete'];
-                                    if (completedStages.includes(override.stage.toLowerCase())) {
-                                        newItem.isComplete = true;
-                                    }
-                                }
-                                if (override.previousStage) {
-                                    newItem.previousStage = override.previousStage;
-                                }
-                                if (override.installed !== undefined) {
-                                    newItem.totalInstalled = override.installed;
-                                    newItem.installed = override.installed;
-                                    const targetQty = newItem.hasQtyAdjustment ? newItem.adjustedQty : (newItem.totalQty || newItem.quantity || 0);
-                                    newItem.pending = Math.max(0, targetQty - override.installed);
-                                    newItem.isOverridden = true;
-                                }
-                                if (override.pending !== undefined) {
-                                    newItem.pending = override.pending;
-                                    newItem.isOverridden = true;
+                                const completedStages = ['installed', 'photos taken', 'pop completed', 'takedown complete'];
+                                if (completedStages.includes(tempOvr.stage.toLowerCase())) {
+                                    newItem.isComplete = true;
                                 }
                             }
-
-                            // Recalculate pending from adjustedQty even when stale
-                            if (newItem.hasQtyAdjustment && (stale || override.installed === undefined)) {
-                                const installed = newItem.totalInstalled || newItem.installed || 0;
-                                newItem.pending = Math.max(0, newItem.adjustedQty - installed);
+                            if (tempOvr.previousStage) {
+                                newItem.previousStage = tempOvr.previousStage;
                             }
-
-                            // ALWAYS apply: metadata
-                            if (override.productionProof) {
-                                newItem.productionProof = override.productionProof;
+                            if (tempOvr.installed !== undefined) {
+                                newItem.totalInstalled = tempOvr.installed;
+                                newItem.installed = tempOvr.installed;
                                 newItem.isOverridden = true;
                             }
                         }
-                        // RECONCILE: Recalculate isComplete and needsReview from final state after overrides
-                        const specFinalQty = newItem.hasQtyAdjustment ? newItem.adjustedQty : (newItem.totalQty || newItem.quantity || 0);
-                        newItem.isComplete = newItem.pending === 0 && (specFinalQty > 0 || newItem.hasQtyAdjustment);
+
+                        // META: productionProof
+                        if (metaOvr?.productionProof) {
+                            newItem.productionProof = metaOvr.productionProof;
+                            newItem.isOverridden = true;
+                        }
+
+                        // ALWAYS recalculate pending from final values (never use stored pending)
+                        const specTargetQty = newItem.hasQtyAdjustment ? newItem.adjustedQty : (newItem.totalQty || newItem.quantity || 0);
+                        const specInstalled = newItem.totalInstalled || newItem.installed || 0;
+                        newItem.pending = Math.max(0, specTargetQty - specInstalled);
+
+                        // RECONCILE: Recalculate isComplete and needsReview from final state
+                        newItem.isComplete = newItem.pending === 0 && (specTargetQty > 0 || newItem.hasQtyAdjustment);
                         const specCompletedStages = ['installed', 'photos taken', 'pop completed', 'takedown complete'];
                         if (specCompletedStages.includes((newItem.stage || '').toLowerCase())) {
                             newItem.isComplete = true;
-                            if (newItem.pending > 0 && newItem.isOverridden) {
-                                const reconciledInst = newItem.totalInstalled || newItem.installed || 0;
-                                newItem.pending = Math.max(0, specFinalQty - reconciledInst);
-                            }
                         }
                         const specInstallStatus = computeInstallStatus(newItem);
                         newItem.needsReview = specInstallStatus.needsReview;
@@ -8534,67 +8673,54 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                             categories.ghostBookings.push(newItem);
                         }
 
-                        // MODIFIED: Check composite key for extended overrides (includes product for uniqueness)
+                        // Apply dual-bucket overrides (temp + meta)
                         const uniqueKey = `${newItem.id}_${newItem.date}_${newItem.product || newItem.media}`;
-                        const override = manualOverrides[uniqueKey];
-                        if (override) {
-                            const stale = isOverrideStale(override);
+                        const tempOvr = tempOverrides[uniqueKey];
+                        const metaOvr = metaOverrides[uniqueKey];
 
-                            // ALWAYS apply: adjustedQty (charted qty is workflow data, 0 = ghost booking clearance)
-                            if (override.adjustedQty !== undefined && override.adjustedQty !== null) {
-                                newItem.adjustedQty = override.adjustedQty;
-                                newItem.hasQtyAdjustment = true;
+                        // META: adjustedQty
+                        if (metaOvr?.adjustedQty !== undefined && metaOvr.adjustedQty !== null) {
+                            newItem.adjustedQty = metaOvr.adjustedQty;
+                            newItem.hasQtyAdjustment = true;
+                            newItem.isOverridden = true;
+                        }
+
+                        // TEMP: stage and installed
+                        if (tempOvr) {
+                            if (tempOvr.stage) {
+                                newItem.stage = tempOvr.stage;
                                 newItem.isOverridden = true;
-                            }
-
-                            // SMART MERGE: skip stage/installed/pending if stale
-                            if (!stale) {
-                                if (override.stage) {
-                                    newItem.stage = override.stage;
-                                    newItem.isOverridden = true;
-                                    const completedStages = ['installed', 'photos taken', 'pop completed', 'takedown complete'];
-                                    if (completedStages.includes(override.stage.toLowerCase())) {
-                                        newItem.isComplete = true;
-                                    }
-                                }
-                                if (override.previousStage) {
-                                    newItem.previousStage = override.previousStage;
-                                }
-                                if (override.installed !== undefined) {
-                                    newItem.totalInstalled = override.installed;
-                                    newItem.installed = override.installed;
-                                    const targetQty = newItem.hasQtyAdjustment ? newItem.adjustedQty : (newItem.totalQty || newItem.quantity || 0);
-                                    newItem.pending = Math.max(0, targetQty - override.installed);
-                                    newItem.isOverridden = true;
-                                }
-                                if (override.pending !== undefined) {
-                                    newItem.pending = override.pending;
-                                    newItem.isOverridden = true;
+                                const completedStages = ['installed', 'photos taken', 'pop completed', 'takedown complete'];
+                                if (completedStages.includes(tempOvr.stage.toLowerCase())) {
+                                    newItem.isComplete = true;
                                 }
                             }
-
-                            // Recalculate pending from adjustedQty even when stale
-                            if (newItem.hasQtyAdjustment && (stale || override.installed === undefined)) {
-                                const installed = newItem.totalInstalled || newItem.installed || 0;
-                                newItem.pending = Math.max(0, newItem.adjustedQty - installed);
+                            if (tempOvr.previousStage) {
+                                newItem.previousStage = tempOvr.previousStage;
                             }
-
-                            // ALWAYS apply: metadata
-                            if (override.productionProof) {
-                                newItem.productionProof = override.productionProof;
+                            if (tempOvr.installed !== undefined) {
+                                newItem.totalInstalled = tempOvr.installed;
+                                newItem.installed = tempOvr.installed;
                                 newItem.isOverridden = true;
                             }
                         }
-                        // RECONCILE: Recalculate isComplete and needsReview from final state after overrides
-                        const lostFinalQty = newItem.hasQtyAdjustment ? newItem.adjustedQty : (newItem.totalQty || newItem.quantity || 0);
-                        newItem.isComplete = newItem.pending === 0 && (lostFinalQty > 0 || newItem.hasQtyAdjustment);
+
+                        // META: productionProof
+                        if (metaOvr?.productionProof) {
+                            newItem.productionProof = metaOvr.productionProof;
+                            newItem.isOverridden = true;
+                        }
+
+                        // ALWAYS recalculate pending (never use stored pending)
+                        const lostTargetQty = newItem.hasQtyAdjustment ? newItem.adjustedQty : (newItem.totalQty || newItem.quantity || 0);
+                        const lostInstalled = newItem.totalInstalled || newItem.installed || 0;
+                        newItem.pending = Math.max(0, lostTargetQty - lostInstalled);
+
+                        // RECONCILE
+                        newItem.isComplete = newItem.pending === 0 && (lostTargetQty > 0 || newItem.hasQtyAdjustment);
                         const lostCompletedStages = ['installed', 'photos taken', 'pop completed', 'takedown complete'];
                         if (lostCompletedStages.includes((newItem.stage || '').toLowerCase())) {
                             newItem.isComplete = true;
-                            if (newItem.pending > 0 && newItem.isOverridden) {
-                                const reconciledInst = newItem.totalInstalled || newItem.installed || 0;
-                                newItem.pending = Math.max(0, lostFinalQty - reconciledInst);
-                            }
                         }
                         const lostInstallStatus = computeInstallStatus(newItem);
                         newItem.needsReview = lostInstallStatus.needsReview;
@@ -8668,113 +8794,71 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                             if (!includeGhosts) return; // Skip from other categories
                         }
 
-                        // MODIFIED: Check composite key for extended manual overrides (includes product for uniqueness)
+                        // Apply dual-bucket overrides (temp + meta)
                         const uniqueKey = `${item.id}_${item.date}_${item.product || item.media}`;
-                        const override = manualOverrides[uniqueKey];
-                        if (override) {
-                            const stale = isOverrideStale(override);
+                        const tempOvr = tempOverrides[uniqueKey];
+                        const metaOvr = metaOverrides[uniqueKey];
 
-                            // ALWAYS apply: adjustedQty (charted qty is intentional workflow data)
-                            if (override.adjustedQty !== undefined && override.adjustedQty !== null) {
-                                item.adjustedQty = override.adjustedQty;
-                                item.hasQtyAdjustment = true;
+                        // META: adjustedQty (charted qty — persists across syncs)
+                        if (metaOvr?.adjustedQty !== undefined && metaOvr.adjustedQty !== null) {
+                            item.adjustedQty = metaOvr.adjustedQty;
+                            item.hasQtyAdjustment = true;
+                            item.isOverridden = true;
+                        }
+
+                        // TEMP: stage, previousStage, installed (working edits — wiped on sync)
+                        if (tempOvr) {
+                            if (tempOvr.stage) {
+                                item.stage = tempOvr.stage;
                                 item.isOverridden = true;
-                            }
-
-                            // SMART MERGE: stage, installed, pending — skip if override is older than fresh import
-                            if (!stale) {
-                                // Apply stage override
-                                if (override.stage) {
-                                    item.stage = override.stage;
-                                    item.isOverridden = true;
-                                    const completedStages = ['installed', 'photos taken', 'pop completed', 'takedown complete'];
-                                    if (completedStages.includes(override.stage.toLowerCase())) {
-                                        item.isComplete = true;
-                                    }
-                                }
-                                if (override.previousStage) {
-                                    item.previousStage = override.previousStage;
-                                }
-                                // Apply installed count override
-                                if (override.installed !== undefined) {
-                                    item.totalInstalled = override.installed;
-                                    item.installed = override.installed;
-                                    const targetQty = (item.hasQtyAdjustment && item.adjustedQty !== undefined) ? item.adjustedQty : (item.totalQty || item.quantity || 0);
-                                    item.pending = Math.max(0, targetQty - override.installed);
-                                    if (targetQty > 0) {
-                                        const pct = Math.round((override.installed / targetQty) * 100);
-                                        item.progress = `${override.installed}/${targetQty} (${pct}%)`;
-                                    }
-                                    item.isOverridden = true;
-                                }
-                                // Apply pending override (if explicitly set)
-                                if (override.pending !== undefined) {
-                                    item.pending = override.pending;
-                                    item.isOverridden = true;
+                                const completedStages = ['installed', 'photos taken', 'pop completed', 'takedown complete'];
+                                if (completedStages.includes(tempOvr.stage.toLowerCase())) {
+                                    item.isComplete = true;
                                 }
                             }
-
-                            // Recalculate pending from adjustedQty even when stale (charted qty always applies)
-                            if (item.hasQtyAdjustment && (stale || override.installed === undefined)) {
-                                const installed = item.totalInstalled || item.installed || 0;
-                                item.pending = Math.max(0, item.adjustedQty - installed);
-                                if (item.adjustedQty > 0) {
-                                    const pct = Math.round((installed / item.adjustedQty) * 100);
-                                    item.progress = `${installed}/${item.adjustedQty} (${pct}%)`;
-                                } else if (item.adjustedQty === 0) {
-                                    item.progress = `0/0 (cleared)`;
-                                }
+                            if (tempOvr.previousStage) {
+                                item.previousStage = tempOvr.previousStage;
                             }
-
-                            // ALWAYS apply: metadata overrides (not affected by freshness)
-                            if (override.notes) {
-                                item.overrideNotes = override.notes;
-                            }
-                            if (override.productionProof) {
-                                item.productionProof = override.productionProof;
+                            if (tempOvr.installed !== undefined) {
+                                item.totalInstalled = tempOvr.installed;
+                                item.installed = tempOvr.installed;
                                 item.isOverridden = true;
-                            }
-                            // Apply removal tracking overrides (consistent across all detail views)
-                            if (override.removalQty !== undefined) {
-                                item.removalQty = override.removalQty;
-                            }
-                            if (override.removedCount !== undefined) {
-                                item.removedCount = override.removedCount;
-                            }
-                            if (override.removalStatus) {
-                                item.removalStatus = override.removalStatus;
-                            }
-                            if (override.removalAssignee) {
-                                item.removalAssignee = override.removalAssignee;
-                            }
-                            if (override.removalPhotosLink) {
-                                item.removalPhotosLink = override.removalPhotosLink;
-                            }
-                            if (override.hasReplacement !== undefined) {
-                                item.hasReplacement = override.hasReplacement;
-                            }
-                            // Load change history
-                            if (override.history) {
-                                item.history = override.history;
                             }
                         }
 
-                        // RECONCILE: Always recalculate isComplete and needsReview from final pending after ALL overrides
-                        // This prevents contradictions (e.g., "Done" checkmark + "31 pending" in red)
+                        // META: all metadata overrides (persist across syncs)
+                        if (metaOvr) {
+                            if (metaOvr.notes) item.overrideNotes = metaOvr.notes;
+                            if (metaOvr.productionProof) {
+                                item.productionProof = metaOvr.productionProof;
+                                item.isOverridden = true;
+                            }
+                            if (metaOvr.removalQty !== undefined) item.removalQty = metaOvr.removalQty;
+                            if (metaOvr.removedCount !== undefined) item.removedCount = metaOvr.removedCount;
+                            if (metaOvr.removalStatus) item.removalStatus = metaOvr.removalStatus;
+                            if (metaOvr.removalAssignee) item.removalAssignee = metaOvr.removalAssignee;
+                            if (metaOvr.removalPhotosLink) item.removalPhotosLink = metaOvr.removalPhotosLink;
+                            if (metaOvr.hasReplacement !== undefined) item.hasReplacement = metaOvr.hasReplacement;
+                            if (metaOvr.history) item.history = metaOvr.history;
+                        }
+
+                        // ALWAYS recalculate pending from final values (never use stored pending)
                         const finalQty = item.hasQtyAdjustment ? item.adjustedQty : (item.totalQty || item.quantity || 0);
+                        const finalInstalled = item.totalInstalled || item.installed || 0;
+                        item.pending = Math.max(0, finalQty - finalInstalled);
+                        if (finalQty > 0) {
+                            const pct = Math.round((finalInstalled / finalQty) * 100);
+                            item.progress = `${finalInstalled}/${finalQty} (${pct}%)`;
+                        } else if (item.hasQtyAdjustment && item.adjustedQty === 0) {
+                            item.progress = `0/0 (cleared)`;
+                        }
+
+                        // RECONCILE: isComplete and needsReview from final state
                         item.isComplete = item.pending === 0 && (finalQty > 0 || item.hasQtyAdjustment);
-                        // Also respect completed stages even if pending > 0 (stage override takes priority)
                         const completedStagesCheck = ['installed', 'photos taken', 'pop completed', 'takedown complete'];
                         if (completedStagesCheck.includes((item.stage || '').toLowerCase())) {
                             item.isComplete = true;
-                            // If stage says completed but pending is stale, recalculate pending too
-                            if (item.pending > 0 && item.isOverridden) {
-                                const reconciledInstalled = item.totalInstalled || item.installed || 0;
-                                const reconciledQty = item.hasQtyAdjustment ? item.adjustedQty : (item.totalQty || item.quantity || 0);
-                                item.pending = Math.max(0, reconciledQty - reconciledInstalled);
-                            }
                         }
-                        // Recalculate needsReview from final pending (not stale CSV value)
                         const mainInstallStatus = computeInstallStatus(item);
                         item.needsReview = mainInstallStatus.needsReview;
                         item.installTier = mainInstallStatus.installTier;
@@ -8848,12 +8932,13 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                         }
 
                         // --- FULLY INSTALLED THIS WEEK 🥇 ---
-                        // Show campaigns with stage "Installed" that STARTED this week
-                        // Uses Product Start Date only
+                        // Show campaigns with stage "Installed" that were COMPLETED this week
+                        // Uses completion date if available, falls back to product start date
                         if (stageLower === 'installed') {
                             const isWarnerPerms = advName.includes("warner bros. | perms | stap");
-                            
-                            if (!isWarnerPerms && item.dateObj >= startOfFormulaWeek && item.dateObj <= today) {
+                            const checkDate = item.completionDate || item.dateObj;
+
+                            if (!isWarnerPerms && checkDate >= startOfFormulaWeek && checkDate <= today) {
                                 categories.fullyInstalledThisWeek.push(item);
                             }
                         }
@@ -9015,22 +9100,23 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                         const daysSinceExpired = Math.floor((today - endDate) / (1000 * 60 * 60 * 24));
                         const daysUntilDeadline = REMOVAL_DEADLINE_DAYS - Math.floor((today - deadlineBaseDate) / (1000 * 60 * 60 * 24));
 
-                        // Check for removal overrides in manualOverrides
+                        // Check for removal overrides in dual buckets
                         const uniqueKey = `${item.id}_${item.date}_${item.product || item.media}`;
-                        const override = manualOverrides[uniqueKey] || {};
+                        const tempOvr = tempOverrides[uniqueKey] || {};
+                        const metaOvr = metaOverrides[uniqueKey] || {};
 
-                        // Apply stage override if exists (important for pending/completed filtering)
-                        const effectiveStage = override.stage || item.stage;
+                        // Apply stage override from temp (important for pending/completed filtering)
+                        const effectiveStage = tempOvr.stage || item.stage;
 
-                        // Removal tracking fields (from override or defaults)
-                        const removalQty = override.removalQty || item.totalInstalled || item.quantity || 0;
-                        const removedCount = override.removedCount || 0;
+                        // Removal tracking fields (from meta override or defaults)
+                        const removalQty = metaOvr.removalQty || item.totalInstalled || item.quantity || 0;
+                        const removedCount = metaOvr.removedCount || 0;
                         const removalPending = Math.max(0, removalQty - removedCount);
                         const removalPct = removalQty > 0 ? Math.round((removedCount / removalQty) * 100) : 0;
-                        const removalStatus = override.removalStatus || 'scheduled'; // scheduled, in_progress, removed, blocked
-                        const removalAssignee = override.removalAssignee || '';
-                        const removalPhotosLink = override.removalPhotosLink || '';
-                        const hasReplacement = override.hasReplacement || false;
+                        const removalStatus = metaOvr.removalStatus || 'scheduled'; // scheduled, in_progress, removed, blocked
+                        const removalAssignee = metaOvr.removalAssignee || '';
+                        const removalPhotosLink = metaOvr.removalPhotosLink || '';
+                        const hasReplacement = metaOvr.hasReplacement || false;
 
                         // Risk calculation for sorting
                         // Higher score = more urgent
@@ -9053,7 +9139,7 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                             removalAssignee,
                             removalPhotosLink,
                             hasReplacement,
-                            history: override.history || item.history, // Preserve change history
+                            history: metaOvr.history || item.history, // Preserve change history
                             isOverDeadline,
                             isAdCouncilTrigger: isOverDeadline && !hasReplacement,
                             removalRiskScore,
@@ -9154,62 +9240,51 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                                 newItem.completionDate = parseDate(newItem.completion);
                             }
 
-                            // APPLY MANUAL OVERRIDES (stage, installed count, etc.) - includes product for uniqueness
+                            // Apply dual-bucket overrides (temp + meta)
                             const uniqueKey = `${newItem.id}_${newItem.date}_${newItem.product || newItem.media}`;
-                            const override = manualOverrides[uniqueKey];
-                            if (override) {
-                                const stale = isOverrideStale(override);
+                            const tempOvr = tempOverrides[uniqueKey];
+                            const metaOvr = metaOverrides[uniqueKey];
 
-                                // ALWAYS apply: adjustedQty (charted qty is workflow data, 0 = ghost booking clearance)
-                                if (override.adjustedQty !== undefined && override.adjustedQty !== null) {
-                                    newItem.adjustedQty = override.adjustedQty;
-                                    newItem.hasQtyAdjustment = true;
+                            // META: adjustedQty
+                            if (metaOvr?.adjustedQty !== undefined && metaOvr.adjustedQty !== null) {
+                                newItem.adjustedQty = metaOvr.adjustedQty;
+                                newItem.hasQtyAdjustment = true;
+                                newItem.isOverridden = true;
+                            }
+
+                            // TEMP: stage, installed
+                            if (tempOvr) {
+                                if (tempOvr.stage) {
+                                    newItem.stage = tempOvr.stage;
                                     newItem.isOverridden = true;
-                                }
-
-                                // SMART MERGE: skip stage/installed if stale
-                                if (!stale) {
-                                    if (override.stage) {
-                                        newItem.stage = override.stage;
-                                        newItem.isOverridden = true;
-                                        const completedStages = ['installed', 'photos taken', 'pop completed', 'takedown complete'];
-                                        if (completedStages.includes(override.stage.toLowerCase())) {
-                                            newItem.isComplete = true;
-                                        }
-                                    }
-                                    if (override.installed !== undefined) {
-                                        newItem.totalInstalled = override.installed;
-                                        newItem.installed = override.installed;
-                                        const targetQty = newItem.hasQtyAdjustment ? newItem.adjustedQty : (newItem.totalQty || newItem.quantity || 0);
-                                        newItem.pending = Math.max(0, targetQty - override.installed);
-                                        newItem.isOverridden = true;
+                                    const completedStages = ['installed', 'photos taken', 'pop completed', 'takedown complete'];
+                                    if (completedStages.includes(tempOvr.stage.toLowerCase())) {
+                                        newItem.isComplete = true;
                                     }
                                 }
-
-                                // Recalculate pending from adjustedQty even when stale
-                                if (newItem.hasQtyAdjustment && (stale || override.installed === undefined)) {
-                                    const installed = newItem.totalInstalled || newItem.installed || 0;
-                                    newItem.pending = Math.max(0, newItem.adjustedQty - installed);
-                                }
-
-                                // ALWAYS apply: metadata
-                                if (override.productionProof) {
-                                    newItem.productionProof = override.productionProof;
+                                if (tempOvr.installed !== undefined) {
+                                    newItem.totalInstalled = tempOvr.installed;
+                                    newItem.installed = tempOvr.installed;
                                     newItem.isOverridden = true;
                                 }
                             }
 
-                            // RECONCILE: Always recalculate isComplete and needsReview from final pending after ALL overrides
-                            const finalQty = newItem.hasQtyAdjustment ? newItem.adjustedQty : (newItem.totalQty || newItem.quantity || 0);
-                            newItem.isComplete = newItem.pending === 0 && (finalQty > 0 || newItem.hasQtyAdjustment);
+                            // META: productionProof
+                            if (metaOvr?.productionProof) {
+                                newItem.productionProof = metaOvr.productionProof;
+                                newItem.isOverridden = true;
+                            }
+
+                            // ALWAYS recalculate pending (never use stored pending)
+                            const mtFinalQty = newItem.hasQtyAdjustment ? newItem.adjustedQty : (newItem.totalQty || newItem.quantity || 0);
+                            const mtInstalled = newItem.totalInstalled || newItem.installed || 0;
+                            newItem.pending = Math.max(0, mtFinalQty - mtInstalled);
+
+                            // RECONCILE
+                            newItem.isComplete = newItem.pending === 0 && (mtFinalQty > 0 || newItem.hasQtyAdjustment);
                             const completedStagesCheck = ['installed', 'photos taken', 'pop completed', 'takedown complete'];
                             if (completedStagesCheck.includes((newItem.stage || '').toLowerCase())) {
                                 newItem.isComplete = true;
-                                if (newItem.pending > 0 && newItem.isOverridden) {
-                                    const reconciledInstalled = newItem.totalInstalled || newItem.installed || 0;
-                                    const reconciledQty = newItem.hasQtyAdjustment ? newItem.adjustedQty : (newItem.totalQty || newItem.quantity || 0);
-                                    newItem.pending = Math.max(0, reconciledQty - reconciledInstalled);
-                                }
                             }
                             const filtInstallStatus = computeInstallStatus(newItem);
                             newItem.needsReview = filtInstallStatus.needsReview;
@@ -9233,7 +9308,7 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                 }
 
                 return categories;
-            }, [baseData, manualOverrides, emailStats, includeGhosts, dataSource]);
+            }, [baseData, tempOverrides, metaOverrides, emailStats, includeGhosts, dataSource]);
 
             // Extract unique markets and products for filters
             const filterOptions = useMemo(() => {
@@ -9407,7 +9482,7 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                         const stageLower = (item.stage || '').toLowerCase();
                         const isCompleteStage = completedStages.includes(stageLower);
                         const totalQty = item.adjustedQty || item.quantity || item.totalQty || 0;
-                        const installedQty = item.installed || item.totalInstalled || 0;
+                        const installedQty = item.totalInstalled || item.installed || 0;
                         const isFullyInstalled = totalQty > 0 && installedQty >= totalQty;
 
                         // Include if: started AND not in a completed stage AND not 100% installed
@@ -9420,7 +9495,7 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                         const startDate = item.dateObj || new Date(item.date);
                         const daysSinceStart = Math.max(0, Math.floor((today - startDate) / (1000 * 60 * 60 * 24)));
                         const totalQty = item.adjustedQty || item.quantity || item.totalQty || 0;
-                        const installedQty = item.installed || item.totalInstalled || 0;
+                        const installedQty = item.totalInstalled || item.installed || 0;
                         const pendingQty = Math.max(0, totalQty - installedQty);
                         const completionPct = totalQty > 0 ? Math.round((installedQty / totalQty) * 100) : 0;
 
@@ -10124,7 +10199,7 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                                             }\nLast sync: ${dataSource.timestamp ? new Date(dataSource.timestamp).toLocaleString() : 'N/A'}${
                                                 dataSource.fallback ? '\n⚠️ Using fallback data - Google Sheet unavailable' : ''
                                             }${storageWarning ? '\n⚠️ ' + storageWarning : ''}${
-                                                Object.keys(manualOverrides).length > 0 ? `\n✏️ ${Object.keys(manualOverrides).length} manual override(s) active` : ''
+                                                (Object.keys(tempOverrides).length + Object.keys(metaOverrides).length) > 0 ? `\n✏️ ${Object.keys(tempOverrides).length} temp + ${Object.keys(metaOverrides).length} meta override(s) active` : ''
                                             }\n\n📊 ${processedData?.all?.length?.toLocaleString() || 0} total campaigns`}
                                         >
                                             <Icon name={
@@ -10140,15 +10215,43 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                                                  dataSource.type === 'persisted_csv' ? 'Cached' : 'Error'}
                                             </span>
                                             {(dataSource.fallback || storageWarning) && <span className="text-amber-600">⚠</span>}
-                                            {Object.keys(manualOverrides).length > 0 && (
+                                            {(Object.keys(tempOverrides).length + Object.keys(metaOverrides).length) > 0 && (
                                                 <span className="ml-1 px-1 bg-purple-200 text-purple-700 rounded text-[10px]">
-                                                    +{Object.keys(manualOverrides).length}
+                                                    +{Object.keys(tempOverrides).length + Object.keys(metaOverrides).length}
                                                 </span>
                                             )}
                                         </div>
                                     )}
+                                    {/* Auto-sync pause toggle */}
+                                    <button
+                                        onClick={() => setSyncPaused(prev => !prev)}
+                                        className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                                            syncPaused
+                                                ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                                                : 'bg-green-100 text-green-700 hover:bg-green-200'
+                                        }`}
+                                        title={syncPaused ? 'Auto-sync is paused. Click to resume.' : 'Auto-sync active (9am, 12pm, 4pm). Click to pause.'}
+                                    >
+                                        <Icon name={syncPaused ? 'PauseCircle' : 'RefreshCw'} size={10} />
+                                        {syncPaused ? 'Sync Paused' : 'Auto-Sync'}
+                                    </button>
                                 </div>
-                                
+
+                                {/* Amber banner when sync is paused */}
+                                {syncPaused && (
+                                    <div className="w-full bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 flex items-center gap-2 text-amber-700 text-xs">
+                                        <Icon name="AlertTriangle" size={14} />
+                                        <span className="font-medium">Auto-sync paused</span>
+                                        <span className="text-amber-600">— manual data only. Scheduled syncs (9am, 12pm, 4pm) are skipped.</span>
+                                        <button
+                                            onClick={() => setSyncPaused(false)}
+                                            className="ml-auto px-2 py-0.5 bg-amber-200 hover:bg-amber-300 rounded text-amber-800 font-medium"
+                                        >
+                                            Resume
+                                        </button>
+                                    </div>
+                                )}
+
                                 {/* --- HEADER FILTERS --- */}
                                 <div className="flex items-center gap-2 flex-wrap justify-end">
                                     {/* Market Filter Dropdown with Smart Groups */}

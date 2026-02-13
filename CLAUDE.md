@@ -118,7 +118,7 @@ Unified campaign detail view with 3-column layout:
 **Key Features:**
 - Waterfall data flow: Charted qty -> Install Progress -> Removal
 - Smart removal status: auto-calculates `in_progress`/`complete` from numbers, manual `scheduled`/`blocked`
-- Change history tracking with timestamps (stored in `manualOverrides`)
+- Change history tracking with timestamps (stored in `metaOverrides`)
 - Save button only appears when there are unsaved changes
 - Unsaved changes warning on close
 - **Dirty-field saving**: Only saves fields that were actually changed (prevents phantom overrides)
@@ -130,25 +130,33 @@ Unified campaign detail view with 3-column layout:
 - `removalQty`, `removedCount`, `removalStatus`, `removalAssignee` - Removal tracking
 - `history` - Array of `{ timestamp, changes[] }` entries
 
-### Pending Calculation & Smart Merge
-**Important:** Pending is ALWAYS calculated as `Math.max(0, qty - installed)`, never trusted from CSV.
-- CSV pending values can be stale/incorrect
-- Aggregation step computes `calculatedPending = totalQty - totalInstalled`
-- This prevents "35/35 Done but Pending: 1" edge cases
+### Pending Calculation & Override Architecture
+**Important:** Pending is ALWAYS calculated as `Math.max(0, qty - installed)`, never stored as an override.
 
-**Smart Merge (Override vs Fresh Data):**
-- Manual overrides have a `lastModified` timestamp, data imports have a `dataSource.timestamp`
-- If override is **older** than the latest import: `stage`, `installed`, `pending` from the override are **skipped** (fresh CSV values used)
-- `adjustedQty` (charted qty) is **always preserved** regardless of freshness (intentional workflow data)
-- Metadata overrides (`productionProof`, `notes`, `materialBreakdown`, removal tracking) are always preserved
-- After all overrides, `isComplete` is reconciled from the final `pending` value to prevent contradictions
+**Dual-Bucket Override Model:**
+
+| Storage Key | Contains | Cleared by sync? | Cleared by reset? |
+|-------------|----------|-------------------|--------------------|
+| `stap_temp_overrides` | `installed`, `stage`, `previousStage` | **YES** | YES |
+| `stap_meta_overrides` | `adjustedQty`, `materialBreakdown`, `photosLink`, `receiverLink`, `mediaType`, removal tracking, `productionProof`, `history`, `notes` | **NO** | YES |
+
+- **Temp overrides** are working adjustments between syncs — wiped on every sync/CSV import
+- **Meta overrides** are app-only fields that don't exist in the sheet — persist forever (survive sync)
+- `pending` is **never stored** in either bucket — always derived as `max(0, targetQty - installed)`
+- Legacy `stap_manual_overrides` key is auto-migrated into the two new buckets on first load
+
+**Auto-Sync Schedule:**
+- Syncs automatically at **9:00 AM, 12:00 PM, 4:00 PM** (60-second check interval)
+- Pause toggle in dashboard header (stored in `stap_sync_paused`)
+- Amber banner shown when paused
+- Manual sync always available
 
 ### Removal Tracking
 Pending Removals view tracks campaigns past their end date:
 - 45-day deadline from end date for removal
 - Risk scoring for priority sorting (overdue items first)
 - Splits into `pendingRemovals` and `completedRemovals` based on stage/status
-- Stage override from `manualOverrides` is applied for proper filtering
+- Stage override from `tempOverrides` is applied for proper filtering
 
 ### Sidebar Navigation (DUAL RENDERING SYSTEM)
 Three interlocking gears with orbital menu items. The sidebar is **draggable to any screen edge** (top, bottom, left, right) using flexbox distribution.
@@ -233,11 +241,14 @@ Dashboard AI analysis powered by Groq (Llama 3.3 70B). See `GROQ_AI_CONFIG.md` f
 ### Reset Button Behavior
 The Reset Data button (`clearPersistedData()`) performs a full cache clear:
 
-**Clears (12 keys):**
+**Clears (15 keys):**
 - `stap_csv_data` - Main CSV data
 - `stap_data_source` - Data source info
 - `stap_current_view` - Current view state
-- `stap_manual_overrides` - All manual edits
+- `stap_manual_overrides` - Legacy key (auto-migrated to temp/meta on load)
+- `stap_temp_overrides` - Temp overrides (stage, installed — wiped on sync)
+- `stap_meta_overrides` - Meta overrides (adjustedQty, removal, materials — persist across sync)
+- `stap_sync_paused` - Auto-sync pause state
 - `stap_materials_data`, `stap_materials_sheet`, `stap_material_data` - Materials
 - `stap_email_log` - Email statistics
 - `stap_dashboard_prefs` - Dashboard preferences
@@ -245,7 +256,7 @@ The Reset Data button (`clearPersistedData()`) performs a full cache clear:
 - `stap_storage_overflow` - Storage overflow flag
 - `STAP_SESSION` - Session data
 
-Note: `stap_production_proof` is a legacy key that gets auto-migrated into `stap_manual_overrides` on first load and then removed.
+Note: `stap_production_proof` and `stap_manual_overrides` are legacy keys that get auto-migrated into `stap_temp_overrides` + `stap_meta_overrides` on first load and then removed.
 
 **Preserves (7 settings keys):**
 - `stap_groq_api_key` - AI API key
@@ -254,7 +265,7 @@ Note: `stap_production_proof` is a legacy key that gets auto-migrated into `stap
 - `stap_pop_sheet_url`, `stap_mobile_sheet_url` - POP/Mobile settings
 - `stap_proof_webhook` - Proof webhook URL
 
-**Also resets React state:** `baseData`, `manualOverrides`, `materialReceiverData`, `ghostBookings`, `emailStats`
+**Also resets React state:** `baseData`, `tempOverrides`, `metaOverrides`, `materialReceiverData`, `ghostBookings`, `emailStats`
 
 After reset, user is returned to upload view and must re-upload CSV or use live sync.
 
