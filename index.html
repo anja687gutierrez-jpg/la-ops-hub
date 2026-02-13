@@ -39,6 +39,442 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
     <style>
+        /* ═══════════════════════════════════════════════════════════════════
+           THEME SYSTEM — CSS Custom Properties for Dark/Light modes
+           Default: dark (current look). .light on <html> activates light mode.
+           ═══════════════════════════════════════════════════════════════════ */
+        :root {
+            --bg-primary: #f9fafb;
+            --bg-card: #ffffff;
+            --bg-card-alt: #f1f5f9;
+            --bg-overlay: rgba(0, 0, 0, 0.5);
+            --bg-glass: rgba(15, 23, 42, 0.75);
+            --bg-glass-light: rgba(15, 23, 42, 0.15);
+            --text-main: #0f172a;
+            --text-secondary: #475569;
+            --text-dim: #94a3b8;
+            --border-color: #e2e8f0;
+            --border-subtle: #f1f5f9;
+            --accent: #38bdf8;
+            --accent-glow: rgba(56, 189, 248, 0.3);
+            --table-header-bg: #f8fafc;
+            --table-row-hover: #f1f5f9;
+            --table-stripe: #fafbfc;
+            --input-bg: #ffffff;
+            --input-border: #d1d5db;
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1);
+            --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1);
+        }
+
+        html.dark {
+            --bg-primary: #0f172a;
+            --bg-card: #1e293b;
+            --bg-card-alt: #0f172a;
+            --bg-overlay: rgba(0, 0, 0, 0.7);
+            --bg-glass: rgba(15, 23, 42, 0.85);
+            --bg-glass-light: rgba(15, 23, 42, 0.25);
+            --text-main: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-dim: #64748b;
+            --border-color: #334155;
+            --border-subtle: #1e293b;
+            --table-header-bg: #1e293b;
+            --table-row-hover: #1e293b;
+            --table-stripe: #0f172a;
+            --input-bg: #1e293b;
+            --input-border: #334155;
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+            --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.4);
+            --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.5);
+        }
+
+        /* ═══════════════════════════════════════════════════════════════════
+           TABULAR NUMS — Align number columns vertically
+           ═══════════════════════════════════════════════════════════════════ */
+        .tabular-nums, td, .kpi-value, [data-numeric] {
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* ═══════════════════════════════════════════════════════════════════
+           FOCUS RINGS — Accessible keyboard navigation
+           ═══════════════════════════════════════════════════════════════════ */
+        :focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+        }
+        /* Remove default outline for mouse users */
+        :focus:not(:focus-visible) {
+            outline: none;
+        }
+
+        /* ═══════════════════════════════════════════════════════════════════
+           AI CHAT WIDGET STYLES
+           ═══════════════════════════════════════════════════════════════════ */
+        .ai-chat-widget {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 12px;
+        }
+        .ai-chat-fab {
+            width: 56px;
+            height: 56px;
+            border-radius: 14px;
+            background: rgba(2, 6, 23, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 8px 32px rgba(56, 189, 248, 0.25);
+            transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+        }
+        .ai-chat-fab:hover {
+            transform: scale(1.08);
+            box-shadow: 0 12px 40px rgba(56, 189, 248, 0.4);
+            border-color: rgba(56, 189, 248, 0.6);
+        }
+
+        /* ═══ Ops Cube — 3D Wireframe Cube (XPO FleetCube pattern) ═══ */
+        .ops-cube-scene {
+            width: 28px;
+            height: 28px;
+            perspective: 180px;
+        }
+        .ops-cube {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            transform-style: preserve-3d;
+            animation: ops-cube-spin 12s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+        }
+        .ai-chat-fab:hover .ops-cube {
+            animation-duration: 3s;
+        }
+        .ops-cube-face {
+            position: absolute;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            border-radius: 2px;
+            background: rgba(56, 189, 248, 0.04);
+        }
+        .ai-chat-fab:hover .ops-cube-face {
+            border-color: rgba(56, 189, 248, 0.7);
+            box-shadow: inset 0 0 8px rgba(56, 189, 248, 0.15);
+        }
+        .ops-cube-line {
+            stroke: rgba(56, 189, 248, 0.7);
+            stroke-width: 1.2;
+        }
+        .ops-cube-dot {
+            fill: #38bdf8;
+        }
+        .ops-cube-front  { transform: rotateY(0deg) translateZ(14px); }
+        .ops-cube-back   { transform: rotateY(180deg) translateZ(14px); }
+        .ops-cube-right  { transform: rotateY(90deg) translateZ(14px); }
+        .ops-cube-left   { transform: rotateY(-90deg) translateZ(14px); }
+        .ops-cube-top    { transform: rotateX(90deg) translateZ(14px); }
+        .ops-cube-bottom { transform: rotateX(-90deg) translateZ(14px); }
+        @keyframes ops-cube-spin {
+            0%   { transform: rotateX(-15deg) rotateY(0deg); }
+            25%  { transform: rotateX(15deg) rotateY(90deg); }
+            50%  { transform: rotateX(-5deg) rotateY(180deg); }
+            75%  { transform: rotateX(10deg) rotateY(270deg); }
+            100% { transform: rotateX(-15deg) rotateY(360deg); }
+        }
+        .ai-chat-panel {
+            width: 350px;
+            height: 450px;
+            border-radius: 16px;
+            background: var(--bg-glass);
+            backdrop-filter: blur(24px) saturate(180%);
+            -webkit-backdrop-filter: blur(24px) saturate(180%);
+            border: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            animation: chatSlideUp 0.25s ease-out;
+        }
+        @keyframes chatSlideUp {
+            from { opacity: 0; transform: translateY(16px) scale(0.96); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .ai-chat-header {
+            padding: 12px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-main);
+            flex-shrink: 0;
+        }
+        .ai-chat-header-btn {
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
+            border: none;
+            background: transparent;
+            color: var(--text-dim);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.15s, background 0.15s;
+        }
+        .ai-chat-header-btn:hover {
+            color: var(--text-main);
+            background: rgba(255,255,255,0.1);
+        }
+        .ai-chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .ai-chat-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            text-align: center;
+            padding: 20px;
+        }
+        .ai-chat-suggestions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            justify-content: center;
+        }
+        .ai-chat-suggestion {
+            padding: 6px 12px;
+            border-radius: 20px;
+            border: 1px solid var(--border-color);
+            background: transparent;
+            color: var(--accent);
+            font-size: 11px;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+            font-family: inherit;
+        }
+        .ai-chat-suggestion:hover {
+            background: rgba(56, 189, 248, 0.1);
+            border-color: var(--accent);
+        }
+        .ai-chat-bubble {
+            max-width: 85%;
+            padding: 10px 14px;
+            border-radius: 16px;
+            font-size: 13px;
+            line-height: 1.5;
+            word-wrap: break-word;
+        }
+        .ai-chat-bubble-user {
+            align-self: flex-end;
+            background: linear-gradient(135deg, #0ea5e9, #38bdf8);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+        .ai-chat-bubble-ai {
+            align-self: flex-start;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            border-bottom-left-radius: 4px;
+        }
+        .ai-chat-ai-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--accent);
+            margin-bottom: 4px;
+        }
+        .ai-chat-thinking {
+            display: flex;
+            gap: 5px;
+            padding: 4px 0;
+        }
+        .ai-chat-thinking span {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--accent);
+            animation: chatBounce 1.2s infinite;
+        }
+        .ai-chat-thinking span:nth-child(2) { animation-delay: 0.15s; }
+        .ai-chat-thinking span:nth-child(3) { animation-delay: 0.3s; }
+        @keyframes chatBounce {
+            0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+            30% { transform: translateY(-8px); opacity: 1; }
+        }
+        .ai-chat-input-bar {
+            padding: 10px 12px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            background: var(--bg-glass);
+            backdrop-filter: blur(16px) saturate(180%);
+            -webkit-backdrop-filter: blur(16px) saturate(180%);
+            flex-shrink: 0;
+        }
+        .ai-chat-input {
+            flex: 1;
+            padding: 8px 12px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            background: var(--input-bg);
+            color: var(--text-main);
+            font-size: 13px;
+            font-family: inherit;
+            transition: border-color 0.15s;
+        }
+        .ai-chat-input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        .ai-chat-input::placeholder {
+            color: var(--text-dim);
+        }
+        .ai-chat-send {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            border: none;
+            background: linear-gradient(135deg, #0ea5e9, #38bdf8);
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.15s, transform 0.15s;
+            flex-shrink: 0;
+        }
+        .ai-chat-send:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .ai-chat-send:not(:disabled):hover {
+            transform: scale(1.05);
+        }
+
+        /* ═══════════════════════════════════════════════════════════════════
+           AI FULL-PAGE VIEW STYLES
+           ═══════════════════════════════════════════════════════════════════ */
+        .ai-page {
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 40px);
+            max-width: 768px;
+            margin: 0 auto;
+            padding: 0 16px;
+        }
+        .ai-page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 0;
+            border-bottom: 1px solid var(--border-color);
+            flex-shrink: 0;
+        }
+        .ai-page-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px 0;
+        }
+        .ai-page-messages-inner {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+        .ai-page-bubble {
+            max-width: 90%;
+        }
+        .ai-page-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            text-align: center;
+        }
+        .ai-page-suggestions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            max-width: 480px;
+        }
+        .ai-page-suggestion {
+            padding: 14px 16px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-card);
+            color: var(--text-main);
+            text-align: left;
+            cursor: pointer;
+            transition: border-color 0.15s, background 0.15s;
+            font-family: inherit;
+        }
+        .ai-page-suggestion:hover {
+            border-color: var(--accent);
+            background: rgba(56, 189, 248, 0.05);
+        }
+        .ai-page-input-bar {
+            padding: 16px 0;
+            border-top: 1px solid var(--border-color);
+            flex-shrink: 0;
+        }
+        .ai-page-input-container {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .ai-page-input {
+            font-size: 14px;
+            padding: 10px 16px;
+        }
+
+        /* ═══════════════════════════════════════════════════════════════════
+           THEME TOGGLE BUTTON
+           ═══════════════════════════════════════════════════════════════════ */
+        .theme-toggle {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            background: transparent;
+            color: var(--text-dim);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.2s, border-color 0.2s, background 0.2s;
+        }
+        .theme-toggle:hover {
+            color: var(--accent);
+            border-color: var(--accent);
+            background: rgba(56, 189, 248, 0.1);
+        }
+
         /* Shared Base Styles */
         body { margin: 0; background-color: #f9fafb; font-family: 'Inter', sans-serif; overflow-x: hidden; } /* bg-gray-50 equivalent */
         .hide-scrollbar::-webkit-scrollbar { display: none; }
@@ -163,6 +599,16 @@
     </style>
 </head>
 <body>
+    <script>
+        // Theme initialization — restore saved preference before render to prevent flash
+        (function() {
+            var theme = localStorage.getItem('stap_theme');
+            // Default to light (current look), dark is opt-in
+            if (theme === 'dark') {
+                document.documentElement.classList.add('dark');
+            }
+        })();
+    </script>
     <div id="root"></div>
 
     <!-- External Component Modules (use React.createElement, no Babel needed) -->
@@ -170,6 +616,7 @@
     <script src="icon.js"></script>
     <script src="idb.js"></script>
     <script src="creativeHub.js"></script>
+    <script src="aiChat.js"></script>
     <script src="demo.js"></script>
     <script src="impressionsDashboard.js"></script>
 
@@ -1088,6 +1535,48 @@
         const Icon = window.STAP_Icon || (({ name }) => <span title={name}>?</span>);
         const ProductionIcon = window.STAP_ProductionIcon || (() => <span>?</span>);
         const ICON_MAP = window.STAP_ICON_MAP || {};
+
+        // ─── THEME TOGGLE COMPONENT ─────────────────────────────────────────
+        const ThemeToggle = () => {
+            const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
+            return (
+                <button
+                    className="theme-toggle"
+                    style={{ position: 'fixed', top: 12, right: 12, zIndex: 90 }}
+                    onClick={() => {
+                        const next = !isDark;
+                        if (next) {
+                            document.documentElement.classList.add('dark');
+                            localStorage.setItem('stap_theme', 'dark');
+                        } else {
+                            document.documentElement.classList.remove('dark');
+                            localStorage.setItem('stap_theme', 'light');
+                        }
+                        setIsDark(next);
+                    }}
+                    title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+                    aria-label="Toggle theme"
+                >
+                    {isDark ? (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="5" />
+                            <line x1="12" y1="1" x2="12" y2="3" />
+                            <line x1="12" y1="21" x2="12" y2="23" />
+                            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+                            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+                            <line x1="1" y1="12" x2="3" y2="12" />
+                            <line x1="21" y1="12" x2="23" y2="12" />
+                            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+                            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+                        </svg>
+                    ) : (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+                        </svg>
+                    )}
+                </button>
+            );
+        };
 
         // ============================================
         // IMPRESSIONS DASHBOARD (loaded from impressionsDashboard.js)
@@ -3187,6 +3676,10 @@
 
         // --- CREATIVE HUB (External - loaded from creativeHub.js) ---
         const CreativeHub = (window.STAPCreativeHub && window.STAPCreativeHub.CreativeHub) || (() => null);
+
+        // --- AI CHAT (External - loaded from aiChat.js) ---
+        const AIChatWidget = (window.STAPAIChat && window.STAPAIChat.AIChatWidget) || (() => null);
+        const AIAssistantPage = (window.STAPAIChat && window.STAPAIChat.AIAssistantPage) || (() => null);
 
 
         const FileUploader = ({ title, onFileSelect, status }) => (
@@ -5426,6 +5919,7 @@
                 { id: 'materialReceivers', icon: 'Package', label: 'Materials' },
                 { id: 'creativeHub', icon: 'Sparkles', label: 'Creative Hub' },
                 { id: 'performanceReport', icon: 'FileText', label: 'Performance' },
+                { id: 'aiAssistant', icon: 'Bot', label: 'AI Assistant' },
             ];
 
             const pipelineItems = [
@@ -5743,6 +6237,7 @@
                 { id: 'materialReceivers', icon: 'Package', label: 'Materials' },
                 { id: 'creativeHub', icon: 'Sparkles', label: 'Creative Hub' },
                 { id: 'performanceReport', icon: 'FileText', label: 'Performance' },
+                { id: 'aiAssistant', icon: 'Bot', label: 'AI Assistant' },
             ];
 
             const pipelineItems = [
@@ -10713,6 +11208,11 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                                         <POPGallery data={processedData.all} onBack={() => setView('dashboard')} setView={setView} />
                                     ) : view === 'performanceReport' ? (
                                         <PerformanceReport data={processedData.all} onBack={() => setView('dashboard')} setView={setView} />
+                                    ) : view === 'aiAssistant' ? (
+                                        <AIAssistantPage
+                                            getData={() => processedData}
+                                            onBack={() => setView('dashboard')}
+                                        />
                                     ) : (
                                         <CampaignTable 
                                             data={filteredData} 
@@ -10751,6 +11251,14 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                             )}
                         </main>
                     </div>
+
+                    {/* AI Chat Floating Widget — always visible when not on AI Assistant page */}
+                    {view !== 'aiAssistant' && (
+                        <AIChatWidget getData={() => processedData} />
+                    )}
+
+                    {/* Theme Toggle — top-right corner */}
+                    <ThemeToggle />
                 </div>
             );
         };
