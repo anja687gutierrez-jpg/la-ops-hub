@@ -8,6 +8,11 @@
     <title>LA STAP Operations Portal - Secure</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+        };
+    </script>
     
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -88,6 +93,102 @@
             --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.4);
             --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.5);
         }
+
+        /* ═══════════════════════════════════════════════════════════════════
+           DARK MODE OVERRIDES — Remap Tailwind light colors → dark
+           These use html.dark to override utility class colors globally.
+           ═══════════════════════════════════════════════════════════════════ */
+        html.dark body {
+            background-color: #0f172a;
+            color: #e2e8f0;
+        }
+        /* Backgrounds */
+        html.dark .bg-gray-50  { background-color: #0f172a !important; }
+        html.dark .bg-gray-100 { background-color: #1e293b !important; }
+        html.dark .bg-gray-200 { background-color: #334155 !important; }
+        html.dark .bg-white    { background-color: #1e293b !important; }
+        html.dark .bg-slate-50 { background-color: #0f172a !important; }
+        html.dark .bg-slate-100 { background-color: #1e293b !important; }
+
+        /* Text */
+        html.dark .text-gray-900 { color: #f1f5f9 !important; }
+        html.dark .text-gray-800 { color: #e2e8f0 !important; }
+        html.dark .text-gray-700 { color: #cbd5e1 !important; }
+        html.dark .text-gray-600 { color: #94a3b8 !important; }
+        html.dark .text-gray-500 { color: #64748b !important; }
+        html.dark .text-gray-400 { color: #475569 !important; }
+        html.dark .text-slate-900 { color: #f1f5f9 !important; }
+        html.dark .text-slate-800 { color: #e2e8f0 !important; }
+        html.dark .text-slate-700 { color: #cbd5e1 !important; }
+        html.dark .text-slate-600 { color: #94a3b8 !important; }
+
+        /* Borders */
+        html.dark .border-gray-100 { border-color: #1e293b !important; }
+        html.dark .border-gray-200 { border-color: #334155 !important; }
+        html.dark .border-gray-300 { border-color: #475569 !important; }
+        html.dark .border-slate-200 { border-color: #334155 !important; }
+
+        /* Cards, panels, modals */
+        html.dark .bg-white.rounded-xl,
+        html.dark .bg-white.rounded-2xl,
+        html.dark .bg-white.rounded-lg {
+            background-color: #1e293b !important;
+            border-color: #334155 !important;
+        }
+
+        /* Tables */
+        html.dark table { color: #e2e8f0; }
+        html.dark th { background-color: #0f172a !important; color: #94a3b8 !important; border-color: #334155 !important; }
+        html.dark td { border-color: #1e293b !important; }
+        html.dark tr:hover td { background-color: rgba(30, 41, 59, 0.5) !important; }
+
+        /* Inputs & selects */
+        html.dark input, html.dark select, html.dark textarea {
+            background-color: #1e293b !important;
+            color: #e2e8f0 !important;
+            border-color: #334155 !important;
+        }
+        html.dark input::placeholder { color: #475569 !important; }
+
+        /* Scrollbar */
+        html.dark .overflow-y-auto::-webkit-scrollbar-track { background: #1e293b; }
+        html.dark .overflow-y-auto::-webkit-scrollbar-thumb { background: #475569; }
+        html.dark .overflow-y-auto::-webkit-scrollbar-thumb:hover { background: #64748b; }
+        html.dark .overflow-y-auto { scrollbar-color: #475569 #1e293b; }
+
+        /* Shadows softer in dark mode */
+        html.dark .shadow-lg, html.dark .shadow-md, html.dark .shadow-sm {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+        }
+
+        /* Stat cards colored backgrounds — mute in dark */
+        html.dark .bg-red-50    { background-color: rgba(239, 68, 68, 0.1) !important; }
+        html.dark .bg-yellow-50 { background-color: rgba(234, 179, 8, 0.1) !important; }
+        html.dark .bg-green-50  { background-color: rgba(34, 197, 94, 0.1) !important; }
+        html.dark .bg-blue-50   { background-color: rgba(59, 130, 246, 0.1) !important; }
+        html.dark .bg-purple-50 { background-color: rgba(168, 85, 247, 0.1) !important; }
+        html.dark .bg-orange-50 { background-color: rgba(249, 115, 22, 0.1) !important; }
+        html.dark .bg-indigo-50 { background-color: rgba(99, 102, 241, 0.1) !important; }
+        html.dark .bg-amber-50  { background-color: rgba(245, 158, 11, 0.1) !important; }
+        html.dark .bg-teal-50   { background-color: rgba(20, 184, 166, 0.1) !important; }
+        html.dark .bg-emerald-50 { background-color: rgba(16, 185, 129, 0.1) !important; }
+        html.dark .bg-pink-50   { background-color: rgba(236, 72, 153, 0.1) !important; }
+
+        html.dark .bg-red-100    { background-color: rgba(239, 68, 68, 0.15) !important; }
+        html.dark .bg-yellow-100 { background-color: rgba(234, 179, 8, 0.15) !important; }
+        html.dark .bg-green-100  { background-color: rgba(34, 197, 94, 0.15) !important; }
+        html.dark .bg-blue-100   { background-color: rgba(59, 130, 246, 0.15) !important; }
+        html.dark .bg-purple-100 { background-color: rgba(168, 85, 247, 0.15) !important; }
+        html.dark .bg-orange-100 { background-color: rgba(249, 115, 22, 0.15) !important; }
+        html.dark .bg-amber-100  { background-color: rgba(245, 158, 11, 0.15) !important; }
+
+        /* Hover states */
+        html.dark .hover\:bg-gray-50:hover  { background-color: #1e293b !important; }
+        html.dark .hover\:bg-gray-100:hover { background-color: #334155 !important; }
+        html.dark .hover\:bg-white:hover    { background-color: #1e293b !important; }
+
+        /* Focus rings in dark mode */
+        html.dark .focus\:bg-white:focus { background-color: #1e293b !important; }
 
         /* ═══════════════════════════════════════════════════════════════════
            TABULAR NUMS — Align number columns vertically
@@ -194,6 +295,81 @@
             75%  { transform: rotateX(10deg) rotateY(270deg); }
             100% { transform: rotateX(-15deg) rotateY(360deg); }
         }
+        /* ═══════════════════════════════════════════════════════════════════
+           VIEW TRANSITION — Hourglass Loader
+           ═══════════════════════════════════════════════════════════════════ */
+        .view-transition-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            opacity: 0;
+            animation: vt-fade 0.5s ease forwards;
+            pointer-events: all;
+        }
+        @keyframes vt-fade {
+            0%   { opacity: 0; }
+            15%  { opacity: 1; }
+            75%  { opacity: 1; }
+            100% { opacity: 0; }
+        }
+        .hourglass-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+        .hourglass {
+            width: 40px;
+            height: 40px;
+            animation: hourglass-rotate 0.5s ease-in-out forwards;
+            filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.4));
+        }
+        @keyframes hourglass-rotate {
+            0%   { transform: rotate(0deg); }
+            100% { transform: rotate(180deg); }
+        }
+        .hourglass-sand-top {
+            animation: sand-drain 0.5s ease-in forwards;
+            transform-origin: center bottom;
+        }
+        @keyframes sand-drain {
+            0%   { transform: scaleY(1); opacity: 1; }
+            100% { transform: scaleY(0); opacity: 0.3; }
+        }
+        .hourglass-sand-bottom {
+            animation: sand-fill 0.5s ease-out forwards;
+            transform-origin: center top;
+        }
+        @keyframes sand-fill {
+            0%   { transform: scaleY(0); opacity: 0.3; }
+            100% { transform: scaleY(1); opacity: 1; }
+        }
+        .hourglass-particles {
+            position: absolute;
+            width: 2px;
+            height: 2px;
+            background: #38bdf8;
+            border-radius: 50%;
+            animation: sand-particle 0.5s ease-in infinite;
+        }
+        @keyframes sand-particle {
+            0%   { transform: translateY(0); opacity: 1; }
+            100% { transform: translateY(8px); opacity: 0; }
+        }
+        .vt-label {
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: #94a3b8;
+        }
+
         .ai-chat-panel {
             width: 350px;
             height: 450px;
@@ -457,22 +633,33 @@
            THEME TOGGLE BUTTON
            ═══════════════════════════════════════════════════════════════════ */
         .theme-toggle {
-            width: 32px;
-            height: 32px;
+            width: 30px;
+            height: 30px;
             border-radius: 8px;
-            border: 1px solid var(--border-color);
-            background: transparent;
-            color: var(--text-dim);
+            border: 1px solid #e2e8f0;
+            background: #fff;
+            color: #64748b;
             cursor: pointer;
-            display: flex;
+            display: inline-flex;
             align-items: center;
             justify-content: center;
             transition: color 0.2s, border-color 0.2s, background 0.2s;
+            flex-shrink: 0;
         }
         .theme-toggle:hover {
-            color: var(--accent);
-            border-color: var(--accent);
-            background: rgba(56, 189, 248, 0.1);
+            color: #38bdf8;
+            border-color: #38bdf8;
+            background: rgba(56, 189, 248, 0.08);
+        }
+        html.dark .theme-toggle {
+            border-color: #475569;
+            background: #1e293b;
+            color: #94a3b8;
+        }
+        html.dark .theme-toggle:hover {
+            color: #fbbf24;
+            border-color: #fbbf24;
+            background: rgba(251, 191, 36, 0.1);
         }
 
         /* Shared Base Styles */
@@ -721,7 +908,7 @@
     <script type="text/babel" src="popGallery.js" data-presets="react"></script>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo, useRef } = React;
+        const { useState, useEffect, useMemo, useRef, useCallback } = React;
 
         // --- CONFIGURATION ---
         // 🔒 SECURITY: Credentials
@@ -1542,7 +1729,6 @@
             return (
                 <button
                     className="theme-toggle"
-                    style={{ position: 'fixed', top: 12, right: 12, zIndex: 90 }}
                     onClick={() => {
                         const next = !isDark;
                         if (next) {
@@ -1558,7 +1744,7 @@
                     aria-label="Toggle theme"
                 >
                     {isDark ? (
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <circle cx="12" cy="12" r="5" />
                             <line x1="12" y1="1" x2="12" y2="3" />
                             <line x1="12" y1="21" x2="12" y2="23" />
@@ -1570,7 +1756,7 @@
                             <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
                         </svg>
                     ) : (
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
                         </svg>
                     )}
@@ -5908,7 +6094,6 @@
 
             // Loop 5: Added human-readable labels for collapsed sidebar tooltips
             const moduleItems = [
-                { id: 'search', icon: 'Search', label: 'Search' },
                 { id: 'dashboard', icon: 'LayoutDashboard', label: 'Dashboard' },
                 { id: 'holdReport', icon: 'ClipboardList', label: 'Hold Report' },
                 { id: 'availability', icon: 'Calendar', label: 'Availability' },
@@ -5936,6 +6121,7 @@
             ];
 
             const historyItems = [
+                { id: 'search', icon: 'Search', label: 'Search' },
                 { id: 'pendingRemovals', icon: 'Trash2', label: 'Pending Removals' },
                 { id: 'activeInstalls', icon: 'Hammer', label: 'Active Installs' },
                 { id: 'awaitingPop', icon: 'Camera', label: 'Awaiting POP' },
@@ -5943,7 +6129,7 @@
                 { id: 'lostOpportunities', icon: 'XCircle', label: 'Lost Opportunities' },
                 { id: 'impressions', icon: 'MapPin', label: 'Impressions' },
             ];
-            
+
             const IconButton = ({ item, colorClass, bgClass, borderClass, hoverBorderClass, index = 0, isVisible = true }) => (
                 <button
                     onClick={() => setView(item.id)}
@@ -6226,7 +6412,6 @@
         const HorizontalMiniBar = ({ view, setView, onLogout, position = 'top', onOpenPositionPicker, onDragStart }) => {
             // Same items as CollapsedMiniBar
             const moduleItems = [
-                { id: 'search', icon: 'Search', label: 'Search' },
                 { id: 'dashboard', icon: 'LayoutDashboard', label: 'Dashboard' },
                 { id: 'holdReport', icon: 'ClipboardList', label: 'Hold Report' },
                 { id: 'availability', icon: 'Calendar', label: 'Availability' },
@@ -6254,6 +6439,7 @@
             ];
 
             const historyItems = [
+                { id: 'search', icon: 'Search', label: 'Search' },
                 { id: 'pendingRemovals', icon: 'Trash2', label: 'Pending Removals' },
                 { id: 'activeInstalls', icon: 'Hammer', label: 'Active Installs' },
                 { id: 'awaitingPop', icon: 'Camera', label: 'Awaiting POP' },
@@ -7043,7 +7229,7 @@
 
         const AuthorizedDashboard = ({ onLogout }) => {
             // Initialize view - always start at dashboard if data exists (consistent UX on app open)
-            const [view, setView] = useState(() => {
+            const [view, _setViewRaw] = useState(() => {
                 try {
                     const savedData = localStorage.getItem('stap_csv_data');
                     // If we have saved data, always start at dashboard for predictable UX
@@ -7060,6 +7246,20 @@
             });
             const [files, setFiles] = useState({ holds: null, install: null });
             const [processing, setProcessing] = useState(false);
+
+            // ─── VIEW TRANSITION (Hourglass Loader) ────────────────────────────
+            const [isTransitioning, setIsTransitioning] = useState(false);
+            const transitionTimerRef = useRef(null);
+            // Wrap setView so ALL navigation shows the hourglass transition
+            const setView = useCallback((nextView) => {
+                if (nextView === view) return;
+                setIsTransitioning(true);
+                if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current);
+                transitionTimerRef.current = setTimeout(() => {
+                    _setViewRaw(nextView);
+                    setIsTransitioning(false);
+                }, 500);
+            }, [view]);
             
             // ============================================
             // DATA PERSISTENCE & MANUAL OVERRIDES SYSTEM
@@ -10531,17 +10731,19 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                                             Use filters below
                                         </span>
                                     </div>
-                                    <div className="relative w-64">
-                                        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 z-10"><Icon name="Search" size={16} /></div>
-                                        <input
-                                            type="text"
-                                            placeholder="Search campaigns..."
-                                            className="w-full pl-9 pr-4 py-1.5 bg-gray-100 border-none rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all outline-none"
-                                            value={searchTerm}
-                                            onChange={(e) => setSearchTerm(e.target.value)}
-                                            onKeyDown={handleSearchKeyDown}
-                                            onFocus={() => globalSearchResults.length > 0 && setShowSearchDropdown(true)}
-                                        />
+                                    <div className="flex items-center gap-2">
+                                        <ThemeToggle />
+                                        <div className="relative w-64">
+                                            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 z-10"><Icon name="Search" size={16} /></div>
+                                            <input
+                                                type="text"
+                                                placeholder="Search campaigns..."
+                                                className="w-full pl-9 pr-4 py-1.5 bg-gray-100 border-none rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all outline-none"
+                                                value={searchTerm}
+                                                onChange={(e) => setSearchTerm(e.target.value)}
+                                                onKeyDown={handleSearchKeyDown}
+                                                onFocus={() => globalSearchResults.length > 0 && setShowSearchDropdown(true)}
+                                            />
                                         {/* Global Search Dropdown */}
                                         {showSearchDropdown && globalSearchResults.length > 0 && (
                                             <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 overflow-hidden max-h-80 overflow-y-auto">
@@ -10587,6 +10789,7 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                                                 </div>
                                             </div>
                                         )}
+                                    </div>
                                     </div>
                                 </div>
                             ) : (
@@ -10846,6 +11049,9 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                                     >
                                         <Icon name={dateSort === 'asc' ? 'ArrowUp' : 'ArrowDown'} size={16} />
                                     </button>
+
+                                    {/* Theme Toggle */}
+                                    <ThemeToggle />
                                 </div>
                             </div>
                             
@@ -11252,13 +11458,35 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                         </main>
                     </div>
 
+                    {/* View Transition — Hourglass Loader */}
+                    {isTransitioning && (
+                        <div className="view-transition-overlay">
+                            <div className="hourglass-container">
+                                <svg className="hourglass" viewBox="0 0 40 40" fill="none">
+                                    {/* Frame */}
+                                    <rect x="6" y="2" width="28" height="3" rx="1.5" fill="#94a3b8" />
+                                    <rect x="6" y="35" width="28" height="3" rx="1.5" fill="#94a3b8" />
+                                    <line x1="9" y1="5" x2="9" y2="35" stroke="#64748b" strokeWidth="1.5" />
+                                    <line x1="31" y1="5" x2="31" y2="35" stroke="#64748b" strokeWidth="1.5" />
+                                    {/* Top sand */}
+                                    <path className="hourglass-sand-top" d="M12 8 L20 18 L28 8 Z" fill="#38bdf8" opacity="0.8" />
+                                    {/* Bottom sand */}
+                                    <path className="hourglass-sand-bottom" d="M12 32 L20 22 L28 32 Z" fill="#38bdf8" opacity="0.8" />
+                                    {/* Falling stream */}
+                                    <rect x="19" y="16" width="2" height="8" rx="1" fill="#38bdf8" opacity="0.5">
+                                        <animate attributeName="opacity" values="0.2;0.7;0.2" dur="0.4s" repeatCount="indefinite" />
+                                    </rect>
+                                </svg>
+                                <span className="vt-label">Loading</span>
+                            </div>
+                        </div>
+                    )}
+
                     {/* AI Chat Floating Widget — always visible when not on AI Assistant page */}
                     {view !== 'aiAssistant' && (
                         <AIChatWidget getData={() => processedData} />
                     )}
 
-                    {/* Theme Toggle — top-right corner */}
-                    <ThemeToggle />
                 </div>
             );
         };

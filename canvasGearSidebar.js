@@ -76,20 +76,19 @@
             textDim: '#475569',
         };
 
-        // MAIN GEAR - Navigation nodes (12 items, ~33° apart)
+        // MAIN GEAR - Navigation nodes (11 items, ~33° apart)
         const navNodes = [
-            { id: 'search', label: 'SEARCH', angle: -132 },
-            { id: 'dashboard', label: 'DASHBOARD', angle: -99 },
-            { id: 'master', label: 'INSTALLATIONS', angle: -66 },
-            { id: 'holdReport', label: 'HOLD REPORT', angle: -33 },
-            { id: 'availability', label: 'AVAILABILITY', angle: 0 },
-            { id: 'riskAnalysis', label: 'RISK CENTER', angle: 33 },
-            { id: 'specialMedia', label: 'SPECIALTY', angle: 66 },
-            { id: 'popGallery', label: 'POP GALLERY', angle: 99 },
-            { id: 'materialReceivers', label: 'MATERIALS', angle: 132 },
-            { id: 'creativeHub', label: 'CREATIVE HUB', angle: 165 },
-            { id: 'performanceReport', label: 'PERFORMANCE', angle: 198 },
-            { id: 'aiAssistant', label: 'AI ASSISTANT', angle: 231 },
+            { id: 'dashboard', label: 'DASHBOARD', angle: -132 },
+            { id: 'master', label: 'INSTALLATIONS', angle: -99 },
+            { id: 'holdReport', label: 'HOLD REPORT', angle: -66 },
+            { id: 'availability', label: 'AVAILABILITY', angle: -33 },
+            { id: 'riskAnalysis', label: 'RISK CENTER', angle: 0 },
+            { id: 'specialMedia', label: 'SPECIALTY', angle: 33 },
+            { id: 'popGallery', label: 'POP GALLERY', angle: 66 },
+            { id: 'materialReceivers', label: 'MATERIALS', angle: 99 },
+            { id: 'creativeHub', label: 'CREATIVE HUB', angle: 132 },
+            { id: 'performanceReport', label: 'PERFORMANCE', angle: 165 },
+            { id: 'aiAssistant', label: 'AI ASSISTANT', angle: 198 },
         ];
 
         // PIPELINE GEAR - Secondary navigation (10 items)
@@ -106,14 +105,15 @@
             { id: 'pipelineSummary', label: 'SUMMARY', angle: 234 },
         ];
 
-        // HISTORY GEAR - Tertiary navigation (6 items)
+        // HISTORY GEAR - Tertiary navigation (7 items, ~51° apart)
         const historyNodes = [
-            { id: 'pendingRemovals', label: 'REMOVALS', angle: -90 },
-            { id: 'activeInstalls', label: 'ACTIVE', angle: -30 },
-            { id: 'awaitingPop', label: 'AWAIT POP', angle: 30 },
-            { id: 'completedCampaigns', label: 'COMPLETED', angle: 90 },
-            { id: 'lostOpportunities', label: 'LOST', angle: 150 },
-            { id: 'impressions', label: 'IMPRESS', angle: 210 },
+            { id: 'search', label: 'SEARCH', angle: -90 },
+            { id: 'pendingRemovals', label: 'REMOVALS', angle: -39 },
+            { id: 'activeInstalls', label: 'ACTIVE', angle: 12 },
+            { id: 'awaitingPop', label: 'AWAIT POP', angle: 63 },
+            { id: 'completedCampaigns', label: 'COMPLETED', angle: 114 },
+            { id: 'lostOpportunities', label: 'LOST', angle: 165 },
+            { id: 'impressions', label: 'IMPRESS', angle: 216 },
         ];
 
         const icons = {

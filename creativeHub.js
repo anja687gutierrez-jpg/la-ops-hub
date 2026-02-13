@@ -10,12 +10,9 @@
     const { useState, useEffect, useMemo, useRef, useCallback } = React;
     const e = React.createElement;
 
-    let Icon = null;
-    const initDeps = () => {
-        Icon = window.STAP_Icon || (({ name, size = 20, className = "" }) =>
-            e('span', { className }, `[${name}]`)
-        );
-    };
+    const Icon = window.STAP_Icon || (({ name, size = 20, className = "" }) =>
+        e('span', { className }, `[${name}]`)
+    );
 
     // ─── OCR Helper ──────────────────────────────────────────────────────────
     const extractMetadataFromText = (text) => {
@@ -145,7 +142,6 @@
 
     // ─── Main Creative Hub Component ─────────────────────────────────────────
     const CreativeHub = ({ proofData = [], onUpdateProofs, onBack }) => {
-        useEffect(() => { initDeps(); }, []);
 
         const [search, setSearch] = useState('');
         const [clientFilter, setClientFilter] = useState('');
