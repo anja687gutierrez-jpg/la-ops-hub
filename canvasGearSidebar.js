@@ -78,17 +78,17 @@
 
         // MAIN GEAR - Navigation nodes (11 items, ~33° apart)
         const navNodes = [
-            { id: 'dashboard', label: 'DASHBOARD', angle: -132 },
-            { id: 'master', label: 'INSTALLATIONS', angle: -99 },
-            { id: 'holdReport', label: 'HOLD REPORT', angle: -66 },
-            { id: 'availability', label: 'AVAILABILITY', angle: -33 },
-            { id: 'riskAnalysis', label: 'RISK CENTER', angle: 0 },
-            { id: 'specialMedia', label: 'SPECIALTY', angle: 33 },
-            { id: 'popGallery', label: 'POP GALLERY', angle: 66 },
-            { id: 'materialReceivers', label: 'MATERIALS', angle: 99 },
-            { id: 'creativeHub', label: 'CREATIVE HUB', angle: 132 },
-            { id: 'performanceReport', label: 'PERFORMANCE', angle: 165 },
-            { id: 'aiAssistant', label: 'AI ASSISTANT', angle: 198 },
+            { id: 'dashboard', label: 'DASHBOARD', angle: -90 },
+            { id: 'master', label: 'INSTALLATIONS', angle: -57 },
+            { id: 'holdReport', label: 'HOLD REPORT', angle: -24 },
+            { id: 'availability', label: 'AVAILABILITY', angle: 9 },
+            { id: 'riskAnalysis', label: 'RISK CENTER', angle: 42 },
+            { id: 'specialMedia', label: 'SPECIALTY', angle: 75 },
+            { id: 'popGallery', label: 'POP GALLERY', angle: 108 },
+            { id: 'materialReceivers', label: 'MATERIALS', angle: 141 },
+            { id: 'creativeHub', label: 'CREATIVE HUB', angle: 174 },
+            { id: 'performanceReport', label: 'PERFORMANCE', angle: 207 },
+            { id: 'aiAssistant', label: 'AI ASSISTANT', angle: 240 },
         ];
 
         // PIPELINE GEAR - Secondary navigation (10 items)

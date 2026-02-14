@@ -29,7 +29,7 @@
         getStatusColor = window.STAP_getStatusColor || (() => 'bg-gray-100 text-gray-700');
     };
 
-    const DetailModal = ({ item, onClose, onSave, onLogEmail, materialReceiverData = [], proofData = [], onOpenCreativeHub, onOpenMaterialReceivers }) => {
+    const DetailModal = ({ item, onClose, onSave, onLogEmail, materialReceiverData = [], proofData = [], onOpenCreativeHub, onOpenMaterialReceivers, onAddMaterial, onRemoveMaterial }) => {
         // Initialize dependencies on first render
         useEffect(() => { initDependencies(); }, []);
 
@@ -56,6 +56,62 @@
             });
         }, [proofData, campaignId, advertiser]);
 
+        // Auto-derive earliest material received date from linked receivers
+        const autoMaterialDate = useMemo(() => {
+            if (!linkedMaterials.length) return '';
+            const dates = linkedMaterials
+                .map(m => m.dateReceived || m.date_received || m.transactionDate)
+                .filter(Boolean)
+                .map(d => new Date(d))
+                .filter(d => !isNaN(d));
+            if (!dates.length) return '';
+            const earliest = new Date(Math.min(...dates));
+            return `${earliest.getMonth()+1}/${earliest.getDate()}/${earliest.getFullYear()}`;
+        }, [linkedMaterials]);
+
+        // Inline PDF upload for material receiver
+        const pdfInputRef = React.useRef(null);
+        const [pdfUploading, setPdfUploading] = useState(false);
+        const [pdfFeedback, setPdfFeedback] = useState('');
+
+        const handleInlinePdfUpload = async (e) => {
+            const files = Array.from(e.target.files || []);
+            if (!files.length || !window.STAP_parseMaterialPdf) return;
+            setPdfUploading(true);
+            const required = parseInt(customQty) || 0;
+            let runningTotal = linkedMaterials.reduce((acc, m) => acc + (parseInt(m.quantity) || 0), 0);
+            let addedCount = 0;
+            let lastDate = '';
+
+            for (const file of files) {
+                setPdfFeedback(`Processing ${addedCount + 1}/${files.length}...`);
+                try {
+                    const parsed = await window.STAP_parseMaterialPdf(file);
+                    parsed.campaignId = campaignId;
+                    parsed.client = parsed.client || item?.advertiser || '';
+                    parsed.advertiser = parsed.advertiser || item?.advertiser || '';
+                    if (onAddMaterial) onAddMaterial(parsed);
+                    if (parsed.dateReceived) lastDate = parsed.dateReceived;
+                    runningTotal += parseInt(parsed.quantity) || 0;
+                    addedCount++;
+                } catch (err) {
+                    console.error('PDF parse error:', err);
+                    setPdfFeedback(`Error on file ${addedCount + 1}: ${err.message}`);
+                    await new Promise(r => setTimeout(r, 2000));
+                }
+            }
+
+            if (lastDate) setMaterialReceivedDate(lastDate);
+            if (required > 0 && runningTotal >= required) {
+                setPdfFeedback(`✓ ${addedCount} file${addedCount > 1 ? 's' : ''} added. Materials complete (${runningTotal}/${required})`);
+            } else {
+                setPdfFeedback(`${addedCount} file${addedCount > 1 ? 's' : ''} added (${runningTotal}/${required} total)`);
+            }
+            setTimeout(() => setPdfFeedback(''), 5000);
+            setPdfUploading(false);
+            if (pdfInputRef.current) pdfInputRef.current.value = '';
+        };
+
         const [editMode, setEditMode] = useState(false);
         const [newStage, setNewStage] = useState(item?.stage || '');
         const [emailDraft, setEmailDraft] = useState('');
@@ -78,6 +134,7 @@
         const [customDesigns, setCustomDesigns] = useState('');
         const [customPhotosLink, setCustomPhotosLink] = useState('');
         const [customReceiverLink, setCustomReceiverLink] = useState('');
+        const [materialReceivedDate, setMaterialReceivedDate] = useState('');
 
         // Template logic
         const [selectedTemplate, setSelectedTemplate] = useState('auto');
@@ -227,38 +284,43 @@
                 setAdjustedQty(item.adjustedQty != null ? item.adjustedQty : null);
                 setEditingAdjustedQty(false);
 
-                // Load saved material data
+                // Load Comms Center fields from localStorage (email-only fields, NOT dirty-checked)
                 const savedMaterialData = JSON.parse(localStorage.getItem('stap_material_data') || '{}');
                 const savedData = savedMaterialData[uniqueKey];
 
-                if (savedData) {
+                // Comms Center fields — loaded from savedData (not dirty-checked)
+                setCustomQty(savedData?.totalQty || item.quantity || item.totalQty || '0');
+                setEmailInstalledQty(savedData?.installed || item.totalInstalled || item.installed || '0');
+                setCustomDesigns(savedData?.mediaType || item.media || item.product || '');
+                setCustomPhotosLink(savedData?.photosLink || item.photosLink || '');
+                setCustomReceiverLink(savedData?.receiverLink || item.receiverLink || '');
+
+                // Dirty-checked fields — MUST initialize from item.* to match hasUnsavedChanges
+                setMaterialReceivedDate(item.materialReceivedDate || '');
+
+                // Material breakdown — init from item (metaOverrides) to match dirty check
+                if (item.materialBreakdown && item.materialBreakdown.length > 0) {
+                    // Load exactly what's on item — no auto-distribute on open (preserves dirty-check parity)
+                    setMaterialBreakdown(item.materialBreakdown.map(row => ({
+                        code: row.code || '',
+                        qty: row.qty || '',
+                        scheduled: row.scheduled !== undefined ? row.scheduled : '',
+                        scheduledLocked: row.scheduledLocked || false,
+                        link: row.link || ''
+                    })));
+                } else if (savedData?.materialBreakdown && savedData.materialBreakdown.length > 0) {
+                    // Fallback: legacy data in stap_material_data but not yet in metaOverrides
                     const loadedQty = savedData.totalQty || item.quantity || item.totalQty || '0';
-                    setCustomQty(loadedQty);
-                    setEmailInstalledQty(savedData.installed || item.totalInstalled || item.installed || '0');
-                    setCustomDesigns(savedData.mediaType || item.media || item.product || '');
-                    setCustomPhotosLink(savedData.photosLink || '');
-                    setCustomReceiverLink(savedData.receiverLink || '');
-                    if (savedData.materialBreakdown && savedData.materialBreakdown.length > 0) {
-                        // Migrate legacy rows: add scheduled/scheduledLocked defaults if missing
-                        const migrated = savedData.materialBreakdown.map(row => ({
-                            code: row.code || '',
-                            qty: row.qty || '',
-                            scheduled: row.scheduled !== undefined ? row.scheduled : '',
-                            scheduledLocked: row.scheduledLocked || false,
-                            link: row.link || ''
-                        }));
-                        // Auto-distribute if no rows have scheduled values yet
-                        const hasScheduled = migrated.some(r => r.scheduled !== '' && r.scheduled !== undefined);
-                        setMaterialBreakdown(hasScheduled ? migrated : autoDistributeScheduled(migrated, loadedQty));
-                    } else {
-                        setMaterialBreakdown([{ code: '', qty: '', scheduled: '', scheduledLocked: false, link: '' }]);
-                    }
+                    const migrated = savedData.materialBreakdown.map(row => ({
+                        code: row.code || '',
+                        qty: row.qty || '',
+                        scheduled: row.scheduled !== undefined ? row.scheduled : '',
+                        scheduledLocked: row.scheduledLocked || false,
+                        link: row.link || ''
+                    }));
+                    const hasScheduled = migrated.some(r => r.scheduled !== '' && r.scheduled !== undefined);
+                    setMaterialBreakdown(hasScheduled ? migrated : autoDistributeScheduled(migrated, loadedQty));
                 } else {
-                    setCustomQty(item.quantity || item.totalQty || '0');
-                    setEmailInstalledQty(item.totalInstalled || item.installed || '0');
-                    setCustomDesigns(item.media || item.product || '');
-                    setCustomPhotosLink('');
-                    setCustomReceiverLink('');
                     setMaterialBreakdown([{ code: '', qty: '', scheduled: '', scheduledLocked: false, link: '' }]);
                 }
 
@@ -270,7 +332,7 @@
                 // Load removal tracking data from item (populated from manualOverrides)
                 // Use same fallback chain as pending removals list: totalInstalled → quantity
                 const effectiveQty = item.totalInstalled || item.quantity || item.totalQty || 0;
-                setRemovalQty(item.removalQty || effectiveQty);
+                setRemovalQty(item.removalQty != null ? item.removalQty : effectiveQty);
                 setRemovedCount(item.removedCount || 0);
                 setRemovalStatus(item.removalStatus || 'scheduled');
                 setRemovalAssignee(item.removalAssignee || '');
@@ -335,8 +397,8 @@
             // Check stage change
             if (newStage !== item.stage) return true;
 
-            // Check adjusted qty change
-            const itemAdjQty = item.adjustedQty || null;
+            // Check adjusted qty change — use strict null check (0 is valid)
+            const itemAdjQty = item.adjustedQty != null ? item.adjustedQty : null;
             const currentAdjQty = adjustedQty !== null && adjustedQty !== '' ? parseInt(adjustedQty) : null;
             if (currentAdjQty !== itemAdjQty) return true;
 
@@ -344,8 +406,9 @@
             const itemInstalled = item.totalInstalled || item.installed || 0;
             if (newInstalledCount !== itemInstalled) return true;
 
-            // Check removal tracking changes
-            const itemRemovalQty = item.removalQty || item.totalInstalled || item.quantity || item.totalQty || 0;
+            // Check removal tracking changes — use same fallback chain as init
+            const effectiveQty = item.totalInstalled || item.quantity || item.totalQty || 0;
+            const itemRemovalQty = item.removalQty != null ? item.removalQty : effectiveQty;
             if (removalQty !== itemRemovalQty) return true;
             if (removedCount !== (item.removedCount || 0)) return true;
             if (removalStatus !== (item.removalStatus || 'scheduled')) return true;
@@ -353,13 +416,16 @@
             if (removalPhotosLink !== (item.removalPhotosLink || '')) return true;
             if (hasReplacement !== (item.hasReplacement || false)) return true;
 
+            // Check material received date change
+            if ((materialReceivedDate || '') !== (item.materialReceivedDate || '')) return true;
+
             // Check material breakdown changes (scheduled values, lock state, or row data)
             const currentBreakdown = materialBreakdown.filter(r => r.code || r.qty);
             const itemBreakdown = (item.materialBreakdown || []).filter(r => r.code || r.qty);
             if (JSON.stringify(currentBreakdown) !== JSON.stringify(itemBreakdown)) return true;
 
             return false;
-        }, [item, newStage, adjustedQty, newInstalledCount, removalQty, removedCount, removalStatus, removalAssignee, removalPhotosLink, hasReplacement, materialBreakdown]);
+        }, [item, newStage, adjustedQty, newInstalledCount, removalQty, removedCount, removalStatus, removalAssignee, removalPhotosLink, hasReplacement, materialBreakdown, materialReceivedDate]);
 
         // Helper functions for templates
         const formatMediaType = (media) => {
@@ -534,29 +600,72 @@
                 return `<tr><td style='padding:6px 10px; border-bottom:1px solid #eee;'>${codeDisplay}</td><td style='padding:6px 10px; border-bottom:1px solid #eee; text-align:right;'>${row.qty || 0}</td><td style='padding:6px 10px; border-bottom:1px solid #eee; text-align:right;'>${row.scheduled || 0}</td></tr>`;
             }).join('');
 
+            // Build received-materials table from linked Material Receivers
+            const receiverTotal = linkedMaterials.reduce((acc, m) => acc + (parseInt(m.quantity) || 0), 0);
+            const receiverRows = linkedMaterials.map(m => {
+                const d = m.dateReceived || m.date_received || m.transactionDate || '';
+                const fmtD = d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
+                const code = m.posterCode || m.designCode || m.description || '—';
+                const qty = m.quantity || 0;
+                const pdfLink = m.pdfSource
+                    ? `<a href="${m.pdfSource}" style="color:#6f42c1; text-decoration:underline; font-size:11px;" target="_blank">PDF</a>`
+                    : '';
+                return `<tr>
+                    <td style='padding:5px 10px; border-bottom:1px solid #eee; font-size:12px;'>${fmtD}</td>
+                    <td style='padding:5px 10px; border-bottom:1px solid #eee; font-size:12px;'>${code}</td>
+                    <td style='padding:5px 10px; border-bottom:1px solid #eee; text-align:right; font-size:12px;'>${qty}</td>
+                    <td style='padding:5px 10px; border-bottom:1px solid #eee; text-align:center; font-size:12px;'>${pdfLink}</td>
+                </tr>`;
+            }).join('');
+
             const { isSufficient, currentTotal } = getInventoryStatus();
             const required = parseFloat(customQty) || 0;
-            const overage = currentTotal - required;
+            // Use the higher of manual inventory total vs linked receiver total for status
+            const effectiveReceived = Math.max(currentTotal, receiverTotal);
+            const overage = effectiveReceived - required;
 
             let statusColor, statusText, statusIcon;
-            if (currentTotal >= required) {
+            if (effectiveReceived >= required && required > 0) {
                 statusColor = '#28a745';
                 statusIcon = '✅';
                 statusText = 'Inventory Sufficient';
+            } else if (effectiveReceived > 0) {
+                statusColor = '#dc3545';
+                statusIcon = '❌';
+                statusText = 'Inventory Shortage';
             } else {
                 statusColor = '#dc3545';
                 statusIcon = '❌';
                 statusText = 'Inventory Shortage';
             }
 
-            const overageNote = currentTotal >= required
+            const overageNote = effectiveReceived >= required
                 ? (overage > 0 ? ` (+${overage} overage)` : '')
-                : ` (short ${required - currentTotal})`;
+                : ` (short ${required - effectiveReceived})`;
 
-            const noOverageNote = (currentTotal === required && currentTotal > 0) ? `
+            const noOverageNote = (effectiveReceived === required && effectiveReceived > 0) ? `
                 <p style='margin:10px 0; padding:8px; background:#fff8e6; border-left:3px solid #ffc107; font-size:12px; color:#856404;'>
                     💡 No overage included — consider ordering backup material.
                 </p>
+            ` : '';
+
+            // Received Materials table (from linked receivers)
+            const receiverTable = linkedMaterials.length > 0 ? `
+                <p style='margin:15px 0 8px; font-weight:bold; font-size:13px; color:#333;'>📋 Received Materials</p>
+                <table style='width:100%; font-size:12px; border-collapse:collapse; margin:0 0 15px; background:#f0faf0;'>
+                    <tr style='background:#2d7d46; color:white;'>
+                        <th style='padding:7px 10px; text-align:left;'>Date Rcvd</th>
+                        <th style='padding:7px 10px; text-align:left;'>Design / Code</th>
+                        <th style='padding:7px 10px; text-align:right;'>Qty</th>
+                        <th style='padding:7px 10px; text-align:center;'>Recv PDF</th>
+                    </tr>
+                    ${receiverRows}
+                    <tr style='background:#e6f4ea; font-weight:bold;'>
+                        <td style='padding:7px 10px; border-top:2px solid #2d7d46;' colspan='2'>TOTAL RECEIVED</td>
+                        <td style='padding:7px 10px; border-top:2px solid #2d7d46; text-align:right;'>${receiverTotal}</td>
+                        <td style='padding:7px 10px; border-top:2px solid #2d7d46;'></td>
+                    </tr>
+                </table>
             ` : '';
 
             return `<div style='font-family:Arial,sans-serif; max-width:560px; color:#333;'>
@@ -566,13 +675,15 @@
                     <p style='margin:0 0 15px;'>Materials have landed in the warehouse and are being processed. Work orders are being drafted.</p>
                     <p style='margin:0 0 15px; padding:10px; background:#f8f9fa; border-left:3px solid ${statusColor};'>
                         <strong>Inventory Status:</strong> ${statusIcon} ${statusText}${overageNote}<br/>
-                        <span style="font-size:12px; color:#666;">Received: ${currentTotal} / Required: ${customQty || '0'}</span>
+                        <span style="font-size:12px; color:#666;">Received: ${effectiveReceived} / Required: ${customQty || '0'}</span>
                     </p>
                     ${noOverageNote}
-                    ${validRows.length > 0 ? `<table style='width:100%; font-size:12px; border-collapse:collapse; margin:0 0 15px; background:#faf8ff;'>
+                    ${receiverTable}
+                    ${validRows.length > 0 ? `<p style='margin:15px 0 8px; font-weight:bold; font-size:13px; color:#333;'>📐 Inventory Breakdown</p>
+                    <table style='width:100%; font-size:12px; border-collapse:collapse; margin:0 0 15px; background:#faf8ff;'>
                         <tr style='background:#6f42c1; color:white;'><th style='padding:8px 10px; text-align:left;'>Design Code</th><th style='padding:8px 10px; text-align:right;'>Received</th><th style='padding:8px 10px; text-align:right;'>Scheduled</th></tr>
                         ${breakdownRows}
-                        <tr style='background:#f3f0ff; font-weight:bold;'><td style='padding:8px 10px; border-top:2px solid #6f42c1;'>TOTAL</td><td style='padding:8px 10px; border-top:2px solid #6f42c1; text-align:right;'>${getInventoryStatus().currentTotal}</td><td style='padding:8px 10px; border-top:2px solid #6f42c1; text-align:right;'>${totalScheduled} / ${customQty || 0}</td></tr>
+                        <tr style='background:#f3f0ff; font-weight:bold;'><td style='padding:8px 10px; border-top:2px solid #6f42c1;'>TOTAL</td><td style='padding:8px 10px; border-top:2px solid #6f42c1; text-align:right;'>${currentTotal}</td><td style='padding:8px 10px; border-top:2px solid #6f42c1; text-align:right;'>${totalScheduled} / ${customQty || 0}</td></tr>
                     </table>` : ''}
                     <table style='width:100%; font-size:13px; border-collapse:collapse; background:#f8f9fa; border-radius:4px;'>
                         <tr><td style='padding:8px 10px; color:#666; width:120px; border-bottom:1px solid #eee;'>Advertiser</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${item.advertiser || 'N/A'}</strong></td></tr>
@@ -641,7 +752,7 @@
             else if (mode === 'delay') setEmailDraft(generateDelayTemplate());
             else if (mode === 'maintenance') setEmailDraft(generateMaintenanceTemplate());
             else if (mode === 'removal') setEmailDraft(generateRemovalTemplate());
-        }, [customQty, emailInstalledQty, selectedTemplate, item, newStage, materialBreakdown, customDesigns, customPhotosLink, customReceiverLink, issueReason, newEta, missingType, deadlineDate]);
+        }, [customQty, emailInstalledQty, selectedTemplate, item, newStage, materialBreakdown, customDesigns, customPhotosLink, customReceiverLink, issueReason, newEta, missingType, deadlineDate, linkedMaterials]);
 
         const handleCopyToWebmail = async () => {
             try {
@@ -811,6 +922,7 @@
             const oldBreakdown = item.materialBreakdown || [];
             const oldScheduledTotal = oldBreakdown.reduce((acc, r) => (r.code || r.qty) ? acc + (parseFloat(r.scheduled) || 0) : acc, 0);
             if (newScheduledTotal !== oldScheduledTotal) changes.push(`Scheduled: ${oldScheduledTotal} → ${newScheduledTotal}`);
+            if ((materialReceivedDate || '') !== (item.materialReceivedDate || '')) changes.push(`Mat. Received: ${item.materialReceivedDate || 'none'} → ${materialReceivedDate || 'none'}`);
             if (removalQty !== (item.removalQty || 0)) changes.push(`Removal Qty: ${item.removalQty || 0} → ${removalQty}`);
             if (removedCount !== (item.removedCount || 0)) changes.push(`Removed: ${item.removedCount || 0} → ${removedCount}`);
             if (effectiveRemovalStatusValue !== (item.removalStatus || 'scheduled')) changes.push(`Removal Status: ${item.removalStatus || 'scheduled'} → ${effectiveRemovalStatusValue}`);
@@ -831,7 +943,7 @@
             const originalInstalled = item.totalInstalled || item.installed || 0;
 
             // Quantity tracking — only include if changed
-            if (adjQty !== (item.adjustedQty || null)) {
+            if (adjQty !== (item.adjustedQty != null ? item.adjustedQty : null)) {
                 saveData.adjustedQty = adjQty;
             }
             if (installed !== originalInstalled) {
@@ -844,6 +956,7 @@
             }
             if ((customPhotosLink || null) !== (item.photosLink || null)) saveData.photosLink = customPhotosLink || null;
             if ((customReceiverLink || null) !== (item.receiverLink || null)) saveData.receiverLink = customReceiverLink || null;
+            if ((materialReceivedDate || null) !== (item.materialReceivedDate || null)) saveData.materialReceivedDate = materialReceivedDate || null;
             if ((customDesigns || null) !== (item.mediaType || null)) saveData.mediaType = customDesigns || null;
             if ((customQty || null) !== (item.totalQty || null)) saveData.totalQty = customQty || null;
             // Removal tracking — only include if changed
@@ -889,9 +1002,9 @@
 
         return (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm animate-fade-in" onClick={handleClose}>
-                <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+                <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden flex flex-col max-h-[90vh] dark:border dark:border-slate-600" onClick={e => e.stopPropagation()}>
                     {/* Header */}
-                    <div className="px-8 py-6 border-b bg-gray-50 flex justify-between items-start">
+                    <div className="px-8 py-6 border-b bg-gray-50 dark:bg-slate-900 dark:border-slate-700 flex justify-between items-start">
                         <div>
                             <div className="flex items-center gap-3 mb-2">
                                 {editMode ? (
@@ -929,9 +1042,9 @@
 
                     {/* Body */}
                     <div className="p-8 overflow-y-auto">
-                        {/* Standard Data Grid - Always 3 columns for consistent layout */}
-                        <div className="grid gap-4 mb-4 grid-cols-3">
-                            <div className="bg-gray-50 p-4 rounded border">
+                        {/* Standard Data Grid - 4 columns */}
+                        <div className="grid gap-4 mb-4 grid-cols-4">
+                            <div className="bg-gray-50 dark:bg-slate-900 p-4 rounded border dark:border-slate-600">
                                 <h4 className="font-bold text-xs text-gray-500 mb-2">SCHEDULE</h4>
                                 <p className="text-sm"><strong>Start:</strong> {item.date}</p>
                                 <p className="text-sm mb-3"><strong>End:</strong> {item.endDate}</p>
@@ -1004,7 +1117,7 @@
                                     );
                                 })()}
                             </div>
-                            <div className="bg-gray-50 p-4 rounded border">
+                            <div className="bg-gray-50 dark:bg-slate-900 p-4 rounded border dark:border-slate-600">
                                 <h4 className="font-bold text-xs text-gray-500 mb-2">INSTALL PROGRESS</h4>
                                 {/* Progress Bar and Stats */}
                                 {(() => {
@@ -1118,7 +1231,7 @@
                             </div>
 
                             {/* REMOVAL TRACKING BOX - Always shown for consistent layout */}
-                            <div className={`p-4 rounded border ${item.isAdCouncilTrigger ? 'bg-red-50 border-red-200' : 'bg-gray-50'}`}>
+                            <div className={`p-4 rounded border ${item.isAdCouncilTrigger ? 'bg-red-50 border-red-200' : 'bg-gray-50 dark:bg-slate-900 dark:border-slate-600'}`}>
                                     <div className="flex items-center justify-between mb-2">
                                         <h4 className="font-bold text-xs text-gray-500 flex items-center gap-1">
                                             <Icon name="Trash2" size={12} /> REMOVAL
@@ -1221,16 +1334,85 @@
                                                     <Icon name="RefreshCw" size={10} /> Replacement
                                                 </div>
                                             )}
-                                            <button onClick={() => setEditingRemoval(true)} className="w-full mt-2 px-2 py-1 bg-gray-100 text-gray-700 text-[10px] font-medium rounded hover:bg-gray-200 flex items-center justify-center gap-1">
+                                            <button onClick={() => setEditingRemoval(true)} className="w-full mt-2 px-2 py-1 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 text-[10px] font-medium rounded hover:bg-gray-200 dark:hover:bg-slate-600 flex items-center justify-center gap-1">
                                                 <Icon name="Edit" size={10} /> Edit
                                             </button>
                                         </div>
                                     )}
                                 </div>
+
+                            {/* MATERIAL RECEIVER — read-only summary pill */}
+                            {(() => {
+                                const matReqQty = parseInt(customQty) || (item.adjustedQty != null ? item.adjustedQty : (originalQty || 0));
+                                const matReceived = linkedMaterials.reduce((a, m) => a + (parseInt(m.quantity) || 0), 0);
+                                const matIsSufficient = matReqQty > 0 && matReceived >= matReqQty;
+                                const matIsPartial = matReceived > 0 && matReceived < matReqQty;
+                                const pct = matReqQty > 0 ? Math.min(100, Math.round((matReceived / matReqQty) * 100)) : 0;
+                                const displayDate = materialReceivedDate || autoMaterialDate || item.materialReceivedDate || '';
+                                return (
+                            <div className="bg-gray-50 dark:bg-slate-900 p-4 rounded border dark:border-slate-600">
+                                <div className="flex items-center justify-between mb-2">
+                                    <h4 className="font-bold text-xs text-gray-500 flex items-center gap-1">
+                                        <Icon name="Package" size={12} /> MATERIALS
+                                    </h4>
+                                    {linkedMaterials.length > 0 && (
+                                        <span className={`text-[10px] font-bold ${matIsSufficient ? 'text-green-600' : matIsPartial ? 'text-amber-600' : 'text-red-500'}`}>
+                                            {matReceived}/{matReqQty}
+                                        </span>
+                                    )}
+                                </div>
+
+                                {linkedMaterials.length > 0 ? (
+                                    <div className="space-y-2">
+                                        {/* Progress bar */}
+                                        <div>
+                                            <div className="flex justify-between items-center mb-1">
+                                                <span className="text-[10px] text-gray-500">{linkedMaterials.length} receipt{linkedMaterials.length !== 1 ? 's' : ''}</span>
+                                                <span className={`text-[10px] font-bold ${matIsSufficient ? 'text-green-600' : 'text-amber-600'}`}>{pct}%</span>
+                                            </div>
+                                            <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-1.5">
+                                                <div className={`h-1.5 rounded-full transition-all ${matIsSufficient ? 'bg-green-500' : matReceived > 0 ? 'bg-amber-500' : 'bg-gray-300'}`}
+                                                    style={{ width: `${pct}%` }} />
+                                            </div>
+                                        </div>
+
+                                        {/* Sufficiency badge */}
+                                        {matReqQty > 0 && (() => {
+                                            const color = matIsSufficient ? 'text-green-600 dark:text-green-400' : matIsPartial ? 'text-amber-600 dark:text-amber-400' : 'text-red-500 dark:text-red-400';
+                                            const bg = matIsSufficient ? 'bg-green-50 dark:bg-green-500/10' : matIsPartial ? 'bg-amber-50 dark:bg-amber-500/10' : 'bg-red-50 dark:bg-red-500/10';
+                                            const icon = matIsSufficient ? '✓' : matIsPartial ? '◐' : '○';
+                                            return (
+                                                <div className={`px-2 py-1 rounded ${bg} flex items-center justify-between`}>
+                                                    <span className="text-[10px] text-gray-500">Status:</span>
+                                                    <span className={`text-[10px] font-bold ${color}`}>
+                                                        {icon} {matIsSufficient ? 'Complete' : matIsPartial ? 'Partial' : 'Waiting'}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })()}
+
+                                        {/* Received date (read-only) */}
+                                        {displayDate && (
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-[10px] text-gray-500">Received:</span>
+                                                <span className="text-[10px] font-mono text-gray-700 dark:text-gray-300">{displayDate}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-4">
+                                        <Icon name="PackageOpen" size={20} className="mx-auto text-gray-300 dark:text-slate-600 mb-1" />
+                                        <div className="text-[10px] text-gray-400 dark:text-gray-500">No materials linked</div>
+                                        <div className="text-[9px] text-gray-400 dark:text-gray-600 mt-0.5">Upload via Comms Center below</div>
+                                    </div>
+                                )}
+                            </div>
+                                );
+                            })()}
                         </div>
 
                         {/* Production Proof Selector */}
-                        <div className="mb-6 p-4 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg">
+                        <div className="mb-6 p-4 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-500/10 dark:to-blue-500/10 border border-purple-200 dark:border-purple-500/30 rounded-lg">
                             <div className="flex items-center justify-between">
                                 <div>
                                     <h4 className="font-bold text-sm text-gray-700 flex items-center gap-2">
@@ -1248,7 +1430,7 @@
                                         className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1 ${
                                             item.productionProof === 'in-house'
                                                 ? 'bg-purple-600 text-white'
-                                                : 'bg-white border border-purple-300 text-purple-700 hover:bg-purple-50'
+                                                : 'bg-white dark:bg-slate-700 border border-purple-300 dark:border-purple-500/40 text-purple-700 dark:text-purple-300 hover:bg-purple-50'
                                         }`}
                                     >
                                         <Icon name="Home" size={12} /> In-House
@@ -1261,7 +1443,7 @@
                                         className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1 ${
                                             item.productionProof === 'client'
                                                 ? 'bg-blue-600 text-white'
-                                                : 'bg-white border border-blue-300 text-blue-700 hover:bg-blue-50'
+                                                : 'bg-white dark:bg-slate-700 border border-blue-300 dark:border-blue-500/40 text-blue-700 dark:text-blue-300 hover:bg-blue-50'
                                         }`}
                                     >
                                         <Icon name="Upload" size={12} /> Client
@@ -1274,7 +1456,7 @@
                                         className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1 ${
                                             item.productionProof === 'mixed'
                                                 ? 'bg-amber-600 text-white'
-                                                : 'bg-white border border-amber-300 text-amber-700 hover:bg-amber-50'
+                                                : 'bg-white dark:bg-slate-700 border border-amber-300 dark:border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-50'
                                         }`}
                                         title="Original from client, reprint from in-house (or vice versa)"
                                     >
@@ -1321,10 +1503,10 @@
                         </div>
 
                         {showInstallControls && (
-                            <div className="mb-4 p-4 bg-gray-50 border rounded-lg">
+                            <div className="mb-4 p-4 bg-gray-50 dark:bg-slate-900 border dark:border-slate-600 rounded-lg">
                                 {/* Missing Asset Options */}
                                 {selectedTemplate === 'missing' && (
-                                    <div className="mb-3 p-3 bg-red-50 border border-red-100 rounded">
+                                    <div className="mb-3 p-3 bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20 rounded">
                                         <div className="flex gap-4 mb-2 text-sm">
                                             <label><input type="radio" checked={missingType==='instructions'} onChange={()=>setMissingType('instructions')}/> Instructions</label>
                                             <label><input type="radio" checked={missingType==='material'} onChange={()=>setMissingType('material')}/> Material</label>
@@ -1336,7 +1518,7 @@
 
                                 {/* Inventory Breakdown or Standard Inputs */}
                                 {selectedTemplate === 'material_received' ? (
-                                    <div className="mb-4 bg-gray-50 border rounded p-3">
+                                    <div className="mb-4 bg-gray-50 dark:bg-slate-800 border dark:border-slate-600 rounded p-3">
                                         {/* Required Qty and Media Type - Bug 1 & 5 fix */}
                                         <div className="grid grid-cols-2 gap-3 mb-3 pb-3 border-b border-gray-200">
                                             <div>
@@ -1445,11 +1627,116 @@
                                     <div className="mb-3"><label className="text-xs font-bold">New Date</label><input type="text" value={newEta} onChange={(e)=>setNewEta(e.target.value)} className="w-full text-sm border rounded px-2 py-1"/></div>
                                 )}
 
-                                {/* Photos & Receiver Links */}
+                                {/* Photos & Receiver Links + Upload */}
                                 <div className="grid grid-cols-2 gap-2 mb-3">
                                     <div><label className="text-xs font-bold text-green-700">📸 Photos Link</label><input type="text" value={customPhotosLink} onChange={(e)=>setCustomPhotosLink(e.target.value)} className="w-full text-sm border border-green-200 rounded px-2 py-1" placeholder="POP folder URL..."/></div>
                                     <div><label className="text-xs font-bold text-blue-700">📄 Receiver Link</label><input type="text" value={customReceiverLink} onChange={(e)=>setCustomReceiverLink(e.target.value)} className="w-full text-sm border border-blue-200 rounded px-2 py-1" placeholder="Receiver PDF URL..."/></div>
                                 </div>
+                                <div className="mb-3 flex items-center gap-2">
+                                    <button
+                                        onClick={() => pdfInputRef.current?.click()}
+                                        disabled={pdfUploading}
+                                        className={`px-3 py-1.5 text-xs font-medium rounded flex items-center gap-1.5 transition-colors ${
+                                            pdfUploading
+                                                ? 'bg-gray-100 dark:bg-slate-700 text-gray-400'
+                                                : 'bg-orange-50 dark:bg-orange-500/15 text-orange-700 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-500/25 border border-orange-200 dark:border-orange-500/30'
+                                        }`}
+                                        title="Upload receiver PDF(s) — auto-creates material entries linked to this campaign"
+                                    >
+                                        <Icon name="Upload" size={12} />
+                                        {pdfUploading ? 'Processing...' : 'Upload Receiver PDF'}
+                                    </button>
+                                    <input
+                                        ref={pdfInputRef}
+                                        type="file"
+                                        accept=".pdf"
+                                        multiple
+                                        onChange={handleInlinePdfUpload}
+                                        className="hidden"
+                                    />
+                                    {pdfFeedback && (
+                                        <span className="text-[11px] text-green-600 dark:text-green-400 font-medium">{pdfFeedback}</span>
+                                    )}
+                                </div>
+
+                                {/* LINKED MATERIAL RECEIVERS — inline detail table */}
+                                {linkedMaterials.length > 0 && (
+                                    <div className="mb-3 border border-green-200 dark:border-green-500/30 rounded-lg overflow-hidden">
+                                        <div className="flex items-center justify-between px-3 py-1.5 bg-green-100/80 dark:bg-green-500/15">
+                                            <div className="flex items-center gap-1.5">
+                                                <Icon name="Package" size={12} className="text-green-600" />
+                                                <span className="text-[11px] font-bold text-green-800 dark:text-green-400">
+                                                    {linkedMaterials.length} Receiver{linkedMaterials.length !== 1 ? 's' : ''} Linked
+                                                </span>
+                                                <span className="text-[10px] text-green-600 dark:text-green-500">
+                                                    ({linkedMaterials.reduce((a, m) => a + (parseInt(m.quantity) || 0), 0)} units)
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    onClick={() => pdfInputRef.current?.click()}
+                                                    disabled={pdfUploading}
+                                                    className="text-[10px] text-green-700 dark:text-green-400 hover:underline flex items-center gap-0.5"
+                                                >
+                                                    <Icon name="Upload" size={10} /> Add PDF
+                                                </button>
+                                                {onOpenMaterialReceivers && (
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); onClose(); onOpenMaterialReceivers(); }}
+                                                        className="text-[10px] text-green-700 dark:text-green-400 hover:underline"
+                                                    >
+                                                        View All →
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <table className="w-full text-[11px]">
+                                            <thead>
+                                                <tr className="bg-green-50 dark:bg-green-500/5 text-gray-500 dark:text-gray-400">
+                                                    <th className="px-3 py-1 text-left font-medium">Date Rcvd</th>
+                                                    <th className="px-3 py-1 text-left font-medium">Design / Code</th>
+                                                    <th className="px-3 py-1 text-right font-medium">Qty</th>
+                                                    <th className="px-3 py-1 text-left font-medium">Source</th>
+                                                    <th className="px-3 py-1 w-6"></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {linkedMaterials.map((m, i) => {
+                                                    const d = m.dateReceived || m.date_received || m.transactionDate || '';
+                                                    const fmtD = d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
+                                                    const code = m.posterCode || m.designCode || m.description || '—';
+                                                    const src = m.client || m.printer || '—';
+                                                    return (
+                                                        <tr key={m.id || i} className="border-t border-green-100 dark:border-green-500/10 group/row">
+                                                            <td className="px-3 py-1 font-mono text-gray-600 dark:text-gray-400">{fmtD}</td>
+                                                            <td className="px-3 py-1 font-medium text-gray-800 dark:text-gray-200">{code}</td>
+                                                            <td className="px-3 py-1 text-right font-mono font-bold text-gray-800 dark:text-gray-200">{m.quantity || 0}</td>
+                                                            <td className="px-3 py-1 text-gray-500 dark:text-gray-400 truncate max-w-[120px]" title={src}>{src}</td>
+                                                            <td className="px-1 py-1">
+                                                                {onRemoveMaterial && (
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            if (confirm('Remove this receiver?')) onRemoveMaterial(m.id);
+                                                                        }}
+                                                                        className="p-0.5 text-gray-300 hover:text-red-500 transition-colors"
+                                                                        title="Remove receiver"
+                                                                    >
+                                                                        <Icon name="X" size={12} />
+                                                                    </button>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                        {pdfFeedback && (
+                                            <div className="px-3 py-1 text-[10px] text-green-600 dark:text-green-400 font-medium bg-green-50 dark:bg-green-500/5 border-t border-green-100">
+                                                {pdfFeedback}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
 
                                 <div className="flex gap-2">
                                     <button onClick={handleCopyToWebmail} className="flex-1 px-4 py-2 bg-blue-600 text-white font-bold rounded flex justify-center gap-2 hover:bg-blue-700"><Icon name="Copy" size={16}/> {copyFeedback || "Copy Email"}</button>
@@ -1458,56 +1745,36 @@
                         )}
 
                         {/* PREVIEW */}
-                        <div className="border rounded bg-white p-4 h-64 overflow-y-auto">
+                        <div className="border dark:border-slate-600 rounded bg-gray-50 dark:bg-slate-950 p-4 h-64 overflow-y-auto">
                             <div dangerouslySetInnerHTML={{ __html: emailDraft }} />
                         </div>
                     </div>
 
-                    {/* LINKED DATA SECTIONS */}
-                    {(linkedMaterials.length > 0 || linkedProofs.length > 0) && (
-                        <div className="px-8 py-3 border-t bg-green-50/50 space-y-2">
-                            {linkedMaterials.length > 0 && (
-                                <div className="flex items-center justify-between p-2 bg-green-100/60 border border-green-200 rounded-lg">
-                                    <div className="flex items-center gap-2">
-                                        <Icon name="Package" size={14} className="text-green-600" />
-                                        <span className="text-xs font-medium text-green-800">
-                                            {linkedMaterials.length} material{linkedMaterials.length !== 1 ? 's' : ''} linked from Material Receivers
-                                        </span>
-                                    </div>
-                                    {onOpenMaterialReceivers && (
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); onClose(); onOpenMaterialReceivers(); }}
-                                            className="text-[10px] text-green-700 hover:text-green-900 underline"
-                                        >
-                                            View →
-                                        </button>
-                                    )}
+                    {/* LINKED PROOFS */}
+                    {linkedProofs.length > 0 && (
+                        <div className="px-8 py-3 border-t dark:border-slate-700 bg-green-50/50 dark:bg-green-500/5">
+                            <div className="flex items-center justify-between p-2 bg-green-100/60 border border-green-200 rounded-lg">
+                                <div className="flex items-center gap-2">
+                                    <Icon name="Sparkles" size={14} className="text-green-600" />
+                                    <span className="text-xs font-medium text-green-800">
+                                        {linkedProofs.length} proof{linkedProofs.length !== 1 ? 's' : ''} linked from Creative Hub
+                                    </span>
                                 </div>
-                            )}
-                            {linkedProofs.length > 0 && (
-                                <div className="flex items-center justify-between p-2 bg-green-100/60 border border-green-200 rounded-lg">
-                                    <div className="flex items-center gap-2">
-                                        <Icon name="Sparkles" size={14} className="text-green-600" />
-                                        <span className="text-xs font-medium text-green-800">
-                                            {linkedProofs.length} proof{linkedProofs.length !== 1 ? 's' : ''} linked from Creative Hub
-                                        </span>
-                                    </div>
-                                    {onOpenCreativeHub && (
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); onClose(); onOpenCreativeHub(); }}
-                                            className="text-[10px] text-green-700 hover:text-green-900 underline"
-                                        >
-                                            View →
-                                        </button>
-                                    )}
-                                </div>
-                            )}
+                                {onOpenCreativeHub && (
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); onClose(); onOpenCreativeHub(); }}
+                                        className="text-[10px] text-green-700 hover:text-green-900 underline"
+                                    >
+                                        View →
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     )}
 
                     {/* HISTORY FOOTER */}
                     {item.history && item.history.length > 0 && (
-                        <div className="px-8 py-3 border-t bg-gray-50 max-h-32 overflow-y-auto">
+                        <div className="px-8 py-3 border-t dark:border-slate-700 bg-gray-50 dark:bg-slate-900 max-h-32 overflow-y-auto">
                             <h4 className="text-[10px] font-bold text-gray-500 mb-2 flex items-center gap-1">
                                 <Icon name="History" size={10} /> CHANGE HISTORY
                             </h4>

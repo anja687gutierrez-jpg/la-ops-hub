@@ -1068,7 +1068,7 @@ function doGet(e) {
                                             </button>
                                         )}
                                         <button 
-                                            onClick={() => { setMaterials([]); setLinkedSheet(null); localStorage.removeItem('stap_material_sheet_url'); localStorage.removeItem('stap_materials_data'); localStorage.removeItem('stap_materials_sheet'); if (setIsLiveMode) setIsLiveMode(false); }}
+                                            onClick={() => { setMaterials([]); setLinkedSheet(null); localStorage.removeItem('stap_material_sheet_url'); localStorage.removeItem('stap_materials_data'); localStorage.removeItem('stap_materials_sheet'); if (window.STAP_IDB) window.STAP_IDB.clear('materials'); if (setIsLiveMode) setIsLiveMode(false); }}
                                             className="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg text-sm font-medium"
                                         >
                                             Disconnect
@@ -1431,51 +1431,88 @@ function doGet(e) {
         
         // Safety: materials might be undefined if prop not passed correctly
         const materialsArray = materials || [];
-        
+
+        // Track deleted savedMaterial IDs so they don't come back
+        const [deletedSavedIds, setDeletedSavedIds] = useState(new Set());
+
         // Load saved material data from DetailModal (localStorage)
         const savedMaterialEntries = useMemo(() => {
             const savedData = JSON.parse(localStorage.getItem('stap_material_data') || '{}');
             const entries = [];
-            
+
             Object.entries(savedData).forEach(([key, data]) => {
                 if (data.materialBreakdown && data.materialBreakdown.length > 0) {
                     const [campaignId, date] = key.split('_');
-                    // Find matching campaign in rawData for additional context
-                    const campaign = data.filter ? data : { advertiser: 'Unknown', name: '' };
-                    
+
                     data.materialBreakdown.forEach((item, idx) => {
                         if (item.code || item.qty) {
-                            entries.push({
-                                id: `SAVED-${key}-${idx}`,
-                                receiptNumber: `${campaignId}-D${idx + 1}`,
-                                dateReceived: new Date(data.updatedAt || Date.now()),
-                                description: item.code || 'Design Material',
-                                posterCode: item.code || '',
-                                client: campaignId,
-                                advertiser: campaignId,
-                                quantity: parseInt(item.qty) || 0,
-                                boxes: 1,
-                                designs: 1,
-                                status: 'Received',
-                                comments: `Logged from Update Stages - ${data.mediaType || ''}`,
-                                warehouseLocation: '',
-                                posterImage: item.link || `https://picsum.photos/seed/${key}-${idx}/400/500`,
-                                originalFileLink: item.link || null,
-                                keywords: [campaignId.toLowerCase(), (item.code || '').toLowerCase()],
-                                fromDetailModal: true
-                            });
+                            const id = `SAVED-${key}-${idx}`;
+                            if (!deletedSavedIds.has(id)) {
+                                entries.push({
+                                    id,
+                                    receiptNumber: `${campaignId}-D${idx + 1}`,
+                                    dateReceived: new Date(data.updatedAt || Date.now()),
+                                    description: item.code || 'Design Material',
+                                    posterCode: item.code || '',
+                                    client: campaignId,
+                                    advertiser: campaignId,
+                                    quantity: parseInt(item.qty) || 0,
+                                    boxes: 1,
+                                    designs: 1,
+                                    status: 'Received',
+                                    comments: `Logged from Update Stages - ${data.mediaType || ''}`,
+                                    warehouseLocation: '',
+                                    posterImage: item.link || `https://picsum.photos/seed/${key}-${idx}/400/500`,
+                                    originalFileLink: item.link || null,
+                                    keywords: [campaignId.toLowerCase(), (item.code || '').toLowerCase()],
+                                    fromDetailModal: true,
+                                    _savedKey: key,
+                                    _savedIdx: idx
+                                });
+                            }
                         }
                     });
                 }
             });
             return entries;
-        }, []);
-        
+        }, [deletedSavedIds]);
+
+        // Delete handler that works for BOTH regular materials AND savedMaterial entries
+        const handleDeleteMaterial = (material) => {
+            if (!confirm('Delete this receipt?')) return;
+            const id = material.id;
+            console.log('🗑️ Deleting material:', id, material.fromDetailModal ? '(from DetailModal)' : '(from IDB)');
+
+            if (material.fromDetailModal && material._savedKey !== undefined) {
+                // Remove from stap_material_data in localStorage
+                try {
+                    const savedData = JSON.parse(localStorage.getItem('stap_material_data') || '{}');
+                    const key = material._savedKey;
+                    const idx = material._savedIdx;
+                    if (savedData[key] && savedData[key].materialBreakdown) {
+                        savedData[key].materialBreakdown.splice(idx, 1);
+                        // Clean up empty entries
+                        if (savedData[key].materialBreakdown.length === 0) {
+                            delete savedData[key];
+                        }
+                        localStorage.setItem('stap_material_data', JSON.stringify(savedData));
+                        console.log('🗑️ Removed from stap_material_data:', key, 'idx:', idx);
+                    }
+                } catch (e) { console.warn('Failed to clean stap_material_data:', e); }
+                // Track so useMemo excludes it immediately
+                setDeletedSavedIds(prev => new Set([...prev, id]));
+            } else {
+                // Regular material — remove from React state + IDB
+                setMaterials(prev => prev.filter(m => m.id !== id));
+                if (window.STAP_IDB) window.STAP_IDB.delete('materials', id);
+            }
+        };
+
         // Combine: uploaded data + saved entries from DetailModal
         const combinedMaterials = useMemo(() => {
             return [...materialsArray, ...savedMaterialEntries];
         }, [materialsArray, savedMaterialEntries]);
-        
+
         // Use combined materials or empty array in production mode
         const allMaterials = combinedMaterials;
 
@@ -1625,7 +1662,7 @@ function doGet(e) {
         };
 
         // Receipt Detail Modal
-        const ReceiptModal = ({ receipt, onClose }) => {
+        const ReceiptModal = ({ receipt, onClose, onDelete }) => {
             if (!receipt) return null;
             
             const deploymentPercent = receipt.quantity > 0 
@@ -1641,9 +1678,23 @@ function doGet(e) {
                                 <h3 className="text-xl font-bold">Receipt #{receipt.receiptNumber}</h3>
                                 <p className="text-orange-100 text-sm">{typeof receipt.dateReceived === 'string' ? receipt.dateReceived : (receipt.dateReceived?.toLocaleDateString?.() || '')} at {typeof receipt.dateReceived === 'object' ? receipt.dateReceived?.toLocaleTimeString?.() : ''}</p>
                             </div>
-                            <button onClick={onClose} className="text-white/80 hover:text-white p-2">
-                                <Icon name="X" size={24} />
-                            </button>
+                            <div className="flex items-center gap-2">
+                                {onDelete && (
+                                    <button
+                                        onClick={() => {
+                                            onDelete(receipt);
+                                            onClose();
+                                        }}
+                                        className="text-white/80 hover:text-white hover:bg-red-600/50 p-2 rounded transition-colors"
+                                        title="Delete receipt"
+                                    >
+                                        <Icon name="Trash2" size={20} />
+                                    </button>
+                                )}
+                                <button onClick={onClose} className="text-white/80 hover:text-white p-2">
+                                    <Icon name="X" size={24} />
+                                </button>
+                            </div>
                         </div>
                         
                         <div className="p-6">
@@ -1851,9 +1902,12 @@ function doGet(e) {
                         {materialsArray.length > 0 && (
                             <button 
                                 onClick={() => {
-                                    if (confirm(`Delete all ${materialsArray.length} receipts? This cannot be undone.`)) {
+                                    if (confirm(`Delete all ${allMaterials.length} receipts? This cannot be undone.`)) {
                                         setMaterials([]);
                                         localStorage.removeItem('stap_materials_data');
+                                        localStorage.removeItem('stap_material_data');
+                                        if (window.STAP_IDB) window.STAP_IDB.clear('materials');
+                                        setDeletedSavedIds(new Set(savedMaterialEntries.map(m => m.id)));
                                     }
                                 }}
                                 className="px-2 py-1 bg-red-100 border border-red-200 hover:bg-red-200 text-red-700 rounded text-xs font-medium flex items-center gap-1"
@@ -2107,11 +2161,9 @@ function doGet(e) {
                                     <button
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            if (confirm('Delete this receipt?')) {
-                                                setMaterials(prev => prev.filter(m => m.id !== material.id));
-                                            }
+                                            handleDeleteMaterial(material);
                                         }}
-                                        className="absolute top-2 left-2 z-10 w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                                        className="absolute top-2 left-2 z-10 w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-sm"
                                         title="Delete"
                                     >
                                         <Icon name="X" size={14} />
@@ -2499,11 +2551,7 @@ function doGet(e) {
                                                         <Icon name="Eye" size={14} />
                                                     </button>
                                                     <button
-                                                        onClick={() => {
-                                                            if (confirm('Delete this receipt?')) {
-                                                                setMaterials(prev => prev.filter(m => m.id !== material.id));
-                                                            }
-                                                        }}
+                                                        onClick={() => handleDeleteMaterial(material)}
                                                         className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
                                                         title="Delete"
                                                     >
@@ -2734,9 +2782,10 @@ function doGet(e) {
 
                 {/* Receipt Detail Modal */}
                 {selectedReceipt && (
-                    <ReceiptModal 
+                    <ReceiptModal
                         receipt={selectedReceipt}
                         onClose={() => setSelectedReceipt(null)}
+                        onDelete={(receipt) => handleDeleteMaterial(receipt)}
                     />
                 )}
                 
@@ -2747,6 +2796,78 @@ function doGet(e) {
                 <WebhookSetupModal />
             </div>
         );
+    };
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // SHARED PDF PARSER — used by Detail Modal for inline receiver upload
+    // ═══════════════════════════════════════════════════════════════════════════════
+    window.STAP_parseMaterialPdf = async (file) => {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+        // Thumbnail from first page
+        const page = await pdf.getPage(1);
+        const scale = 0.5;
+        const viewport = page.getViewport({ scale });
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+        await page.render({ canvasContext: context, viewport }).promise;
+        const thumbnailUrl = canvas.toDataURL('image/jpeg', 0.7);
+
+        // Extract text from first 3 pages
+        let fullText = '';
+        for (let pageNum = 1; pageNum <= Math.min(pdf.numPages, 3); pageNum++) {
+            const textPage = await pdf.getPage(pageNum);
+            const textContent = await textPage.getTextContent();
+            fullText += textContent.items.map(item => item.str).join(' ') + ' ';
+        }
+
+        // Reuse the same parse logic as MaterialReceivers component
+        const upperText = fullText.toUpperCase();
+        let receiptNumber = '';
+        const invMatch = fullText.match(/(?:INV|INVOICE|RECEIPT|PO|ORDER)[#:\s\-]*([A-Z0-9\-]+)/i);
+        if (invMatch) receiptNumber = invMatch[1].trim();
+        else { const fm = file.name.match(/(\d{5,})/); receiptNumber = fm ? `INV-${fm[1]}` : `INV-${Date.now().toString().slice(-6)}`; }
+
+        let dateReceived = new Date().toLocaleDateString();
+        for (const pattern of [/(\d{1,2}\/\d{1,2}\/\d{2,4})/, /(\d{4}-\d{2}-\d{2})/, /(?:DATE|RECEIVED)[:\s]*(\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4})/i]) {
+            const m = fullText.match(pattern);
+            if (m) { dateReceived = m[1]; break; }
+        }
+
+        const commonClients = ['NETFLIX','NIKE','APPLE','AMAZON','DISNEY','WARNER','PARAMOUNT','UNIVERSAL','SONY','HBO','HULU','GOOGLE','META','FACEBOOK','MICROSOFT'];
+        let client = '';
+        for (const c of commonClients) { if (upperText.includes(c)) { client = c; break; } }
+        if (!client) { const cm = fullText.match(/(?:CLIENT|CUSTOMER|ADVERTISER|BILL TO)[:\s]*([A-Za-z][A-Za-z\s&]+)/i); client = cm ? cm[1].trim().substring(0, 30) : 'Unknown Client'; }
+
+        let quantity = 1;
+        const qm = fullText.match(/(?:TOTAL\s*(?:QUANTITY|QTY)?|QTY|QUANTITY)[:\s]*(\d+)/i);
+        if (qm) quantity = parseInt(qm[1]) || 1;
+
+        let description = 'Material Receipt';
+        const dm = fullText.match(/(?:DESCRIPTION|ITEM|PRODUCT|MATERIAL)[:\s]*([^\n]{5,50})/i);
+        if (dm) description = dm[1].trim();
+
+        let printer = '';
+        const pm = fullText.match(/(?:PRINTER|VENDOR|FROM|SHIP FROM|CIRCLE|VENDOR)[:\s]*([A-Za-z][A-Za-z\s&]+)/i);
+        if (pm) printer = pm[1].trim().substring(0, 30);
+        if (!printer && upperText.includes('CIRCLE GRAPHICS')) printer = 'Circle Graphics';
+
+        let posterCode = receiptNumber;
+        const cm = fullText.match(/(?:POSTER\s*CODE|CODE|SKU)[:\s]*([A-Z0-9\-]+)/i);
+        if (cm) posterCode = cm[1].trim();
+
+        return {
+            id: `PDF-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+            receiptNumber, dateReceived, description, posterCode,
+            client, advertiser: client, printer: printer || 'Unknown Vendor',
+            quantity, boxes: 1, designs: 1,
+            comments: `Imported from: ${file.name}`,
+            status: 'Received', warehouseLocation: '',
+            posterImage: thumbnailUrl, pdfSource: file.name
+        };
     };
 
     // ═══════════════════════════════════════════════════════════════════════════════

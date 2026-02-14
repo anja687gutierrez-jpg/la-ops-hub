@@ -272,6 +272,27 @@
         /* ── Gradient overrides ─────────────────────────────────────────── */
         html.dark .bg-gradient-to-r.from-white { --tw-gradient-from: #1e293b !important; }
         html.dark .bg-gradient-to-b.from-white { --tw-gradient-from: #1e293b !important; }
+        /* Pastel gradients → dark-friendly tinted gradients */
+        html.dark .from-purple-50 { --tw-gradient-from: rgba(168, 85, 247, 0.12) !important; }
+        html.dark .to-blue-50 { --tw-gradient-to: rgba(59, 130, 246, 0.12) !important; }
+        html.dark .from-purple-100 { --tw-gradient-from: rgba(168, 85, 247, 0.18) !important; }
+        html.dark .to-blue-100 { --tw-gradient-to: rgba(59, 130, 246, 0.18) !important; }
+        html.dark .via-blue-50 { --tw-gradient-via: rgba(59, 130, 246, 0.12) !important; }
+        html.dark .to-indigo-50 { --tw-gradient-to: rgba(99, 102, 241, 0.12) !important; }
+        html.dark .from-green-50 { --tw-gradient-from: rgba(34, 197, 94, 0.12) !important; }
+        html.dark .to-emerald-50 { --tw-gradient-to: rgba(16, 185, 129, 0.12) !important; }
+
+        /* ── Colored borders → muted in dark mode ─────────────────────── */
+        html.dark .border-purple-200 { border-color: rgba(168, 85, 247, 0.3) !important; }
+        html.dark .border-purple-300 { border-color: rgba(168, 85, 247, 0.4) !important; }
+        html.dark .border-blue-200 { border-color: rgba(59, 130, 246, 0.3) !important; }
+        html.dark .border-blue-300 { border-color: rgba(59, 130, 246, 0.4) !important; }
+        html.dark .border-green-200 { border-color: rgba(34, 197, 94, 0.3) !important; }
+        html.dark .border-amber-200 { border-color: rgba(245, 158, 11, 0.3) !important; }
+        html.dark .border-amber-300 { border-color: rgba(245, 158, 11, 0.4) !important; }
+        html.dark .border-amber-400 { border-color: rgba(245, 158, 11, 0.5) !important; }
+        html.dark .border-red-100 { border-color: rgba(239, 68, 68, 0.2) !important; }
+        html.dark .border-red-200 { border-color: rgba(239, 68, 68, 0.3) !important; }
 
         /* ── Specific component fixes ───────────────────────────────────── */
         /* Progress bar tracks */
@@ -1915,20 +1936,9 @@
             const padding = settings.compactMode ? '4px 6px' : '8px 10px';
             
             // --- Helper: Create Table Row ---
-            // Options: { groupByProduct: true } to insert product sub-headers when product column is shown
-            const createHtmlTable = (data, headers, columnWidths, rowMapper, options = {}) => {
+            const createHtmlTable = (data, headers, columnWidths, rowMapper) => {
                 if (!data || data.length === 0) {
                     return "<p style='font-style: italic; color: #666;'>No flights are currently in this category.</p>";
-                }
-
-                // Sort by product if grouping is enabled and product column is shown
-                let sortedData = data;
-                if (options.groupByProduct && settings.showProductColumn) {
-                    sortedData = [...data].sort((a, b) => {
-                        const pA = (a.product || a.media || '').toLowerCase();
-                        const pB = (b.product || b.media || '').toLowerCase();
-                        return pA.localeCompare(pB);
-                    });
                 }
 
                 let table = `<table class="data-table" style="font-size: ${fontSize};"><tr>`;
@@ -1938,20 +1948,12 @@
                 });
                 table += '</tr>';
 
-                let lastProduct = null;
-                sortedData.forEach(item => {
-                    // Insert product sub-header row when product changes
-                    if (options.groupByProduct && settings.showProductColumn) {
-                        const currentProduct = formatProduct(item.product || item.media || 'Other');
-                        if (currentProduct !== lastProduct) {
-                            table += `<tr><td colspan="${headers.length}" style="padding: 4px 8px; background: #eef2ff; font-size: 10px; font-weight: 700; color: #4338ca; border-bottom: 1px solid #c7d2fe; letter-spacing: 0.3px;">${currentProduct}</td></tr>`;
-                            lastProduct = currentProduct;
-                        }
-                    }
+                data.forEach(item => {
                     const rowValues = rowMapper(item);
                     table += '<tr>';
-                    rowValues.forEach(val => {
-                        table += `<td style="padding: ${padding};">${val || ''}</td>`;
+                    rowValues.forEach((val, i) => {
+                        const nowrap = headers[i] && /date|start|end|late|ago|1st|mat/i.test(headers[i]) ? ' white-space: nowrap;' : '';
+                        table += `<td style="padding: ${padding};${nowrap}">${val || ''}</td>`;
                     });
                     table += '</tr>';
                 });
@@ -1982,14 +1984,34 @@
             };
 
             // --- Generate Tables ---
-            // Helper for formatting Client/Campaign cell (with optional in-house icon)
-            const formatClient = (client, campaign, productionProof) => {
+            // Helper for formatting Advertiser/Campaign cell with inline product badge
+            const formatCampaignCell = (client, campaign, productionProof, product) => {
                 const inHouseIcon = (settings.showProductionIcon && productionProof === 'in-house')
                     ? '<span style="margin-left:4px;" title="In-House Production">&#127968;</span>'
                     : '';
-                return `<strong>${client}</strong>${inHouseIcon}<br/><span style="font-size:11px;color:#666;">${campaign}</span>`;
+                const productBadge = product
+                    ? ` <span class="badge">${formatProduct(product)}</span>`
+                    : '';
+                return `<strong>${client}</strong>${inHouseIcon}${productBadge}<br/><span style="font-size:11px;color:#666;">${campaign}</span>`;
             };
-            
+
+            // Helper: check if stage is at or past "Material Ready For Install"
+            const isMaterialReceived = (stage) => {
+                const materialReadyIdx = ALL_STAGES.indexOf('Material Ready For Install');
+                const stageIdx = ALL_STAGES.indexOf(stage);
+                return stageIdx >= materialReadyIdx && stageIdx !== -1;
+            };
+
+            // Helper: format Mat. Rcvd column — show real date if available, else ✓/—
+            const formatMatRcvd = (item) => {
+                const suf = item.materialSufficiency;
+                const countStr = suf && suf.required > 0 ? ` <span style="font-size:10px;color:#888;">(${suf.received}/${suf.required})</span>` : '';
+                if (item.materialReceivedDate) return formatDate(item.materialReceivedDate) + countStr;
+                if (isMaterialReceived(item.stage)) return '✓' + countStr;
+                if (suf && suf.isPartial) return '◐' + countStr;
+                return '—';
+            };
+
             // Helper to shorten product names - keep product type, abbreviate common prefixes
             // Order matters: strip suffixes first, then prefixes, then normalize whitespace
             const formatProduct = (product) => {
@@ -2021,60 +2043,54 @@
                 return dateStr;
             };
 
-            // Dynamic column building based on settings
-            const buildTableConfig = (baseHeaders, baseWidths, baseMapper, options = {}) => {
-                let headers = [...baseHeaders];
-                let widths = [...baseWidths];
-                let mapper = baseMapper;
-                
-                // Add optional columns
-                if (settings.showMarketColumn && options.includeMarket) {
-                    headers.splice(options.marketPosition || 2, 0, 'Market');
-                    widths.splice(options.marketPosition || 2, 0, '12%');
-                }
-                if (settings.showProductColumn && options.includeProduct) {
-                    headers.splice(options.productPosition || 3, 0, 'Media');
-                    widths.splice(options.productPosition || 3, 0, '15%');
-                }
-                
-                return { headers, widths };
+            // Helper: Overdue alert banner for items >7 days late
+            const createAlertBanner = (delayedFlights) => {
+                const overdue = (delayedFlights || [])
+                    .map(item => {
+                        const daysLate = item.dateObj ? Math.floor((new Date() - item.dateObj) / (1000 * 60 * 60 * 24)) : 0;
+                        return { name: item.advertiser, days: daysLate };
+                    })
+                    .filter(x => x.days > 7)
+                    .sort((a, b) => b.days - a.days);
+                if (overdue.length === 0) return '';
+                const top3 = overdue.slice(0, 3).map(x => `${x.name} (${x.days}d)`).join(', ');
+                const extra = overdue.length > 3 ? ` + ${overdue.length - 3} more` : '';
+                return `<tr><td class="alert-banner">&#9888;&ensp;${overdue.length} overdue — ${top3}${extra}</td></tr>`;
             };
 
             const tables = {
                 delayed: (() => {
-                    const base = { headers: ["Campaign #", "Advertiser / Campaign"], widths: ['10%', '50%'] };
-                    if (settings.showMarketColumn) { base.headers.push('Market'); base.widths.push('18%'); }
-                    if (settings.showProductColumn) { base.headers.push('Media'); base.widths.push('18%'); }
-                    if (settings.showOwnerColumn) { base.headers.push('Owner'); base.widths.push('15%'); }
-                    base.headers.push('Start', 'Late'); base.widths.push('7%', '5%');
-                    
-                    return createHtmlTable(processedData.delayedFlights, base.headers, base.widths, item => {
-                        const row = [item.id, formatClient(item.advertiser, item.name, item.productionProof)];
+                    const h = ["Advertiser / Campaign"];
+                    const w = ['55%'];
+                    if (settings.showMarketColumn) { h.push('Market'); w.push('10%'); }
+                    if (settings.showOwnerColumn) { h.push('Owner'); w.push('10%'); }
+                    h.push('Start', '1st Install', 'Mat. Rcvd', 'Late');
+                    w.push('8%', '8%', '6%', '5%');
+
+                    return createHtmlTable(processedData.delayedFlights, h, w, item => {
+                        const row = [formatCampaignCell(item.advertiser, item.name, item.productionProof, item.product || item.media)];
                         if (settings.showMarketColumn) row.push(formatMarket(item.market));
-                        if (settings.showProductColumn) row.push(formatProduct(item.product || item.media));
                         if (settings.showOwnerColumn) row.push(item.owner);
-                        // Calculate days overdue
                         const daysLate = item.dateObj ? Math.floor((new Date() - item.dateObj) / (1000 * 60 * 60 * 24)) : '-';
                         const daysLateDisplay = daysLate > 0 ? `<span style="color: ${daysLate > 7 ? '#d32f2f' : '#f57c00'}; font-weight: bold;">${daysLate}d</span>` : '-';
-                        row.push(formatDate(item.date), daysLateDisplay);
+                        row.push(formatDate(item.date), formatDate(item.firstInstall), formatMatRcvd(item), daysLateDisplay);
                         return row;
-                    }, { groupByProduct: true });
+                    });
                 })(),
-                
+
                 inProgress: (() => {
-                    const base = { headers: ["Campaign #", "Advertiser / Campaign"], widths: ['10%', '45%'] };
-                    if (settings.showMarketColumn) { base.headers.push('Market'); base.widths.push('15%'); }
-                    if (settings.showProductColumn) { base.headers.push('Media'); base.widths.push('18%'); }
-                    if (settings.showOwnerColumn) { base.headers.push('Owner'); base.widths.push('15%'); }
-                    base.headers.push('Start', 'Progress'); base.widths.push('7%', '22%');
-                    
-                    return createHtmlTable(processedData.inProgressFlights, base.headers, base.widths, item => {
-                        const row = [item.id, formatClient(item.advertiser, item.name, item.productionProof)];
+                    const h = ["Advertiser / Campaign"];
+                    const w = ['45%'];
+                    if (settings.showMarketColumn) { h.push('Market'); w.push('10%'); }
+                    if (settings.showOwnerColumn) { h.push('Owner'); w.push('10%'); }
+                    h.push('Start', '1st Install', 'Progress');
+                    w.push('8%', '8%', '20%');
+
+                    return createHtmlTable(processedData.inProgressFlights, h, w, item => {
+                        const row = [formatCampaignCell(item.advertiser, item.name, item.productionProof, item.product || item.media)];
                         if (settings.showMarketColumn) row.push(formatMarket(item.market));
-                        if (settings.showProductColumn) row.push(formatProduct(item.product || item.media));
                         if (settings.showOwnerColumn) row.push(item.owner);
 
-                        // Build visual progress bar - use adjustedQty if set for charted qty override
                         const totalQty = item.adjustedQty || item.quantity || item.totalQty || 0;
                         const installedQty = item.totalInstalled || item.installed || 0;
                         const pendingQty = item.pending || item.totalPending || (totalQty - installedQty);
@@ -2083,148 +2099,132 @@
 
                         const progressHtml = totalQty > 0 ? `
                             <div style="display: flex; align-items: center; gap: 6px;">
-                                <div style="flex: 1; background: #e0e0e0; border-radius: 4px; height: 8px; min-width: 80px;">
+                                <div style="flex: 1; background: #e0e0e0; border-radius: 4px; height: 8px; min-width: 60px;">
                                     <div style="width: ${pct}%; background: ${barColor}; height: 100%; border-radius: 4px;"></div>
                                 </div>
                                 <span style="font-size: 11px; white-space: nowrap; color: #333;">
                                     <strong>${installedQty}</strong>/${totalQty}
                                 </span>
                             </div>
-                            <div style="font-size: 10px; color: #666; margin-top: 2px;">${pct}% • ${pendingQty} pending</div>
+                            <div style="font-size: 10px; color: #666; margin-top: 2px;">${pct}% &bull; ${pendingQty} pending</div>
                         ` : '-';
 
-                        row.push(formatDate(item.date), progressHtml);
+                        row.push(formatDate(item.date), formatDate(item.firstInstall), progressHtml);
                         return row;
-                    }, { groupByProduct: true });
+                    });
                 })(),
 
                 upcoming: (() => {
-                    const base = { headers: ["Stage", "Campaign #", "Client / Campaign"], widths: ['18%', '10%', '50%'] };
-                    if (settings.showMarketColumn) { base.headers.push('Market'); base.widths.push('18%'); }
-                    if (settings.showProductColumn) { base.headers.push('Media'); base.widths.push('20%'); }
-                    if (settings.showOwnerColumn) { base.headers.push('Owner'); base.widths.push('15%'); }
-                    base.headers.push('Start'); base.widths.push('7%');
-                    
-                    return createHtmlTable(processedData.upcoming, base.headers, base.widths, item => {
-                        const row = [item.stage, item.id, formatClient(item.advertiser, item.name, item.productionProof)];
+                    const h = ["Stage", "Client / Campaign"];
+                    const w = ['15%', '45%'];
+                    if (settings.showMarketColumn) { h.push('Market'); w.push('10%'); }
+                    if (settings.showOwnerColumn) { h.push('Owner'); w.push('10%'); }
+                    h.push('Start', 'Mat. Rcvd');
+                    w.push('8%', '6%');
+
+                    return createHtmlTable(processedData.upcoming, h, w, item => {
+                        const row = [item.stage, formatCampaignCell(item.advertiser, item.name, item.productionProof, item.product || item.media)];
                         if (settings.showMarketColumn) row.push(formatMarket(item.market));
-                        if (settings.showProductColumn) row.push(formatProduct(item.product || item.media));
                         if (settings.showOwnerColumn) row.push(item.owner);
-                        row.push(formatDate(item.date));
+                        row.push(formatDate(item.date), formatMatRcvd(item));
                         return row;
-                    }, { groupByProduct: true });
+                    });
                 })(),
 
                 installed: (() => {
-                    const base = { headers: ["Campaign #", "Advertiser / Campaign"], widths: ['10%', '50%'] };
-                    if (settings.showMarketColumn) { base.headers.push('Market'); base.widths.push('18%'); }
-                    if (settings.showProductColumn) { base.headers.push('Media'); base.widths.push('18%'); }
-                    if (settings.showOwnerColumn) { base.headers.push('Owner'); base.widths.push('15%'); }
-                    base.headers.push('Start', 'Units'); base.widths.push('7%', '10%');
-                    
-                    return createHtmlTable(processedData.fullyInstalledThisWeek, base.headers, base.widths, item => {
-                        const row = [item.id, formatClient(item.advertiser, item.name, item.productionProof)];
+                    const h = ["Advertiser / Campaign"];
+                    const w = ['50%'];
+                    if (settings.showMarketColumn) { h.push('Market'); w.push('10%'); }
+                    if (settings.showOwnerColumn) { h.push('Owner'); w.push('10%'); }
+                    h.push('Start', '1st Install', 'Units');
+                    w.push('8%', '8%', '12%');
+
+                    return createHtmlTable(processedData.fullyInstalledThisWeek, h, w, item => {
+                        const row = [formatCampaignCell(item.advertiser, item.name, item.productionProof, item.product || item.media)];
                         if (settings.showMarketColumn) row.push(formatMarket(item.market));
-                        if (settings.showProductColumn) row.push(formatProduct(item.product || item.media));
                         if (settings.showOwnerColumn) row.push(item.owner);
-                        
-                        // Show installed count with checkmark (use charted qty when available)
+
                         const totalQty = item.adjustedQty || item.quantity || item.totalQty || 0;
                         const installedQty = item.totalInstalled || item.installed || 0;
                         const unitsHtml = totalQty > 0 ? `
-                            <span style="color: #4caf50; font-weight: bold;">✓ ${installedQty}</span>
+                            <span style="color: #4caf50; font-weight: bold;">&#10003; ${installedQty}</span>
                             <span style="color: #666; font-size: 11px;">/ ${totalQty}</span>
                         ` : '-';
-                        
-                        row.push(formatDate(item.date), unitsHtml);
-                        return row;
-                    }, { groupByProduct: true });
-                })(),
 
-                recentCompleted: (() => {
-                    const base = { headers: ["Stage", "Campaign #", "Advertiser / Campaign"], widths: ['18%', '10%', '55%'] };
-                    if (settings.showMarketColumn) { base.headers.push('Market'); base.widths.push('18%'); }
-                    if (settings.showProductColumn) { base.headers.push('Media'); base.widths.push('20%'); }
-                    if (settings.showOwnerColumn) { base.headers.push('Owner'); base.widths.push('15%'); }
-                    
-                    return createHtmlTable(processedData.recentInstalls, base.headers, base.widths, item => {
-                        const row = [item.stage, item.id, formatClient(item.advertiser, item.name, item.productionProof)];
-                        if (settings.showMarketColumn) row.push(formatMarket(item.market));
-                        if (settings.showProductColumn) row.push(formatProduct(item.product || item.media));
-                        if (settings.showOwnerColumn) row.push(item.owner);
+                        row.push(formatDate(item.date), formatDate(item.firstInstall), unitsHtml);
                         return row;
-                    }, { groupByProduct: true });
+                    });
                 })(),
 
                 pipeline: (() => {
-                    // Count unique campaigns (by ID) for each category
-                    const countUniqueCampaigns = (arr) => {
+                    const countUnique = (arr) => {
                         if (!arr || arr.length === 0) return 0;
-                        const uniqueIds = new Set(arr.map(item => item.id));
-                        return uniqueIds.size;
+                        return new Set(arr.map(item => item.id)).size;
                     };
-                    // Sum faces/qty for anticipated installs
                     const sumFaces = (arr) => {
                         if (!arr || arr.length === 0) return 0;
                         return arr.reduce((sum, item) => sum + (item.adjustedQty || item.totalQty || item.quantity || 0), 0);
                     };
 
-                    // Simplified: campaign counts + anticipated faces this week
-                    const thisWeekFaces = sumFaces(processedData.thisWeek || processedData.upcoming);
-                    const inProgressFaces = sumFaces(processedData.inProgressFlights);
-                    const holdCount = countUniqueCampaigns(processedData.onHoldCampaigns);
-
-                    const pipelineStats = [
-                        { stage: 'Anticipated Installs This Week', count: countUniqueCampaigns(processedData.thisWeek || processedData.upcoming), faces: thisWeekFaces },
-                        { stage: 'In-Progress', count: countUniqueCampaigns(processedData.inProgressFlights), faces: inProgressFaces },
-                        { stage: 'On Hold', count: holdCount, faces: sumFaces(processedData.onHoldCampaigns) },
+                    const stats = [
+                        { label: 'Anticipated This Week', count: countUnique(processedData.thisWeek || processedData.upcoming), faces: sumFaces(processedData.thisWeek || processedData.upcoming) },
+                        { label: 'In-Progress', count: countUnique(processedData.inProgressFlights), faces: sumFaces(processedData.inProgressFlights) },
+                        { label: 'On Hold', count: countUnique(processedData.onHoldCampaigns), faces: sumFaces(processedData.onHoldCampaigns) },
+                        { label: 'Removals Due', count: countUnique(processedData.expiredFlights), faces: sumFaces(processedData.expiredFlights) },
                     ].filter(s => s.count > 0);
 
-                    return createHtmlTable(
-                        pipelineStats,
-                        ["Category", "Campaigns", "Faces"],
-                        ['60%', '20%', '20%'],
-                        item => [item.stage, `<strong>${item.count}</strong>`, `<strong>${item.faces.toLocaleString()}</strong>`]
-                    );
+                    let html = `<table class="data-table" style="font-size: ${fontSize};"><tr><th style="font-size: ${headerSize}; padding: ${padding};" width="55%">Category</th><th style="font-size: ${headerSize}; padding: ${padding};" width="22%">Campaigns</th><th style="font-size: ${headerSize}; padding: ${padding};" width="23%">Faces</th></tr>`;
+                    stats.forEach(s => {
+                        html += `<tr><td style="padding: ${padding};">${s.label}</td><td style="padding: ${padding};"><strong>${s.count}</strong></td><td style="padding: ${padding};"><strong>${s.faces.toLocaleString()}</strong></td></tr>`;
+                    });
+                    html += '</table>';
+                    return html;
                 })(),
-                
+
                 removal: (() => {
-                    const base = { headers: ["Campaign #", "Advertiser / Campaign"], widths: ['10%', '50%'] };
-                    if (settings.showMarketColumn) { base.headers.push('Market'); base.widths.push('18%'); }
-                    if (settings.showProductColumn) { base.headers.push('Media'); base.widths.push('18%'); }
-                    if (settings.showOwnerColumn) { base.headers.push('Owner'); base.widths.push('15%'); }
-                    base.headers.push('End', 'Ago'); base.widths.push('7%', '5%');
-                    
-                    return createHtmlTable(processedData.expiredFlights, base.headers, base.widths, item => {
-                        const row = [item.id, formatClient(item.advertiser, item.name, item.productionProof)];
+                    // Sort most overdue first
+                    const sorted = [...(processedData.expiredFlights || [])].sort((a, b) => {
+                        const dA = a.endDateObj ? (new Date() - a.endDateObj) : 0;
+                        const dB = b.endDateObj ? (new Date() - b.endDateObj) : 0;
+                        return dB - dA;
+                    });
+
+                    const h = ["Advertiser / Campaign"];
+                    const w = ['55%'];
+                    if (settings.showMarketColumn) { h.push('Market'); w.push('10%'); }
+                    if (settings.showOwnerColumn) { h.push('Owner'); w.push('10%'); }
+                    h.push('End', 'Ago');
+                    w.push('8%', '6%');
+
+                    return createHtmlTable(sorted, h, w, item => {
+                        const row = [formatCampaignCell(item.advertiser, item.name, item.productionProof, item.product || item.media)];
                         if (settings.showMarketColumn) row.push(formatMarket(item.market));
-                        if (settings.showProductColumn) row.push(formatProduct(item.product || item.media));
                         if (settings.showOwnerColumn) row.push(item.owner);
-                        // Calculate days since expired
                         const daysAgo = item.endDateObj ? Math.floor((new Date() - item.endDateObj) / (1000 * 60 * 60 * 24)) : '-';
                         const daysDisplay = daysAgo > 0 ? `${daysAgo}d` : '-';
                         row.push(formatDate(item.endDate), daysDisplay);
                         return row;
-                    }, { groupByProduct: true });
+                    });
                 })()
             };
 
             const weatherHtml = getWeatherHtml();
 
-            // Dynamic Sections based on settings
-            let sectionsHtml = '';
-            
-            // Calculate production breakdown (used by both summary and production breakdown sections)
+            // Calculate production counts for summary
             const allCampaigns = processedData.all || [];
             const productionBreakdown = {
                 inHouse: allCampaigns.filter(c => c.productionProof === 'in-house').length,
                 client: allCampaigns.filter(c => c.productionProof === 'client').length,
-                mixed: allCampaigns.filter(c => c.productionProof === 'mixed').length,
-                unset: allCampaigns.filter(c => !c.productionProof).length
             };
-            const hasProductionData = productionBreakdown.inHouse > 0 || productionBreakdown.client > 0 || productionBreakdown.mixed > 0;
 
+            // Build sections: Summary → Alert → Delayed → InProgress → Upcoming → Installed → Pipeline → Removal
+            let sectionsHtml = '';
+
+            // 1. Summary KPIs + In-House vs Client count
             if (settings.sections.summary) {
+                const prodLine = (productionBreakdown.inHouse > 0 || productionBreakdown.client > 0)
+                    ? `<p style="margin: 8px 0 0; font-size: 11px; color: #777; text-align: center;">Production: ${productionBreakdown.inHouse} In-House &nbsp;&middot;&nbsp; ${productionBreakdown.client} Client-Provided</p>`
+                    : '';
                 sectionsHtml += `
                 <tr><td class="summary-section">
                 <h2>THIS WEEK AT A GLANCE</h2>
@@ -2234,61 +2234,36 @@
                     <div class="summary-item"><div class="count normal">${processedData.upcoming.length}</div><div class="label">UPCOMING</div></div>
                     <div class="summary-item"><div class="count" style="color: #4caf50;">${processedData.fullyInstalledThisWeek.length}</div><div class="label">INSTALLED</div></div>
                 </div>
+                ${prodLine}
                 </td></tr>`;
             }
 
-            // Production Source Breakdown - now independent section
-            if (settings.sections.productionBreakdown) {
-                sectionsHtml += `
-                <tr><td class="summary-section" style="padding-top: 12px; padding-bottom: 12px;">
-                <h3 style="margin: 0 0 8px; font-size: 12px; color: #666; text-align: center; text-transform: uppercase; letter-spacing: 0.5px;">PRODUCTION SOURCE BREAKDOWN</h3>
-                <div class="summary-grid">
-                    <div class="summary-item">
-                        <div class="count" style="font-size: 18px; color: #7c3aed;">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-                            ${productionBreakdown.inHouse}
-                        </div>
-                        <div class="label" style="font-size: 10px;">IN-HOUSE</div>
-                    </div>
-                    <div class="summary-item">
-                        <div class="count" style="font-size: 18px; color: #2563eb;">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
-                            ${productionBreakdown.client}
-                        </div>
-                        <div class="label" style="font-size: 10px;">CLIENT</div>
-                    </div>
-                    <div class="summary-item">
-                        <div class="count" style="font-size: 18px; color: #d97706;">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
-                            ${productionBreakdown.mixed}
-                        </div>
-                        <div class="label" style="font-size: 10px;">MIXED</div>
-                    </div>
-                    ${productionBreakdown.unset > 0 ? `<div class="summary-item"><div class="count" style="font-size: 18px; color: #9ca3af;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>${productionBreakdown.unset}</div><div class="label" style="font-size: 10px;">NOT SET</div></div>` : ''}
-                </div>
-                </td></tr>`;
-            }
+            // 2. Overdue alert (subtle, only if any >7d late)
+            sectionsHtml += createAlertBanner(processedData.delayedFlights);
 
+            // 3. Delayed
             if (settings.sections.delayed) {
-                sectionsHtml += `<tr><td class="section"><h2>${settings.titles.delayed}</h2>${tables.delayed}</td></tr>`;
+                sectionsHtml += `<tr><td class="section section-accent-red"><h2>${settings.titles.delayed}</h2>${tables.delayed}</td></tr>`;
             }
+            // 4. In-Progress
             if (settings.sections.inProgress) {
-                sectionsHtml += `<tr><td class="section"><h2>${settings.titles.inProgress}</h2>${tables.inProgress}</td></tr>`;
+                sectionsHtml += `<tr><td class="section section-accent-blue"><h2>${settings.titles.inProgress}</h2>${tables.inProgress}</td></tr>`;
             }
+            // 5. Upcoming
             if (settings.sections.upcoming) {
                 sectionsHtml += `<tr><td class="section"><h2>${settings.titles.upcoming}</h2>${tables.upcoming}</td></tr>`;
             }
+            // 6. Installed
             if (settings.sections.installed) {
-                sectionsHtml += `<tr><td class="section"><h2>${settings.titles.installed}</h2>${tables.installed}</td></tr>`;
+                sectionsHtml += `<tr><td class="section section-accent-green"><h2>${settings.titles.installed}</h2>${tables.installed}</td></tr>`;
             }
-            if (settings.sections.recent) {
-                sectionsHtml += `<tr><td class="section"><h2>${settings.titles.recent}</h2>${tables.recentCompleted}</td></tr>`;
-            }
+            // 7. Pipeline Snapshot (compact, near the bottom)
             if (settings.sections.pipeline) {
-                sectionsHtml += `<tr><td class="section"><h2>${settings.titles.pipeline}</h2>${tables.pipeline}</td></tr>`;
+                sectionsHtml += `<tr><td class="section"><h2>${settings.titles.pipeline || 'Pipeline Snapshot'}</h2>${tables.pipeline}</td></tr>`;
             }
+            // 8. Removal
             if (settings.sections.removal) {
-                sectionsHtml += `<tr><td class="section"><h2>${settings.titles.removal}</h2>${tables.removal}</td></tr>`;
+                sectionsHtml += `<tr><td class="section section-accent-amber"><h2>${settings.titles.removal}</h2>${tables.removal}</td></tr>`;
             }
 
             return `
@@ -2310,10 +2285,16 @@
             .section { padding: 14px 20px; border-bottom: 1px solid #e0e0e8; }
             .section:last-of-type { border-bottom: none; }
             .section h2 { margin: 0 0 10px; font-size: 15px; color: #0d47a1; }
-            table.data-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-            .data-table th, .data-table td { padding: 6px 8px; text-align: left; border-bottom: 1px solid #eeeeee; font-size: 12px; vertical-align: top; word-break: break-word; }
+            .section-accent-red { border-left: 3px solid #e8a0a0; }
+            .section-accent-blue { border-left: 3px solid #a0c4e8; }
+            .section-accent-green { border-left: 3px solid #a0d4a0; }
+            .section-accent-amber { border-left: 3px solid #e8d0a0; }
+            table.data-table { width: 100%; border-collapse: collapse; }
+            .data-table th, .data-table td { padding: 6px 8px; text-align: left; border-bottom: 1px solid #eeeeee; font-size: 12px; vertical-align: top; }
             .data-table th { font-weight: 600; color: #555; background-color: #f8f9fa; font-size: 11px; }
             .data-table tr:last-child td { border-bottom: none; }
+            .badge { display: inline-block; padding: 1px 5px; border-radius: 3px; font-size: 9px; font-weight: 500; background: #f0f0f8; color: #6366a0; vertical-align: middle; margin-left: 4px; white-space: nowrap; }
+            .alert-banner { padding: 10px 20px; background: #fef8f8; color: #b45050; font-size: 12px; font-weight: 500; border-bottom: 1px solid #e0e0e8; }
             .footer { padding: 18px 20px; text-align: center; font-size: 12px; background-color: #f0f4f8; }
             .footer a { background-color: #2979ff; color: #ffffff; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block; font-size: 13px; }
             </style></head><body>
@@ -2518,6 +2499,12 @@
         };
         // Export for external components
         window.STAP_getStatusColor = getStatusColor;
+        window.STAP_isMaterialReceived = (stage) => {
+            const stgs = window.STAP_ALL_STAGES || [];
+            const idx = stgs.indexOf('Material Ready For Install');
+            const si = stgs.indexOf(stage);
+            return si >= idx && si !== -1;
+        };
 
         // ═══════════════════════════════════════════════════════════════════
         // TIME-GATED INSTALL STATUS CLASSIFICATION
@@ -4292,6 +4279,15 @@
                             )}
                             {row.productionProof && (
                                 <ProductionIcon type={row.productionProof} size={12} compact />
+                            )}
+                            {row.materialSufficiency && row.materialSufficiency.required > 0 && (
+                                <span title={`Materials: ${row.materialSufficiency.received}/${row.materialSufficiency.required}`}
+                                    className={`ml-0.5 ${
+                                        row.materialSufficiency.isSufficient ? 'text-green-500' :
+                                        row.materialSufficiency.isPartial ? 'text-amber-500' : 'text-gray-300'
+                                    }`}>
+                                    <Icon name="Package" size={12} />
+                                </span>
                             )}
                         </div>
                     </td>}
@@ -7485,7 +7481,7 @@
             const TEMP_OVERRIDE_FIELDS = new Set(['installed', 'stage', 'previousStage']);
             const META_OVERRIDE_FIELDS = new Set([
                 'adjustedQty', 'materialBreakdown', 'photosLink', 'receiverLink',
-                'mediaType', 'removalQty', 'removedCount', 'removalStatus',
+                'mediaType', 'materialReceivedDate', 'removalQty', 'removedCount', 'removalStatus',
                 'removalAssignee', 'removalPhotosLink', 'hasReplacement',
                 'productionProof', 'history', 'notes'
             ]);
@@ -7957,18 +7953,25 @@
                 window.STAP_IDB.checkStorageHealth().then(setStorageHealth);
             }, []);
 
-            // IDB write-through: persist materials to IDB on change
+            // IDB write-through: persist materials to IDB on change (including empty array for deletes)
+            // IMPORTANT: clear-then-putAll so deleted items don't survive in IDB
             React.useEffect(() => {
-                if (materialReceiverData.length > 0 && window.STAP_IDB) {
-                    window.STAP_IDB.putAll('materials', materialReceiverData);
-                }
+                if (!window.STAP_IDB) return;
+                window.STAP_IDB.clear('materials').then(() => {
+                    if (materialReceiverData.length > 0) {
+                        window.STAP_IDB.putAll('materials', materialReceiverData);
+                    }
+                });
             }, [materialReceiverData]);
 
-            // IDB write-through: persist proofs to IDB on change
+            // IDB write-through: persist proofs to IDB on change (clear-then-putAll so deletes persist)
             React.useEffect(() => {
-                if (proofData.length > 0 && window.STAP_IDB) {
-                    window.STAP_IDB.putAll('proofs', proofData);
-                }
+                if (!window.STAP_IDB) return;
+                window.STAP_IDB.clear('proofs').then(() => {
+                    if (proofData.length > 0) {
+                        window.STAP_IDB.putAll('proofs', proofData);
+                    }
+                });
             }, [proofData]);
 
             // Save linked sheet info to localStorage
@@ -8276,12 +8279,13 @@
                 console.log('✅ Override saved for:', campaignKey, '→', newStage);
 
                 // If material data is provided, also store it for Material Receiver sync
-                if (additionalUpdates.materialBreakdown || additionalUpdates.photosLink || additionalUpdates.receiverLink) {
+                if (additionalUpdates.materialBreakdown || additionalUpdates.photosLink || additionalUpdates.receiverLink || additionalUpdates.materialReceivedDate) {
                     const materialData = JSON.parse(localStorage.getItem('stap_material_data') || '{}');
                     materialData[campaignKey] = {
                         materialBreakdown: additionalUpdates.materialBreakdown || [],
                         photosLink: additionalUpdates.photosLink || null,
                         receiverLink: additionalUpdates.receiverLink || null,
+                        materialReceivedDate: additionalUpdates.materialReceivedDate || null,
                         mediaType: additionalUpdates.mediaType || null,
                         totalQty: additionalUpdates.totalQty || null,
                         updatedAt: new Date().toISOString()
@@ -8315,6 +8319,7 @@
                     if (additionalUpdates.photosLink) updated.photosLink = additionalUpdates.photosLink;
                     if (additionalUpdates.receiverLink) updated.receiverLink = additionalUpdates.receiverLink;
                     if (additionalUpdates.materialBreakdown) updated.materialBreakdown = additionalUpdates.materialBreakdown;
+                    if (additionalUpdates.materialReceivedDate !== undefined) updated.materialReceivedDate = additionalUpdates.materialReceivedDate;
                     if (additionalUpdates.productionProof) updated.productionProof = additionalUpdates.productionProof;
                     // Removal tracking (consistent across all views)
                     if (additionalUpdates.removalQty !== undefined) updated.removalQty = additionalUpdates.removalQty;
@@ -9272,6 +9277,18 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
             // ADDED: Helper to format dates for display in the Title
             const formatDateShort = (d) => `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`;
 
+            // Helper: find material receiver entries linked to a campaign
+            const getLinkedMaterials = (item, materialReceiverData) => {
+                if (!materialReceiverData.length) return [];
+                const itemId = (item.id || '').toLowerCase();
+                const itemAdv = (item.advertiser || '').toLowerCase();
+                return materialReceiverData.filter(m => {
+                    const mId = (m.campaignId || m.campaign_id || '').toLowerCase();
+                    const mClient = (m.client || m.advertiser || '').toLowerCase();
+                    return (mId && mId === itemId) || (mClient && itemAdv && mClient.includes(itemAdv));
+                });
+            };
+
             const processedData = useMemo(() => {
                 // Dual-bucket override merge:
                 // - tempOverrides: working edits (installed, stage) — wiped on sync/import
@@ -9647,7 +9664,33 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                             if (metaOvr.removalPhotosLink) item.removalPhotosLink = metaOvr.removalPhotosLink;
                             if (metaOvr.hasReplacement !== undefined) item.hasReplacement = metaOvr.hasReplacement;
                             if (metaOvr.history) item.history = metaOvr.history;
+                            if (metaOvr.materialReceivedDate) item.materialReceivedDate = metaOvr.materialReceivedDate;
+                            if (metaOvr.receiverLink) item.receiverLink = metaOvr.receiverLink;
                         }
+
+                        // Auto-derive materialReceivedDate from linked Material Receiver entries (fallback)
+                        const linked = getLinkedMaterials(item, materialReceiverData);
+                        if (!item.materialReceivedDate && linked.length) {
+                            const dates = linked.map(m => new Date(m.dateReceived || m.transactionDate)).filter(d => !isNaN(d));
+                            if (dates.length) {
+                                const earliest = new Date(Math.min(...dates));
+                                item.materialReceivedDate = `${earliest.getMonth()+1}/${earliest.getDate()}/${earliest.getFullYear()}`;
+                            }
+                        }
+
+                        // Compute material sufficiency
+                        const totalReceived = linked.reduce((acc, m) => acc + (parseInt(m.quantity) || 0), 0);
+                        const requiredQty = item.hasQtyAdjustment ? (item.adjustedQty || 0) : (item.totalQty || item.quantity || 0);
+                        item.materialSufficiency = {
+                            received: totalReceived,
+                            required: requiredQty,
+                            linked: linked.length,
+                            isSufficient: requiredQty > 0 && totalReceived >= requiredQty,
+                            isPartial: totalReceived > 0 && totalReceived < requiredQty,
+                            isNone: totalReceived === 0
+                        };
+                        item.isWaitingOnMaterials = !item.materialSufficiency.isSufficient &&
+                            ALL_STAGES.indexOf(item.stage) < ALL_STAGES.indexOf('Material Ready For Install');
 
                         // ALWAYS recalculate pending from final values (never use stored pending)
                         const finalQty = item.hasQtyAdjustment ? item.adjustedQty : (item.totalQty || item.quantity || 0);
@@ -10115,7 +10158,7 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                 }
 
                 return categories;
-            }, [baseData, tempOverrides, metaOverrides, emailStats, includeGhosts, dataSource]);
+            }, [baseData, tempOverrides, metaOverrides, emailStats, includeGhosts, dataSource, materialReceiverData]);
 
             // Extract unique markets and products for filters
             const filterOptions = useMemo(() => {
@@ -10736,6 +10779,8 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                         proofData={proofData}
                         onOpenCreativeHub={() => setView('creativeHub')}
                         onOpenMaterialReceivers={() => setView('materialReceivers')}
+                        onAddMaterial={(entry) => setMaterialReceiverData(prev => [entry, ...prev])}
+                        onRemoveMaterial={(id) => { setMaterialReceiverData(prev => prev.filter(m => m.id !== id)); if (window.STAP_IDB) window.STAP_IDB.delete('materials', id); }}
                     />
                     {/* Fullscreen Search Overlay (External Component) */}
                     {window.STAPSearchOverlay && (
@@ -11281,7 +11326,7 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                                                     <button 
                                                         onClick={() => generatePipelineInsight(filteredStats.all)}
                                                         disabled={isInsightLoading}
-                                                        className={`text-sm flex items-center gap-2 px-3 py-1.5 rounded-lg font-medium transition-all ${isInsightLoading ? 'bg-gray-100 text-gray-400' : 'bg-gradient-to-r from-purple-100 to-blue-100 text-purple-700 hover:from-purple-200 hover:to-blue-200'}`}
+                                                        className={`text-sm flex items-center gap-2 px-3 py-1.5 rounded-lg font-medium transition-all ${isInsightLoading ? 'bg-gray-100 text-gray-400' : 'bg-gradient-to-r from-purple-100 to-blue-100 text-purple-700 hover:from-purple-200 hover:to-blue-200 dark:from-purple-600 dark:to-blue-600 dark:text-white dark:hover:from-purple-500 dark:hover:to-blue-500 dark:shadow-md dark:shadow-purple-500/25'}`}
                                                     >
                                                         <Icon name="Sparkles" size={16} className={isInsightLoading ? "animate-spin" : ""} />
                                                         {isInsightLoading ? "Analyzing..." : "AI Pipeline Insights"}
