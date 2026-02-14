@@ -57,7 +57,7 @@ LA STAP Operations Portal - A single-page React application for managing out-of-
 - Dashboard views (Upload, Dashboard, POP Gallery, Availability Charting, etc.)
 - Sidebar navigation with draggable gear-based menu system
 
-**State Management**: Uses React hooks (`useState`, `useEffect`, `useMemo`, `useRef`) for local component state. Data persists via `localStorage`.
+**State Management**: Uses React hooks (`useState`, `useEffect`, `useMemo`, `useRef`) for local component state. Data persists via IndexedDB (primary) with localStorage fallback. See **Data Storage Architecture** section below.
 
 **External APIs**:
 - Groq API (Llama 3.3 70B) for AI analysis features (see `GROQ_AI_CONFIG.md`)
@@ -95,9 +95,49 @@ npx serve .
 
 ### Data Flow
 - CSV uploads parsed client-side via `parseCSV()` function
-- Data stored in component state and `localStorage`
 - Google Sheets integration uses published CSV export URLs
 - Live sync is the primary data source (daily), manual CSV is fallback
+
+### Data Storage Architecture (CRITICAL)
+
+The app has **four distinct persistence layers**. Bugs arise when they desync.
+
+| Layer | Storage | Contents | Cleared by sync? | Cleared by reset? |
+|-------|---------|----------|-------------------|-------------------|
+| **IndexedDB** (`idb.js`) | `stap_ops_hub` DB | Materials (`materials` store), Proofs (`proofs` store) | NO | YES |
+| **Temp Overrides** | `stap_temp_overrides` (localStorage) | `installed`, `stage`, `previousStage` | **YES** | YES |
+| **Meta Overrides** | `stap_meta_overrides` (localStorage) | `adjustedQty`, `materialBreakdown`, removal tracking, `productionProof`, `history`, etc. | **NO** | YES |
+| **Material Data** | `stap_material_data` (localStorage) | Comms Center email fields (breakdown, photosLink, receiverLink, mediaType) | NO | YES |
+
+**IDB Write-Through Pattern:**
+```javascript
+// CORRECT: clear-then-putAll (deletions persist)
+STAP_IDB.clear('materials').then(() => {
+    if (data.length > 0) STAP_IDB.putAll('materials', data);
+});
+
+// WRONG: putAll alone (deleted items survive in IDB)
+STAP_IDB.putAll('materials', data); // ← zombie entries!
+```
+
+**CRITICAL RULES:**
+1. **IDB `putAll` only upserts** — it never removes items missing from the new array. Always `clear()` then `putAll()`, or use `IDB.delete(store, id)` for single-item deletes.
+2. **Material Receiver hub merges two sources** — `materialsArray` (IDB) + `savedMaterialEntries` (from `stap_material_data`). Delete must handle both. Entries tagged `fromDetailModal: true` live in localStorage, others in IDB.
+3. **Dirty-check init must match comparison source** — All dirty-checked fields in `detailModal.js` MUST initialize from `item.*` (metaOverrides), never from `stap_material_data`. The dirty check compares against `item.*`.
+4. **Use `!= null` not `||` for numeric fields** — `0 || fallback` skips zero. `item.removalQty != null ? item.removalQty : fallback` preserves it.
+5. **Every delete path must nuke from the correct store** — React state update + `IDB.delete()` for IDB entries, or `localStorage` manipulation + `setDeletedSavedIds()` for savedMaterial entries.
+
+**Detail Modal (4 boxes):**
+- **SCHEDULE** — Booked qty, charted qty, dates (editable)
+- **INSTALL PROGRESS** — Installed/pending counts, progress bar (editable)
+- **REMOVAL** — Removal tracking with status/assignee (editable)
+- **MATERIALS** — Read-only summary pill (count, progress bar, sufficiency badge, date). All intake happens in Comms Center below.
+
+**Comms Center (single intake point for materials):**
+- Upload Receiver PDFs → creates entries in `materialReceiverData` (IDB)
+- Inventory Breakdown → manual design code/qty/scheduled rows (saved to metaOverrides)
+- Linked Materials table → shows receivers from IDB, delete X removes from IDB
+- Email drafter → generates templates from all the above data
 
 ### Date Handling
 The `parseDate()` function handles multiple formats:
@@ -110,10 +150,11 @@ Campaigns flow through stages defined in `ALL_STAGES` array:
 `RFP` -> `Initial Proposal` -> `Contracted` -> `Proofs Approved` -> `Material Ready For Install` -> `Installed` -> `POP Completed` -> `Takedown Complete`
 
 ### Detail Modal (`detailModal.js`)
-Unified campaign detail view with 3-column layout:
+Unified campaign detail view with **4-column layout**:
 - **SCHEDULE** - Booked qty, charted qty (manual override), start/end dates
 - **INSTALL PROGRESS** - Installed count, pending count, progress bar
 - **REMOVAL** - Removal tracking with qty, done count, status, assignee
+- **MATERIALS** - Read-only summary pill (receipt count, progress bar, sufficiency badge, received date)
 
 **Key Features:**
 - Waterfall data flow: Charted qty -> Install Progress -> Removal
@@ -122,12 +163,16 @@ Unified campaign detail view with 3-column layout:
 - Save button only appears when there are unsaved changes
 - Unsaved changes warning on close
 - **Dirty-field saving**: Only saves fields that were actually changed (prevents phantom overrides)
+- **Material sufficiency**: Computed live from `linkedMaterials` prop (not stale `item` snapshot)
+- **Comms Center**: Single intake point — PDF upload, inventory breakdown, email drafter, linked materials table with inline delete
 
 **Data Keys:**
 - `adjustedQty` - Manual charted quantity override
 - `installed` / `totalInstalled` - Installed count
 - `pending` - Pending count (always calculated as `max(0, qty - installed)`)
 - `removalQty`, `removedCount`, `removalStatus`, `removalAssignee` - Removal tracking
+- `materialReceivedDate` - Auto-derived from linked receivers, or manual
+- `materialBreakdown` - Array of `{ code, qty, scheduled, scheduledLocked, link }` rows
 - `history` - Array of `{ timestamp, changes[] }` entries
 
 ### Pending Calculation & Override Architecture

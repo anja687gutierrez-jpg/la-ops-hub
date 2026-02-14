@@ -88,12 +88,35 @@
                 try {
                     const parsed = await window.STAP_parseMaterialPdf(file);
                     parsed.campaignId = campaignId;
+                    parsed.matchedCampaign = item?.advertiser
+                        ? `${item.advertiser}${item.name ? ' – ' + item.name : ''}`
+                        : campaignId;
                     parsed.client = parsed.client || item?.advertiser || '';
                     parsed.advertiser = parsed.advertiser || item?.advertiser || '';
                     if (onAddMaterial) onAddMaterial(parsed);
                     if (parsed.dateReceived) lastDate = parsed.dateReceived;
                     runningTotal += parseInt(parsed.quantity) || 0;
                     addedCount++;
+
+                    // Auto-fill breakdown row from parsed PDF data
+                    const code = parsed.posterCode || parsed.description || '';
+                    const qty = String(parsed.quantity || '');
+
+                    if (code || qty) {
+                        setMaterialBreakdown(prev => {
+                            // Don't duplicate if code already exists
+                            const exists = prev.some(r => r.code && r.code.toLowerCase() === code.toLowerCase());
+                            if (exists) return prev;
+                            // Replace first empty row, or append
+                            const firstEmptyIdx = prev.findIndex(r => !r.code && !r.qty);
+                            if (firstEmptyIdx >= 0) {
+                                const updated = [...prev];
+                                updated[firstEmptyIdx] = { code, qty, scheduled: '', scheduledLocked: false, link: parsed.pdfSource || '' };
+                                return updated;
+                            }
+                            return [...prev, { code, qty, scheduled: '', scheduledLocked: false, link: parsed.pdfSource || '' }];
+                        });
+                    }
                 } catch (err) {
                     console.error('PDF parse error:', err);
                     setPdfFeedback(`Error on file ${addedCount + 1}: ${err.message}`);
@@ -298,9 +321,9 @@
                 // Dirty-checked fields — MUST initialize from item.* to match hasUnsavedChanges
                 setMaterialReceivedDate(item.materialReceivedDate || '');
 
-                // Material breakdown — init from item (metaOverrides) to match dirty check
+                // Material breakdown — MUST init from item (metaOverrides) to match dirty check
+                // Never fall back to stap_material_data — that causes dirty-check mismatch (save button on open)
                 if (item.materialBreakdown && item.materialBreakdown.length > 0) {
-                    // Load exactly what's on item — no auto-distribute on open (preserves dirty-check parity)
                     setMaterialBreakdown(item.materialBreakdown.map(row => ({
                         code: row.code || '',
                         qty: row.qty || '',
@@ -308,18 +331,6 @@
                         scheduledLocked: row.scheduledLocked || false,
                         link: row.link || ''
                     })));
-                } else if (savedData?.materialBreakdown && savedData.materialBreakdown.length > 0) {
-                    // Fallback: legacy data in stap_material_data but not yet in metaOverrides
-                    const loadedQty = savedData.totalQty || item.quantity || item.totalQty || '0';
-                    const migrated = savedData.materialBreakdown.map(row => ({
-                        code: row.code || '',
-                        qty: row.qty || '',
-                        scheduled: row.scheduled !== undefined ? row.scheduled : '',
-                        scheduledLocked: row.scheduledLocked || false,
-                        link: row.link || ''
-                    }));
-                    const hasScheduled = migrated.some(r => r.scheduled !== '' && r.scheduled !== undefined);
-                    setMaterialBreakdown(hasScheduled ? migrated : autoDistributeScheduled(migrated, loadedQty));
                 } else {
                     setMaterialBreakdown([{ code: '', qty: '', scheduled: '', scheduledLocked: false, link: '' }]);
                 }
@@ -410,8 +421,17 @@
             const effectiveQty = item.totalInstalled || item.quantity || item.totalQty || 0;
             const itemRemovalQty = item.removalQty != null ? item.removalQty : effectiveQty;
             if (removalQty !== itemRemovalQty) return true;
-            if (removedCount !== (item.removedCount || 0)) return true;
-            if (removalStatus !== (item.removalStatus || 'scheduled')) return true;
+            const itemRemovedCount = item.removedCount || 0;
+            if (removedCount !== itemRemovedCount) return true;
+            // Account for auto-status effect: when removedCount > 0, the useEffect
+            // overrides removalStatus to 'in_progress' or 'removed', so compare
+            // against what the effect would produce, not the raw stored value
+            const expectedRemovalStatus = (() => {
+                if (itemRemovedCount === 0) return item.removalStatus || 'scheduled';
+                if (itemRemovalQty > 0 && itemRemovedCount >= itemRemovalQty) return 'removed';
+                return 'in_progress';
+            })();
+            if (removalStatus !== expectedRemovalStatus) return true;
             if (removalAssignee !== (item.removalAssignee || '')) return true;
             if (removalPhotosLink !== (item.removalPhotosLink || '')) return true;
             if (hasReplacement !== (item.hasReplacement || false)) return true;
@@ -590,7 +610,6 @@
         };
 
         const generateMaterialReceivedTemplate = () => {
-            // Bug 3 fix: Only include rows that have actual data (code or qty)
             const validRows = materialBreakdown.filter(row => row.code || row.qty);
             const totalScheduled = validRows.reduce((acc, r) => acc + (parseFloat(r.scheduled) || 0), 0);
             const breakdownRows = validRows.map(row => {
@@ -600,27 +619,9 @@
                 return `<tr><td style='padding:6px 10px; border-bottom:1px solid #eee;'>${codeDisplay}</td><td style='padding:6px 10px; border-bottom:1px solid #eee; text-align:right;'>${row.qty || 0}</td><td style='padding:6px 10px; border-bottom:1px solid #eee; text-align:right;'>${row.scheduled || 0}</td></tr>`;
             }).join('');
 
-            // Build received-materials table from linked Material Receivers
             const receiverTotal = linkedMaterials.reduce((acc, m) => acc + (parseInt(m.quantity) || 0), 0);
-            const receiverRows = linkedMaterials.map(m => {
-                const d = m.dateReceived || m.date_received || m.transactionDate || '';
-                const fmtD = d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
-                const code = m.posterCode || m.designCode || m.description || '—';
-                const qty = m.quantity || 0;
-                const pdfLink = m.pdfSource
-                    ? `<a href="${m.pdfSource}" style="color:#6f42c1; text-decoration:underline; font-size:11px;" target="_blank">PDF</a>`
-                    : '';
-                return `<tr>
-                    <td style='padding:5px 10px; border-bottom:1px solid #eee; font-size:12px;'>${fmtD}</td>
-                    <td style='padding:5px 10px; border-bottom:1px solid #eee; font-size:12px;'>${code}</td>
-                    <td style='padding:5px 10px; border-bottom:1px solid #eee; text-align:right; font-size:12px;'>${qty}</td>
-                    <td style='padding:5px 10px; border-bottom:1px solid #eee; text-align:center; font-size:12px;'>${pdfLink}</td>
-                </tr>`;
-            }).join('');
-
             const { isSufficient, currentTotal } = getInventoryStatus();
             const required = parseFloat(customQty) || 0;
-            // Use the higher of manual inventory total vs linked receiver total for status
             const effectiveReceived = Math.max(currentTotal, receiverTotal);
             const overage = effectiveReceived - required;
 
@@ -649,24 +650,12 @@
                 </p>
             ` : '';
 
-            // Received Materials table (from linked receivers)
-            const receiverTable = linkedMaterials.length > 0 ? `
-                <p style='margin:15px 0 8px; font-weight:bold; font-size:13px; color:#333;'>📋 Received Materials</p>
-                <table style='width:100%; font-size:12px; border-collapse:collapse; margin:0 0 15px; background:#f0faf0;'>
-                    <tr style='background:#2d7d46; color:white;'>
-                        <th style='padding:7px 10px; text-align:left;'>Date Rcvd</th>
-                        <th style='padding:7px 10px; text-align:left;'>Design / Code</th>
-                        <th style='padding:7px 10px; text-align:right;'>Qty</th>
-                        <th style='padding:7px 10px; text-align:center;'>Recv PDF</th>
-                    </tr>
-                    ${receiverRows}
-                    <tr style='background:#e6f4ea; font-weight:bold;'>
-                        <td style='padding:7px 10px; border-top:2px solid #2d7d46;' colspan='2'>TOTAL RECEIVED</td>
-                        <td style='padding:7px 10px; border-top:2px solid #2d7d46; text-align:right;'>${receiverTotal}</td>
-                        <td style='padding:7px 10px; border-top:2px solid #2d7d46;'></td>
-                    </tr>
-                </table>
-            ` : '';
+            // Derive printer and date received from linked receivers
+            const printers = [...new Set(linkedMaterials.map(m => m.printer || m.client || '').filter(Boolean))];
+            const printerDisplay = printers.length > 0 ? printers.join(', ') : null;
+            const dateReceivedDisplay = materialReceivedDate
+                ? new Date(materialReceivedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                : null;
 
             return `<div style='font-family:Arial,sans-serif; max-width:560px; color:#333;'>
                 <div style='background:#6f42c1; padding:12px 15px; color:white;'><strong style='font-size:16px;'>📦 Materials Received</strong></div>
@@ -678,7 +667,6 @@
                         <span style="font-size:12px; color:#666;">Received: ${effectiveReceived} / Required: ${customQty || '0'}</span>
                     </p>
                     ${noOverageNote}
-                    ${receiverTable}
                     ${validRows.length > 0 ? `<p style='margin:15px 0 8px; font-weight:bold; font-size:13px; color:#333;'>📐 Inventory Breakdown</p>
                     <table style='width:100%; font-size:12px; border-collapse:collapse; margin:0 0 15px; background:#faf8ff;'>
                         <tr style='background:#6f42c1; color:white;'><th style='padding:8px 10px; text-align:left;'>Design Code</th><th style='padding:8px 10px; text-align:right;'>Received</th><th style='padding:8px 10px; text-align:right;'>Scheduled</th></tr>
@@ -692,6 +680,8 @@
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Media Type</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'><strong>${formatMediaType(customDesigns)}</strong></td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Market</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${formatMarketName(item.market)}</td></tr>
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Product Dates</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.date || 'N/A'} — ${item.endDate || 'TBD'}</td></tr>
+                        ${printerDisplay ? `<tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Printer</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${printerDisplay}</td></tr>` : ''}
+                        ${dateReceivedDisplay ? `<tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Date Received</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${dateReceivedDisplay}</td></tr>` : ''}
                         <tr><td style='padding:8px 10px; color:#666;'>Sales Owner</td><td style='padding:8px 10px;'>${item.owner || 'N/A'}</td></tr>
                     </table>
                     <div style='margin:15px 0 0; display:flex; gap:10px;'>

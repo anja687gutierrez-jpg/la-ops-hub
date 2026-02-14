@@ -2843,8 +2843,20 @@ function doGet(e) {
         if (!client) { const cm = fullText.match(/(?:CLIENT|CUSTOMER|ADVERTISER|BILL TO)[:\s]*([A-Za-z][A-Za-z\s&]+)/i); client = cm ? cm[1].trim().substring(0, 30) : 'Unknown Client'; }
 
         let quantity = 1;
-        const qm = fullText.match(/(?:TOTAL\s*(?:QUANTITY|QTY)?|QTY|QUANTITY)[:\s]*(\d+)/i);
-        if (qm) quantity = parseInt(qm[1]) || 1;
+        // Try multiple quantity patterns — most specific first
+        // Note: quantities can be decimal (e.g. "48.0") — match \d+\.?\d* then parseInt
+        const qtyPatterns = [
+            /Total\s*Received[:\s]*(\d+\.?\d*)/i,
+            /(?:TOTAL\s*(?:QUANTITY|QTY|UNITS|FACES|SHEETS|POSTERS)?)[:\s]*(\d+\.?\d*)/i,
+            /\bQty\b[^]*?(\d{2,}\.?\d*)/i,
+            /(?:QTY|QUANTITY|UNITS|FACES|SHEETS|POSTERS)[:\s]*(\d+\.?\d*)/i,
+            /(\d+\.?\d*)\s*(?:POSTERS|FACES|SHEETS|UNITS|PCS|PIECES|PANELS)\b/i,
+            /(?:SHIP|DELIVER|SEND|TOTAL)[:\s]*(\d{2,}\.?\d*)/i,
+        ];
+        for (const pat of qtyPatterns) {
+            const qm = fullText.match(pat);
+            if (qm && parseInt(qm[1]) > 1) { quantity = parseInt(qm[1]); break; }
+        }
 
         let description = 'Material Receipt';
         const dm = fullText.match(/(?:DESCRIPTION|ITEM|PRODUCT|MATERIAL)[:\s]*([^\n]{5,50})/i);
