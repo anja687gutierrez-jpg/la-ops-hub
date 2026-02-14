@@ -82,19 +82,33 @@
                 
                 if (linkedCampaign) {
                     const stage = (linkedCampaign['Install Stage'] || '').toLowerCase();
-                    
+                    let updatedMaterial = { ...material };
+
+                    // Sync deployedQty from campaign's actual install count
+                    const installed = parseInt(linkedCampaign.installed || linkedCampaign['Installed'] || 0);
+                    const totalQty = parseInt(linkedCampaign['Qty'] || linkedCampaign.qty || 0);
+                    if (totalQty > 0 && installed > 0) {
+                        const share = Math.round((material.quantity / totalQty) * installed);
+                        updatedMaterial.deployedQty = Math.min(share, material.quantity);
+                        hasChanges = true;
+                    }
+
                     // Auto-update to Installed if campaign is installed
                     if (stage.includes('installed') || stage.includes('photos taken') || stage.includes('pop complete')) {
                         hasChanges = true;
                         console.log(`📦 Auto-updating material ${material.receiptNumber} to Installed (campaign ${material.campaignId} is ${stage})`);
-                        return { ...material, status: 'Installed' };
+                        updatedMaterial.status = 'Installed';
+                        return updatedMaterial;
                     }
-                    
+
                     // Auto-update to Fully Deployed if campaign is material ready
                     if (stage.includes('material ready') && material.status !== 'Fully Deployed' && material.status !== 'Installed') {
                         hasChanges = true;
-                        return { ...material, status: 'Fully Deployed' };
+                        updatedMaterial.status = 'Fully Deployed';
+                        return updatedMaterial;
                     }
+
+                    return updatedMaterial;
                 }
                 
                 return material;
@@ -396,7 +410,8 @@
             
             // Extract description - keep it short
             let description = 'Material Receipt';
-            const descMatch = text.match(/(?:DESCRIPTION|ITEM|PRODUCT|MATERIAL)[:\s]*([^\n]{5,50})/i);
+            const descMatch = text.match(/(?:DESCRIPTION)[:\s]*([^:]{5,50}?)(?=\s*(?:Client|Printer|Comments|Receipt|Invoice|Poster|Code|Date|Qty|Total))/i)
+                || text.match(/(?:DESCRIPTION)[:\s]*([^:]{5,40})/i);
             if (descMatch) {
                 description = descMatch[1].trim();
             } else {
@@ -431,7 +446,8 @@
 
             // Extract comments from PDF
             let pdfComments = '';
-            const commMatch = text.match(/(?:COMMENTS|NOTES|REMARKS)[:\s]*([^\n]{3,120})/i);
+            const commMatch = text.match(/(?:COMMENTS|NOTES|REMARKS)[:\s]*(.+?)(?=\s*(?:Receipt|Invoice|Poster|Transaction|Total|Summary|Client|Printer|Date|Qty|\b[A-Z][a-z]+:))/i)
+                || text.match(/(?:COMMENTS|NOTES|REMARKS)[:\s]*([^]{3,80})/i);
             if (commMatch) pdfComments = commMatch[1].trim();
 
             return {
@@ -1566,6 +1582,8 @@ function doGet(e) {
                         m.printer?.toLowerCase().includes(search) ||
                         m.status?.toLowerCase().includes(search) ||
                         m.comments?.toLowerCase().includes(search) ||
+                        m.campaignId?.toLowerCase().includes(search) ||
+                        m.matchedCampaign?.toLowerCase().includes(search) ||
                         m.pdfSource?.toLowerCase().includes(search) ||
                         (typeof m.dateReceived === 'string' && m.dateReceived.toLowerCase().includes(search)) ||
                         String(m.quantity).includes(search)
@@ -1778,6 +1796,17 @@ function doGet(e) {
                                         )}
                                     </div>
                                     
+                                    {/* Campaign ID */}
+                                    {receipt.campaignId && receipt.campaignId !== '__PENDING__' && (
+                                        <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+                                            <div className="text-[10px] text-blue-500 font-medium">CAMPAIGN ID</div>
+                                            <div className="text-sm font-mono font-bold text-blue-700">{receipt.campaignId}</div>
+                                            {receipt.matchedCampaign && (
+                                                <div className="text-xs text-blue-600 mt-0.5">{receipt.matchedCampaign}</div>
+                                            )}
+                                        </div>
+                                    )}
+
                                     {/* Info Grid */}
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="bg-gray-50 rounded-lg p-3">
@@ -2249,6 +2278,11 @@ function doGet(e) {
                                             <span className="text-[10px] text-gray-400 font-mono">{material.receiptNumber}</span>
                                             <span className="text-[10px] text-gray-400">{typeof material.dateReceived === 'string' ? material.dateReceived : (material.dateReceived?.toLocaleDateString?.() || '')}</span>
                                         </div>
+                                        {material.campaignId && material.campaignId !== '__PENDING__' && (
+                                            <div className="text-[10px] font-mono text-blue-600 truncate mt-0.5">
+                                                📋 {material.campaignId}
+                                            </div>
+                                        )}
                                         {/* Deployment progress */}
                                         {material.deployedQty !== undefined && (
                                             <div className="mt-2">
@@ -2891,7 +2925,8 @@ function doGet(e) {
         }
 
         let description = 'Material Receipt';
-        const dm = fullText.match(/(?:DESCRIPTION|ITEM|PRODUCT|MATERIAL)[:\s]*([^\n]{5,50})/i);
+        const dm = fullText.match(/(?:DESCRIPTION)[:\s]*([^:]{5,50}?)(?=\s*(?:Client|Printer|Comments|Receipt|Invoice|Poster|Code|Date|Qty|Total))/i)
+            || fullText.match(/(?:DESCRIPTION)[:\s]*([^:]{5,40})/i);
         if (dm) description = dm[1].trim();
 
         let printer = '';
@@ -2908,7 +2943,8 @@ function doGet(e) {
         if (cm) posterCode = cm[1].trim();
 
         let pdfComments = '';
-        const commMatch = fullText.match(/(?:COMMENTS|NOTES|REMARKS)[:\s]*([^\n]{3,120})/i);
+        const commMatch = fullText.match(/(?:COMMENTS|NOTES|REMARKS)[:\s]*(.+?)(?=\s*(?:Receipt|Invoice|Poster|Transaction|Total|Summary|Client|Printer|Date|Qty|\b[A-Z][a-z]+:))/i)
+            || fullText.match(/(?:COMMENTS|NOTES|REMARKS)[:\s]*([^]{3,80})/i);
         if (commMatch) pdfComments = commMatch[1].trim();
 
         return {
