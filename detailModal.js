@@ -104,10 +104,7 @@
 
                     if (code || qty) {
                         setMaterialBreakdown(prev => {
-                            // Don't duplicate if code already exists
-                            const exists = prev.some(r => r.code && r.code.toLowerCase() === code.toLowerCase());
-                            if (exists) return prev;
-                            // Replace first empty row, or append
+                            // Each receiver gets its own row (multiple shipments of same design)
                             const firstEmptyIdx = prev.findIndex(r => !r.code && !r.qty);
                             if (firstEmptyIdx >= 0) {
                                 const updated = [...prev];
@@ -650,12 +647,18 @@
                 </p>
             ` : '';
 
-            // Derive printer and date received from linked receivers
+            // Derive printer, dates, and invoice numbers from linked receivers
             const printers = [...new Set(linkedMaterials.map(m => m.printer || m.client || '').filter(Boolean))];
             const printerDisplay = printers.length > 0 ? printers.join(', ') : null;
-            const dateReceivedDisplay = materialReceivedDate
-                ? new Date(materialReceivedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+            const receivedDates = [...new Set(linkedMaterials.map(m => {
+                const d = m.dateReceived || m.date_received || m.transactionDate || '';
+                return d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+            }).filter(Boolean))];
+            const dateReceivedDisplay = receivedDates.length > 0 ? receivedDates.join(', ')
+                : materialReceivedDate ? new Date(materialReceivedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
                 : null;
+            const invoiceNums = [...new Set(linkedMaterials.map(m => m.receiptNumber || '').filter(Boolean))];
+            const invoiceDisplay = invoiceNums.length > 0 ? invoiceNums.join(', ') : null;
 
             return `<div style='font-family:Arial,sans-serif; max-width:560px; color:#333;'>
                 <div style='background:#6f42c1; padding:12px 15px; color:white;'><strong style='font-size:16px;'>📦 Materials Received</strong></div>
@@ -682,6 +685,7 @@
                         <tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Product Dates</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${item.date || 'N/A'} — ${item.endDate || 'TBD'}</td></tr>
                         ${printerDisplay ? `<tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Printer</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${printerDisplay}</td></tr>` : ''}
                         ${dateReceivedDisplay ? `<tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Date Received</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${dateReceivedDisplay}</td></tr>` : ''}
+                        ${invoiceDisplay ? `<tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Invoice #</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${invoiceDisplay}</td></tr>` : ''}
                         <tr><td style='padding:8px 10px; color:#666;'>Sales Owner</td><td style='padding:8px 10px;'>${item.owner || 'N/A'}</td></tr>
                     </table>
                     <div style='margin:15px 0 0; display:flex; gap:10px;'>
@@ -1338,7 +1342,9 @@
                                 const matIsSufficient = matReqQty > 0 && matReceived >= matReqQty;
                                 const matIsPartial = matReceived > 0 && matReceived < matReqQty;
                                 const pct = matReqQty > 0 ? Math.min(100, Math.round((matReceived / matReqQty) * 100)) : 0;
-                                const displayDate = materialReceivedDate || autoMaterialDate || item.materialReceivedDate || '';
+                                const overage = matReceived - matReqQty;
+                                const printers = [...new Set(linkedMaterials.map(m => m.printer || m.client || '').filter(Boolean))];
+                                const invoices = [...new Set(linkedMaterials.map(m => m.receiptNumber || '').filter(Boolean))];
                                 return (
                             <div className="bg-gray-50 dark:bg-slate-900 p-4 rounded border dark:border-slate-600">
                                 <div className="flex items-center justify-between mb-2">
@@ -1353,41 +1359,69 @@
                                 </div>
 
                                 {linkedMaterials.length > 0 ? (
-                                    <div className="space-y-2">
-                                        {/* Progress bar */}
+                                    <div className="space-y-1.5">
+                                        {/* Progress bar with percentage */}
                                         <div>
-                                            <div className="flex justify-between items-center mb-1">
-                                                <span className="text-[10px] text-gray-500">{linkedMaterials.length} receipt{linkedMaterials.length !== 1 ? 's' : ''}</span>
-                                                <span className={`text-[10px] font-bold ${matIsSufficient ? 'text-green-600' : 'text-amber-600'}`}>{pct}%</span>
-                                            </div>
-                                            <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-1.5">
+                                            <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-1.5 mb-1">
                                                 <div className={`h-1.5 rounded-full transition-all ${matIsSufficient ? 'bg-green-500' : matReceived > 0 ? 'bg-amber-500' : 'bg-gray-300'}`}
                                                     style={{ width: `${pct}%` }} />
                                             </div>
                                         </div>
 
-                                        {/* Sufficiency badge */}
+                                        {/* Status + overage */}
                                         {matReqQty > 0 && (() => {
-                                            const color = matIsSufficient ? 'text-green-600 dark:text-green-400' : matIsPartial ? 'text-amber-600 dark:text-amber-400' : 'text-red-500 dark:text-red-400';
-                                            const bg = matIsSufficient ? 'bg-green-50 dark:bg-green-500/10' : matIsPartial ? 'bg-amber-50 dark:bg-amber-500/10' : 'bg-red-50 dark:bg-red-500/10';
-                                            const icon = matIsSufficient ? '✓' : matIsPartial ? '◐' : '○';
+                                            const color = matIsSufficient ? 'text-green-700 dark:text-green-400' : matIsPartial ? 'text-amber-700 dark:text-amber-400' : 'text-red-600 dark:text-red-400';
+                                            const bg = matIsSufficient ? 'bg-green-50 dark:bg-green-500/10 border-green-200 dark:border-green-500/20' : matIsPartial ? 'bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/20' : 'bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/20';
+                                            const label = matIsSufficient ? 'Complete' : matIsPartial ? `Short ${matReqQty - matReceived}` : 'Waiting';
+                                            const icon = matIsSufficient ? '✓' : matIsPartial ? '⚠' : '○';
                                             return (
-                                                <div className={`px-2 py-1 rounded ${bg} flex items-center justify-between`}>
-                                                    <span className="text-[10px] text-gray-500">Status:</span>
+                                                <div className={`px-2 py-1 rounded border ${bg} flex items-center justify-between`}>
                                                     <span className={`text-[10px] font-bold ${color}`}>
-                                                        {icon} {matIsSufficient ? 'Complete' : matIsPartial ? 'Partial' : 'Waiting'}
+                                                        {icon} {label}
                                                     </span>
+                                                    {matIsSufficient && overage > 0 && (
+                                                        <span className="text-[9px] text-green-600 dark:text-green-400">+{overage} overage</span>
+                                                    )}
+                                                    {!matIsSufficient && (
+                                                        <span className="text-[10px] font-bold text-gray-500">{pct}%</span>
+                                                    )}
                                                 </div>
                                             );
                                         })()}
 
-                                        {/* Received date (read-only) */}
-                                        {displayDate && (
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-[10px] text-gray-500">Received:</span>
-                                                <span className="text-[10px] font-mono text-gray-700 dark:text-gray-300">{displayDate}</span>
-                                            </div>
-                                        )}
+                                        {/* Receiver line items */}
+                                        <div className="space-y-0.5 pt-0.5">
+                                            {linkedMaterials.map((m, i) => {
+                                                const d = m.dateReceived || m.date_received || m.transactionDate || '';
+                                                const fmtD = d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+                                                const code = m.posterCode || m.designCode || m.description || '';
+                                                const qty = parseInt(m.quantity) || 0;
+                                                return (
+                                                    <div key={i} className="flex items-center gap-1 text-[9px] text-gray-600 dark:text-gray-400">
+                                                        <span className="text-gray-400 dark:text-gray-600 w-[14px] text-right">{qty}</span>
+                                                        <span className="text-gray-300 dark:text-gray-600">×</span>
+                                                        <span className="font-medium text-gray-700 dark:text-gray-300 truncate flex-1">{code || 'Material'}</span>
+                                                        {fmtD && <span className="text-gray-400 dark:text-gray-500 whitespace-nowrap">{fmtD}</span>}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+
+                                        {/* Printer & Invoice details */}
+                                        <div className="pt-1 border-t border-gray-200 dark:border-slate-700 space-y-0.5">
+                                            {printers.length > 0 && (
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-[9px] text-gray-400">Printer:</span>
+                                                    <span className="text-[9px] font-medium text-gray-600 dark:text-gray-300 truncate ml-1">{printers.join(', ')}</span>
+                                                </div>
+                                            )}
+                                            {invoices.length > 0 && (
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-[9px] text-gray-400">Invoice:</span>
+                                                    <span className="text-[9px] font-mono text-gray-600 dark:text-gray-300 truncate ml-1">{invoices.join(', ')}</span>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 ) : (
                                     <div className="text-center py-4">
@@ -1695,7 +1729,7 @@
                                                     const d = m.dateReceived || m.date_received || m.transactionDate || '';
                                                     const fmtD = d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
                                                     const code = m.posterCode || m.designCode || m.description || '—';
-                                                    const src = m.client || m.printer || '—';
+                                                    const src = m.printer || m.client || '—';
                                                     return (
                                                         <tr key={m.id || i} className="border-t border-green-100 dark:border-green-500/10 group/row">
                                                             <td className="px-3 py-1 font-mono text-gray-600 dark:text-gray-400">{fmtD}</td>

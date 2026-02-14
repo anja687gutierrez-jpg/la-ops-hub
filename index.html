@@ -7486,6 +7486,30 @@
                 'productionProof', 'history', 'notes'
             ]);
 
+            // Helper: apply all meta override fields onto an item object
+            const applyMetaOverrides = (item, metaOvr) => {
+                if (!metaOvr) return;
+                if (metaOvr.adjustedQty !== undefined && metaOvr.adjustedQty !== null) {
+                    item.adjustedQty = metaOvr.adjustedQty;
+                    item.hasQtyAdjustment = true;
+                    item.isOverridden = true;
+                }
+                if (metaOvr.productionProof) { item.productionProof = metaOvr.productionProof; item.isOverridden = true; }
+                if (metaOvr.notes) item.overrideNotes = metaOvr.notes;
+                if (metaOvr.removalQty !== undefined) item.removalQty = metaOvr.removalQty;
+                if (metaOvr.removedCount !== undefined) item.removedCount = metaOvr.removedCount;
+                if (metaOvr.removalStatus) item.removalStatus = metaOvr.removalStatus;
+                if (metaOvr.removalAssignee) item.removalAssignee = metaOvr.removalAssignee;
+                if (metaOvr.removalPhotosLink) item.removalPhotosLink = metaOvr.removalPhotosLink;
+                if (metaOvr.hasReplacement !== undefined) item.hasReplacement = metaOvr.hasReplacement;
+                if (metaOvr.history) item.history = metaOvr.history;
+                if (metaOvr.materialReceivedDate) item.materialReceivedDate = metaOvr.materialReceivedDate;
+                if (metaOvr.materialBreakdown) item.materialBreakdown = metaOvr.materialBreakdown;
+                if (metaOvr.receiverLink) item.receiverLink = metaOvr.receiverLink;
+                if (metaOvr.photosLink) item.photosLink = metaOvr.photosLink;
+                if (metaOvr.mediaType) item.mediaType = metaOvr.mediaType;
+            };
+
             // One-time migration: Split legacy stap_manual_overrides into temp + meta buckets
             useEffect(() => {
                 try {
@@ -9410,12 +9434,8 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                         const tempOvr = tempOverrides[uniqueKey];
                         const metaOvr = metaOverrides[uniqueKey];
 
-                        // META: adjustedQty (charted qty is workflow data, 0 = ghost booking clearance)
-                        if (metaOvr?.adjustedQty !== undefined && metaOvr.adjustedQty !== null) {
-                            newItem.adjustedQty = metaOvr.adjustedQty;
-                            newItem.hasQtyAdjustment = true;
-                            newItem.isOverridden = true;
-                        }
+                        // META: all meta override fields
+                        applyMetaOverrides(newItem, metaOvr);
 
                         // TEMP: stage and installed (working edits between syncs)
                         if (tempOvr) {
@@ -9435,12 +9455,6 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                                 newItem.installed = tempOvr.installed;
                                 newItem.isOverridden = true;
                             }
-                        }
-
-                        // META: productionProof
-                        if (metaOvr?.productionProof) {
-                            newItem.productionProof = metaOvr.productionProof;
-                            newItem.isOverridden = true;
                         }
 
                         // ALWAYS recalculate pending from final values (never use stored pending)
@@ -9502,12 +9516,8 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                         const tempOvr = tempOverrides[uniqueKey];
                         const metaOvr = metaOverrides[uniqueKey];
 
-                        // META: adjustedQty
-                        if (metaOvr?.adjustedQty !== undefined && metaOvr.adjustedQty !== null) {
-                            newItem.adjustedQty = metaOvr.adjustedQty;
-                            newItem.hasQtyAdjustment = true;
-                            newItem.isOverridden = true;
-                        }
+                        // META: all meta override fields
+                        applyMetaOverrides(newItem, metaOvr);
 
                         // TEMP: stage and installed
                         if (tempOvr) {
@@ -9527,12 +9537,6 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                                 newItem.installed = tempOvr.installed;
                                 newItem.isOverridden = true;
                             }
-                        }
-
-                        // META: productionProof
-                        if (metaOvr?.productionProof) {
-                            newItem.productionProof = metaOvr.productionProof;
-                            newItem.isOverridden = true;
                         }
 
                         // ALWAYS recalculate pending (never use stored pending)
@@ -9623,13 +9627,6 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                         const tempOvr = tempOverrides[uniqueKey];
                         const metaOvr = metaOverrides[uniqueKey];
 
-                        // META: adjustedQty (charted qty — persists across syncs)
-                        if (metaOvr?.adjustedQty !== undefined && metaOvr.adjustedQty !== null) {
-                            item.adjustedQty = metaOvr.adjustedQty;
-                            item.hasQtyAdjustment = true;
-                            item.isOverridden = true;
-                        }
-
                         // TEMP: stage, previousStage, installed (working edits — wiped on sync)
                         if (tempOvr) {
                             if (tempOvr.stage) {
@@ -9651,22 +9648,7 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                         }
 
                         // META: all metadata overrides (persist across syncs)
-                        if (metaOvr) {
-                            if (metaOvr.notes) item.overrideNotes = metaOvr.notes;
-                            if (metaOvr.productionProof) {
-                                item.productionProof = metaOvr.productionProof;
-                                item.isOverridden = true;
-                            }
-                            if (metaOvr.removalQty !== undefined) item.removalQty = metaOvr.removalQty;
-                            if (metaOvr.removedCount !== undefined) item.removedCount = metaOvr.removedCount;
-                            if (metaOvr.removalStatus) item.removalStatus = metaOvr.removalStatus;
-                            if (metaOvr.removalAssignee) item.removalAssignee = metaOvr.removalAssignee;
-                            if (metaOvr.removalPhotosLink) item.removalPhotosLink = metaOvr.removalPhotosLink;
-                            if (metaOvr.hasReplacement !== undefined) item.hasReplacement = metaOvr.hasReplacement;
-                            if (metaOvr.history) item.history = metaOvr.history;
-                            if (metaOvr.materialReceivedDate) item.materialReceivedDate = metaOvr.materialReceivedDate;
-                            if (metaOvr.receiverLink) item.receiverLink = metaOvr.receiverLink;
-                        }
+                        applyMetaOverrides(item, metaOvr);
 
                         // Auto-derive materialReceivedDate from linked Material Receiver entries (fallback)
                         const linked = getLinkedMaterials(item, materialReceiverData);
@@ -10095,12 +10077,8 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                             const tempOvr = tempOverrides[uniqueKey];
                             const metaOvr = metaOverrides[uniqueKey];
 
-                            // META: adjustedQty
-                            if (metaOvr?.adjustedQty !== undefined && metaOvr.adjustedQty !== null) {
-                                newItem.adjustedQty = metaOvr.adjustedQty;
-                                newItem.hasQtyAdjustment = true;
-                                newItem.isOverridden = true;
-                            }
+                            // META: all meta override fields
+                            applyMetaOverrides(newItem, metaOvr);
 
                             // TEMP: stage, installed
                             if (tempOvr) {
@@ -10117,12 +10095,6 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                                     newItem.installed = tempOvr.installed;
                                     newItem.isOverridden = true;
                                 }
-                            }
-
-                            // META: productionProof
-                            if (metaOvr?.productionProof) {
-                                newItem.productionProof = metaOvr.productionProof;
-                                newItem.isOverridden = true;
                             }
 
                             // ALWAYS recalculate pending (never use stored pending)

@@ -344,8 +344,11 @@
             const upperText = text.toUpperCase();
             
             // Try to extract receipt/invoice number
+            // Order: labeled patterns first (Receipt# INV175992), then standalone INV-prefixed
             let receiptNumber = '';
-            const invMatch = text.match(/(?:INV|INVOICE|RECEIPT|PO|ORDER)[#:\s\-]*([A-Z0-9\-]+)/i);
+            const invMatch = text.match(/(?:RECEIPT|INVOICE|ORDER)\s*#?\s*:?\s*([A-Z0-9][A-Z0-9\-]{3,})/i)
+                || text.match(/\bPO\s*#\s*([A-Z0-9\-]{3,})/i)
+                || text.match(/\b(INV[#\-]?\d{4,})\b/i);
             if (invMatch) {
                 receiptNumber = invMatch[1].trim();
             } else {
@@ -379,7 +382,8 @@
                 }
             }
             if (!client) {
-                const clientMatch = text.match(/(?:CLIENT|CUSTOMER|ADVERTISER|BILL TO)[:\s]*([A-Za-z][A-Za-z\s&]+)/i);
+                const clientMatch = text.match(/(?:CLIENT|CUSTOMER|ADVERTISER|BILL TO)[:\s]*([^:\n]{2,30}?)(?=\s*(?:Printer|Vendor|Receipt|Invoice|Comments|Date|Qty|Total|Description|\n|$))/i)
+                    || text.match(/(?:CLIENT|CUSTOMER|ADVERTISER|BILL TO)[:\s]*([^:\n]{2,30})/i);
                 client = clientMatch ? clientMatch[1].trim().substring(0, 30) : 'Unknown Client';
             }
             
@@ -403,11 +407,16 @@
                 }
             }
             
-            // Extract printer/vendor
+            // Extract printer/vendor — stop at next label or colon
             let printer = '';
-            const printerMatch = text.match(/(?:PRINTER|VENDOR|FROM|SHIP FROM|CIRCLE|VENDOR)[:\s]*([A-Za-z][A-Za-z\s&]+)/i);
+            const printerMatch = text.match(/(?:PRINTER|VENDOR|SHIP FROM)[:\s]*([A-Za-z][A-Za-z\s&]*?)(?=\s*(?:Comments|Client|Receipt|Invoice|Poster|Code|Date|Qty|Total|Description|\n|$|:))/i);
             if (printerMatch) {
                 printer = printerMatch[1].trim().substring(0, 30);
+            }
+            if (!printer) {
+                // Fallback: grab up to the next colon (label boundary)
+                const pf = text.match(/(?:PRINTER|VENDOR|SHIP FROM)[:\s]*([^:\n]{2,30})/i);
+                if (pf) printer = pf[1].trim().replace(/\s+(Comments|Client|Receipt|Poster|Date|Qty).*$/i, '').trim();
             }
             if (!printer && upperText.includes('CIRCLE GRAPHICS')) {
                 printer = 'Circle Graphics';
@@ -419,7 +428,12 @@
             if (codeMatch) {
                 posterCode = codeMatch[1].trim();
             }
-            
+
+            // Extract comments from PDF
+            let pdfComments = '';
+            const commMatch = text.match(/(?:COMMENTS|NOTES|REMARKS)[:\s]*([^\n]{3,120})/i);
+            if (commMatch) pdfComments = commMatch[1].trim();
+
             return {
                 id: `PDF-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
                 receiptNumber: receiptNumber,
@@ -432,7 +446,7 @@
                 quantity: quantity,
                 boxes: 1,
                 designs: 1,
-                comments: `Imported from: ${fileName}`,
+                comments: pdfComments || `Imported from: ${fileName}`,
                 status: 'Received',
                 warehouseLocation: '',
                 posterImage: thumbnailUrl,
@@ -2827,7 +2841,9 @@ function doGet(e) {
         // Reuse the same parse logic as MaterialReceivers component
         const upperText = fullText.toUpperCase();
         let receiptNumber = '';
-        const invMatch = fullText.match(/(?:INV|INVOICE|RECEIPT|PO|ORDER)[#:\s\-]*([A-Z0-9\-]+)/i);
+        const invMatch = fullText.match(/(?:RECEIPT|INVOICE|ORDER)\s*#?\s*:?\s*([A-Z0-9][A-Z0-9\-]{3,})/i)
+            || fullText.match(/\bPO\s*#\s*([A-Z0-9\-]{3,})/i)
+            || fullText.match(/\b(INV[#\-]?\d{4,})\b/i);
         if (invMatch) receiptNumber = invMatch[1].trim();
         else { const fm = file.name.match(/(\d{5,})/); receiptNumber = fm ? `INV-${fm[1]}` : `INV-${Date.now().toString().slice(-6)}`; }
 
@@ -2840,7 +2856,11 @@ function doGet(e) {
         const commonClients = ['NETFLIX','NIKE','APPLE','AMAZON','DISNEY','WARNER','PARAMOUNT','UNIVERSAL','SONY','HBO','HULU','GOOGLE','META','FACEBOOK','MICROSOFT'];
         let client = '';
         for (const c of commonClients) { if (upperText.includes(c)) { client = c; break; } }
-        if (!client) { const cm = fullText.match(/(?:CLIENT|CUSTOMER|ADVERTISER|BILL TO)[:\s]*([A-Za-z][A-Za-z\s&]+)/i); client = cm ? cm[1].trim().substring(0, 30) : 'Unknown Client'; }
+        if (!client) {
+            const cm = fullText.match(/(?:CLIENT|CUSTOMER|ADVERTISER|BILL TO)[:\s]*([^:\n]{2,30}?)(?=\s*(?:Printer|Vendor|Receipt|Invoice|Comments|Date|Qty|Total|Description|\n|$))/i)
+                || fullText.match(/(?:CLIENT|CUSTOMER|ADVERTISER|BILL TO)[:\s]*([^:\n]{2,30})/i);
+            client = cm ? cm[1].trim().substring(0, 30) : 'Unknown Client';
+        }
 
         let quantity = 1;
         // Try multiple quantity patterns — most specific first
@@ -2863,20 +2883,28 @@ function doGet(e) {
         if (dm) description = dm[1].trim();
 
         let printer = '';
-        const pm = fullText.match(/(?:PRINTER|VENDOR|FROM|SHIP FROM|CIRCLE|VENDOR)[:\s]*([A-Za-z][A-Za-z\s&]+)/i);
+        const pm = fullText.match(/(?:PRINTER|VENDOR|SHIP FROM)[:\s]*([A-Za-z][A-Za-z\s&]*?)(?=\s*(?:Comments|Client|Receipt|Invoice|Poster|Code|Date|Qty|Total|Description|\n|$|:))/i);
         if (pm) printer = pm[1].trim().substring(0, 30);
+        if (!printer) {
+            const pf = fullText.match(/(?:PRINTER|VENDOR|SHIP FROM)[:\s]*([^:\n]{2,30})/i);
+            if (pf) printer = pf[1].trim().replace(/\s+(Comments|Client|Receipt|Poster|Date|Qty).*$/i, '').trim();
+        }
         if (!printer && upperText.includes('CIRCLE GRAPHICS')) printer = 'Circle Graphics';
 
         let posterCode = receiptNumber;
         const cm = fullText.match(/(?:POSTER\s*CODE|CODE|SKU)[:\s]*([A-Z0-9\-]+)/i);
         if (cm) posterCode = cm[1].trim();
 
+        let pdfComments = '';
+        const commMatch = fullText.match(/(?:COMMENTS|NOTES|REMARKS)[:\s]*([^\n]{3,120})/i);
+        if (commMatch) pdfComments = commMatch[1].trim();
+
         return {
             id: `PDF-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
             receiptNumber, dateReceived, description, posterCode,
             client, advertiser: client, printer: printer || 'Unknown Vendor',
             quantity, boxes: 1, designs: 1,
-            comments: `Imported from: ${file.name}`,
+            comments: pdfComments || `Imported from: ${file.name}`,
             status: 'Received', warehouseLocation: '',
             posterImage: thumbnailUrl, pdfSource: file.name
         };
