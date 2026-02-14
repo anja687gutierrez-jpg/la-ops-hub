@@ -175,6 +175,7 @@
         const [removalPhotosLink, setRemovalPhotosLink] = useState('');
         const [hasReplacement, setHasReplacement] = useState(false);
         const [editingRemoval, setEditingRemoval] = useState(false);
+        const [matExpanded, setMatExpanded] = useState(false);
 
         // Helper: Calculate inventory status
         const getInventoryStatus = () => {
@@ -1335,7 +1336,7 @@
                                     )}
                                 </div>
 
-                            {/* MATERIAL RECEIVER — read-only summary pill */}
+                            {/* MATERIAL RECEIVER — compact summary with expandable detail */}
                             {(() => {
                                 const matReqQty = parseInt(customQty) || (item.adjustedQty != null ? item.adjustedQty : (originalQty || 0));
                                 const matReceived = linkedMaterials.reduce((a, m) => a + (parseInt(m.quantity) || 0), 0);
@@ -1345,89 +1346,81 @@
                                 const overage = matReceived - matReqQty;
                                 const printers = [...new Set(linkedMaterials.map(m => m.printer || m.client || '').filter(Boolean))];
                                 const invoices = [...new Set(linkedMaterials.map(m => m.receiptNumber || '').filter(Boolean))];
+                                const statusColor = matIsSufficient ? 'green' : matIsPartial ? 'amber' : 'gray';
+                                const borderAccent = matIsSufficient ? 'border-green-300 dark:border-green-500/30' : matIsPartial ? 'border-amber-300 dark:border-amber-500/30' : 'border-gray-200 dark:border-slate-600';
                                 return (
-                            <div className="bg-gray-50 dark:bg-slate-900 p-4 rounded border dark:border-slate-600">
+                            <div className={`bg-gray-50 dark:bg-slate-900 p-4 rounded border ${linkedMaterials.length > 0 ? borderAccent : 'dark:border-slate-600'}`}>
+                                {/* Header */}
                                 <div className="flex items-center justify-between mb-2">
-                                    <h4 className="font-bold text-xs text-gray-500 flex items-center gap-1">
+                                    <h4 className="font-bold text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
                                         <Icon name="Package" size={12} /> MATERIALS
                                     </h4>
-                                    {linkedMaterials.length > 0 && (
-                                        <span className={`text-[10px] font-bold ${matIsSufficient ? 'text-green-600' : matIsPartial ? 'text-amber-600' : 'text-red-500'}`}>
-                                            {matReceived}/{matReqQty}
-                                        </span>
-                                    )}
                                 </div>
 
                                 {linkedMaterials.length > 0 ? (
-                                    <div className="space-y-1.5">
-                                        {/* Progress bar with percentage */}
-                                        <div>
-                                            <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-1.5 mb-1">
-                                                <div className={`h-1.5 rounded-full transition-all ${matIsSufficient ? 'bg-green-500' : matReceived > 0 ? 'bg-amber-500' : 'bg-gray-300'}`}
-                                                    style={{ width: `${pct}%` }} />
-                                            </div>
+                                    <div>
+                                        {/* Status line — the single most important thing */}
+                                        <div className="flex items-baseline gap-1.5 mb-2">
+                                            <span className={`text-lg font-bold tabular-nums ${matIsSufficient ? 'text-green-600 dark:text-green-400' : matIsPartial ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400'}`}>
+                                                {matReceived}
+                                            </span>
+                                            <span className="text-xs text-gray-400 dark:text-gray-500">/ {matReqQty}</span>
+                                            <span className={`text-[10px] font-semibold ml-auto ${matIsSufficient ? 'text-green-600 dark:text-green-400' : matIsPartial ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400'}`}>
+                                                {matIsSufficient ? (overage > 0 ? `+${overage} extra` : 'Complete') : matIsPartial ? `${pct}%` : 'Waiting'}
+                                            </span>
                                         </div>
 
-                                        {/* Status + overage */}
-                                        {matReqQty > 0 && (() => {
-                                            const color = matIsSufficient ? 'text-green-700 dark:text-green-400' : matIsPartial ? 'text-amber-700 dark:text-amber-400' : 'text-red-600 dark:text-red-400';
-                                            const bg = matIsSufficient ? 'bg-green-50 dark:bg-green-500/10 border-green-200 dark:border-green-500/20' : matIsPartial ? 'bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/20' : 'bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/20';
-                                            const label = matIsSufficient ? 'Complete' : matIsPartial ? `Short ${matReqQty - matReceived}` : 'Waiting';
-                                            const icon = matIsSufficient ? '✓' : matIsPartial ? '⚠' : '○';
-                                            return (
-                                                <div className={`px-2 py-1 rounded border ${bg} flex items-center justify-between`}>
-                                                    <span className={`text-[10px] font-bold ${color}`}>
-                                                        {icon} {label}
-                                                    </span>
-                                                    {matIsSufficient && overage > 0 && (
-                                                        <span className="text-[9px] text-green-600 dark:text-green-400">+{overage} overage</span>
-                                                    )}
-                                                    {!matIsSufficient && (
-                                                        <span className="text-[10px] font-bold text-gray-500">{pct}%</span>
-                                                    )}
-                                                </div>
-                                            );
-                                        })()}
+                                        {/* Progress bar */}
+                                        <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-1 mb-2">
+                                            <div className={`h-1 rounded-full transition-all ${matIsSufficient ? 'bg-green-500' : matReceived > 0 ? 'bg-amber-500' : 'bg-gray-300'}`}
+                                                style={{ width: `${Math.min(pct, 100)}%` }} />
+                                        </div>
 
-                                        {/* Receiver line items */}
-                                        <div className="space-y-0.5 pt-0.5">
-                                            {linkedMaterials.map((m, i) => {
-                                                const d = m.dateReceived || m.date_received || m.transactionDate || '';
-                                                const fmtD = d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
-                                                const code = m.posterCode || m.designCode || m.description || '';
-                                                const qty = parseInt(m.quantity) || 0;
-                                                return (
-                                                    <div key={i} className="flex items-center gap-1 text-[9px] text-gray-600 dark:text-gray-400">
-                                                        <span className="text-gray-400 dark:text-gray-600 w-[14px] text-right">{qty}</span>
-                                                        <span className="text-gray-300 dark:text-gray-600">×</span>
-                                                        <span className="font-medium text-gray-700 dark:text-gray-300 truncate flex-1">{code || 'Material'}</span>
-                                                        {fmtD && <span className="text-gray-400 dark:text-gray-500 whitespace-nowrap">{fmtD}</span>}
+                                        {/* Summary line — printer + receipt count, clickable to expand */}
+                                        <button
+                                            onClick={() => setMatExpanded(!matExpanded)}
+                                            className="w-full flex items-center justify-between text-[10px] text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors group cursor-pointer"
+                                        >
+                                            <span className="truncate">
+                                                {linkedMaterials.length} receipt{linkedMaterials.length !== 1 ? 's' : ''}
+                                                {printers.length > 0 && <span className="text-gray-400 dark:text-gray-500"> · {printers[0]}{printers.length > 1 ? ` +${printers.length - 1}` : ''}</span>}
+                                            </span>
+                                            <Icon name={matExpanded ? 'ChevronUp' : 'ChevronDown'} size={10}
+                                                className="text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300 flex-shrink-0 ml-1 transition-colors" />
+                                        </button>
+
+                                        {/* Expandable detail */}
+                                        {matExpanded && (
+                                            <div className="mt-2 pt-2 border-t border-gray-200 dark:border-slate-700 space-y-1">
+                                                {linkedMaterials.map((m, i) => {
+                                                    const d = m.dateReceived || m.date_received || m.transactionDate || '';
+                                                    const fmtD = d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+                                                    const code = m.posterCode || m.designCode || m.description || '';
+                                                    const qty = parseInt(m.quantity) || 0;
+                                                    const inv = m.receiptNumber || '';
+                                                    return (
+                                                        <div key={i} className="flex items-center gap-1.5 text-[10px]">
+                                                            <span className="font-mono font-bold text-gray-700 dark:text-gray-300 w-[20px] text-right">{qty}</span>
+                                                            <span className="text-gray-300 dark:text-gray-600">×</span>
+                                                            <span className="font-medium text-gray-600 dark:text-gray-300 truncate flex-1" title={code}>{code || 'Material'}</span>
+                                                            {fmtD && <span className="text-gray-400 dark:text-gray-500 whitespace-nowrap">{fmtD}</span>}
+                                                        </div>
+                                                    );
+                                                })}
+                                                {(printers.length > 0 || invoices.length > 0) && (
+                                                    <div className="pt-1 mt-1 border-t border-dashed border-gray-200 dark:border-slate-700 flex flex-wrap gap-x-3 gap-y-0.5 text-[9px] text-gray-400 dark:text-gray-500">
+                                                        {printers.length > 0 && <span>Printer: <span className="text-gray-600 dark:text-gray-400">{printers.join(', ')}</span></span>}
+                                                        {invoices.length > 0 && <span>Inv: <span className="font-mono text-gray-600 dark:text-gray-400">{invoices.join(', ')}</span></span>}
                                                     </div>
-                                                );
-                                            })}
-                                        </div>
-
-                                        {/* Printer & Invoice details */}
-                                        <div className="pt-1 border-t border-gray-200 dark:border-slate-700 space-y-0.5">
-                                            {printers.length > 0 && (
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-[9px] text-gray-400">Printer:</span>
-                                                    <span className="text-[9px] font-medium text-gray-600 dark:text-gray-300 truncate ml-1">{printers.join(', ')}</span>
-                                                </div>
-                                            )}
-                                            {invoices.length > 0 && (
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-[9px] text-gray-400">Invoice:</span>
-                                                    <span className="text-[9px] font-mono text-gray-600 dark:text-gray-300 truncate ml-1">{invoices.join(', ')}</span>
-                                                </div>
-                                            )}
-                                        </div>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                 ) : (
-                                    <div className="text-center py-4">
-                                        <Icon name="PackageOpen" size={20} className="mx-auto text-gray-300 dark:text-slate-600 mb-1" />
+                                    <div className="text-center py-3">
+                                        <Icon name="PackageOpen" size={18} className="mx-auto text-gray-300 dark:text-slate-600 mb-1" />
                                         <div className="text-[10px] text-gray-400 dark:text-gray-500">No materials linked</div>
-                                        <div className="text-[9px] text-gray-400 dark:text-gray-600 mt-0.5">Upload via Comms Center below</div>
+                                        <div className="text-[9px] text-gray-400 dark:text-gray-600 mt-0.5">Upload via Comms Center ↓</div>
                                     </div>
                                 )}
                             </div>
