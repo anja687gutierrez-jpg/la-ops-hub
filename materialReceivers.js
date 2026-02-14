@@ -1523,8 +1523,20 @@ function doGet(e) {
         };
 
         // Combine: uploaded data + saved entries from DetailModal
+        // Deduplicate: skip savedMaterialEntries that match an existing IDB entry
+        // (PDF upload from detail modal creates both an IDB entry AND a breakdown row)
         const combinedMaterials = useMemo(() => {
-            return [...materialsArray, ...savedMaterialEntries];
+            const idbCodes = new Set(materialsArray.map(m => {
+                const code = (m.posterCode || m.designCode || m.description || '').toLowerCase();
+                const camp = (m.campaignId || m.campaign_id || '').toLowerCase();
+                return `${camp}::${code}`;
+            }));
+            const deduped = savedMaterialEntries.filter(s => {
+                const code = (s.posterCode || '').toLowerCase();
+                const camp = (s.client || s.advertiser || '').toLowerCase();
+                return !idbCodes.has(`${camp}::${code}`);
+            });
+            return [...materialsArray, ...deduped];
         }, [materialsArray, savedMaterialEntries]);
 
         // Use combined materials or empty array in production mode
