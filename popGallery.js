@@ -28,10 +28,13 @@
         const [expandedCampaign, setExpandedCampaign] = useState(null); // For viewing all photos in a campaign
         
         // Local Folder State
-        const [linkedFolder, setLinkedFolder] = useState(null); // Folder handle
-        const [localPhotos, setLocalPhotos] = useState([]); // Photos from local folder
+        const [linkedFolder, setLinkedFolder] = useState(null); // Global folder handle (bulk link)
+        const [campaignFolders, setCampaignFolders] = useState({}); // Per-campaign: { [cid]: { handle, photos: [], scanning: false, error: null } }
         const [scanningFolder, setScanningFolder] = useState(false);
         const [folderError, setFolderError] = useState(null);
+        // Tag editor state
+        const [tagEditorOpen, setTagEditorOpen] = useState(null); // campaignNumber or null
+        const [editingTags, setEditingTags] = useState({ include: '', exclude: '' });
         // Demo data toggle (disabled in production mode)
         const [showDemoData, setShowDemoData] = useState(false);
         
@@ -198,6 +201,11 @@
             }
         }, []);
 
+        // Derive localPhotos from campaignFolders (replaces old useState)
+        const localPhotos = useMemo(() =>
+            Object.values(campaignFolders).flatMap(cf => cf.photos || []),
+        [campaignFolders]);
+
         // Generate expected keywords from campaign data
         const getExpectedKeywords = (photo) => {
             const keywords = new Set();
@@ -233,22 +241,40 @@
         };
 
         // Calculate match score between detected text and expected keywords
-        const calculateMatchScore = (detectedText, expectedKeywords) => {
+        // popTags: optional { include: string[], exclude: string[] } from per-campaign tag config
+        const calculateMatchScore = (detectedText, expectedKeywords, popTags) => {
             if (!detectedText || detectedText.length < 3) {
-                return { score: 0, matched: [], unmatched: [], suspicious: [] };
+                return { score: 0, matched: [], unmatched: [], suspicious: [], excludeMatches: [] };
             }
-            
+
             const words = detectedText.toLowerCase().split(/[\s\n\r]+/).filter(w => w.length > 2);
+            const fullText = detectedText.toLowerCase();
             const matched = [];
             const suspicious = [];
-            
-            // Check for primary keyword matches
-            expectedKeywords.primary.forEach(keyword => {
-                if (words.some(w => w.includes(keyword) || keyword.includes(w))) {
+            const excludeMatches = [];
+
+            // Use popTags.include if available, otherwise fall back to auto-derived keywords
+            const includeKeywords = (popTags?.include?.length > 0)
+                ? popTags.include.map(t => t.toLowerCase().trim()).filter(Boolean)
+                : expectedKeywords.primary;
+
+            // Check for include keyword matches
+            includeKeywords.forEach(keyword => {
+                if (words.some(w => w.includes(keyword) || keyword.includes(w)) || fullText.includes(keyword)) {
                     matched.push(keyword);
                 }
             });
-            
+
+            // Check for exclude keyword matches (wrong ad detection)
+            if (popTags?.exclude?.length > 0) {
+                popTags.exclude.forEach(tag => {
+                    const lowerTag = tag.toLowerCase().trim();
+                    if (lowerTag && (words.some(w => w.includes(lowerTag) || lowerTag.includes(w)) || fullText.includes(lowerTag))) {
+                        excludeMatches.push(tag);
+                    }
+                });
+            }
+
             // Check for suspicious/graffiti words
             const graffitiPatterns = ['tag', 'crew', 'fuck', 'shit', 'dick', 'ass', 'hate', 'kill', 'gang'];
             words.forEach(word => {
@@ -256,34 +282,33 @@
                     suspicious.push(word);
                 }
             });
-            
+
             // Also flag random letter combinations (potential graffiti tags)
             words.forEach(word => {
-                // If word is 2-4 chars, all caps style, and not a known word
-                if (word.length >= 2 && word.length <= 5 && 
-                    !expectedKeywords.primary.includes(word) && 
+                if (word.length >= 2 && word.length <= 5 &&
+                    !includeKeywords.includes(word) &&
                     !expectedKeywords.common.includes(word) &&
                     /^[a-z]+$/.test(word)) {
-                    // Could be a graffiti tag - flag if it seems random
                     const vowels = (word.match(/[aeiou]/g) || []).length;
                     if (vowels === 0 || vowels > 3) {
                         suspicious.push(word);
                     }
                 }
             });
-            
-            // Calculate score
+
+            // Calculate score based on include keywords
             const primaryMatches = matched.length;
-            const primaryTotal = expectedKeywords.primary.length || 1;
+            const primaryTotal = includeKeywords.length || 1;
             const score = Math.min(100, Math.round((primaryMatches / primaryTotal) * 100));
-            
+
             return {
                 score,
                 matched,
-                unmatched: expectedKeywords.primary.filter(k => !matched.includes(k)),
+                unmatched: includeKeywords.filter(k => !matched.includes(k)),
                 suspicious: [...new Set(suspicious)],
+                excludeMatches: [...new Set(excludeMatches)],
                 totalWords: words.length,
-                detectedText: detectedText.substring(0, 500) // Truncate for display
+                detectedText: detectedText.substring(0, 500)
             };
         };
 
@@ -321,15 +346,17 @@
                 
                 const detectedText = result.data.text;
                 const expectedKeywords = getExpectedKeywords(photo);
-                const matchResult = calculateMatchScore(detectedText, expectedKeywords);
-                
+                const popTags = getPopTags(photo.campaignNumber);
+                const matchResult = calculateMatchScore(detectedText, expectedKeywords, popTags);
+
                 // Determine flags
                 const flags = [];
+                if (matchResult.excludeMatches?.length > 0) flags.push('EXCLUDE_MATCH');
                 if (matchResult.score < 30) flags.push('LOW_MATCH');
                 if (matchResult.score === 0 && detectedText.length > 10) flags.push('WRONG_POSTER');
                 if (matchResult.suspicious.length > 0) flags.push('GRAFFITI_DETECTED');
                 if (detectedText.length < 5) flags.push('NO_TEXT_FOUND');
-                if (matchResult.score >= 70) flags.push('VERIFIED');
+                if (matchResult.score >= 70 && matchResult.excludeMatches?.length === 0) flags.push('VERIFIED');
                 
                 const analysis = {
                     analyzing: false,
@@ -398,10 +425,11 @@
             if (analyzed.length === 0) return null;
             
             const verified = analyzed.filter(p => photoAnalysis[p.id].flags?.includes('VERIFIED')).length;
-            const issues = analyzed.filter(p => 
+            const issues = analyzed.filter(p =>
                 photoAnalysis[p.id].flags?.includes('GRAFFITI_DETECTED') ||
                 photoAnalysis[p.id].flags?.includes('LOW_MATCH') ||
-                photoAnalysis[p.id].flags?.includes('WRONG_POSTER')
+                photoAnalysis[p.id].flags?.includes('WRONG_POSTER') ||
+                photoAnalysis[p.id].flags?.includes('EXCLUDE_MATCH')
             ).length;
             const avgScore = Math.round(analyzed.reduce((sum, p) => sum + (photoAnalysis[p.id].score || 0), 0) / analyzed.length);
             
@@ -475,7 +503,7 @@
                             }
                             
                             // Try to match campaign ID to uploaded data for more details
-                            const matchedCampaign = data.find(d => d.campaignNumber === campaignId);
+                            const matchedCampaign = data.find(d => (d.campaignNumber || d.id) === campaignId);
                             
                             photos.push({
                                 id: `local-${entryPath}`,
@@ -524,10 +552,10 @@
                 });
                 
                 setLinkedFolder(dirHandle);
-                
+
                 // Scan the folder
                 const photos = await scanFolder(dirHandle);
-                
+
                 // Group photos by campaign to get total counts
                 const campaignPhotoCounts = {};
                 photos.forEach(p => {
@@ -536,7 +564,7 @@
                     }
                     campaignPhotoCounts[p.campaignNumber]++;
                 });
-                
+
                 // Add photo index info
                 const photosWithIndex = photos.map(p => {
                     const sameCapaign = photos.filter(pp => pp.campaignNumber === p.campaignNumber);
@@ -547,9 +575,19 @@
                         totalPhotos: campaignPhotoCounts[p.campaignNumber]
                     };
                 });
-                
-                setLocalPhotos(photosWithIndex);
-                setShowDemoData(false); // Switch to local data
+
+                // Populate campaignFolders from global scan
+                const newCampaignFolders = {};
+                const grouped = {};
+                photosWithIndex.forEach(p => {
+                    if (!grouped[p.campaignNumber]) grouped[p.campaignNumber] = [];
+                    grouped[p.campaignNumber].push(p);
+                });
+                Object.entries(grouped).forEach(([cid, cPhotos]) => {
+                    newCampaignFolders[cid] = { handle: dirHandle, photos: cPhotos, scanning: false, error: null };
+                });
+                setCampaignFolders(prev => ({ ...prev, ...newCampaignFolders }));
+                setShowDemoData(false);
                 setScanningFolder(false);
                 
             } catch (err) {
@@ -564,13 +602,13 @@
             }
         };
 
-        // Refresh folder scan
+        // Refresh folder scan (global)
         const handleRefreshFolder = async () => {
             if (!linkedFolder) return;
-            
+
             setScanningFolder(true);
             const photos = await scanFolder(linkedFolder);
-            
+
             const campaignPhotoCounts = {};
             photos.forEach(p => {
                 if (!campaignPhotoCounts[p.campaignNumber]) {
@@ -578,7 +616,7 @@
                 }
                 campaignPhotoCounts[p.campaignNumber]++;
             });
-            
+
             const photosWithIndex = photos.map(p => {
                 const sameCapaign = photos.filter(pp => pp.campaignNumber === p.campaignNumber);
                 const idx = sameCapaign.findIndex(pp => pp.id === p.id);
@@ -588,9 +626,180 @@
                     totalPhotos: campaignPhotoCounts[p.campaignNumber]
                 };
             });
-            
-            setLocalPhotos(photosWithIndex);
+
+            // Populate campaignFolders from global scan
+            const newCampaignFolders = {};
+            const grouped = {};
+            photosWithIndex.forEach(p => {
+                if (!grouped[p.campaignNumber]) grouped[p.campaignNumber] = [];
+                grouped[p.campaignNumber].push(p);
+            });
+            Object.entries(grouped).forEach(([cid, photos]) => {
+                newCampaignFolders[cid] = { handle: linkedFolder, photos, scanning: false, error: null };
+            });
+            setCampaignFolders(prev => ({ ...prev, ...newCampaignFolders }));
             setScanningFolder(false);
+        };
+
+        // Scan a single campaign folder (flat + one level of date subdirs)
+        const scanCampaignFolder = async (dirHandle, campaignNumber) => {
+            const photos = [];
+            const matchedCampaign = data.find(d => (d.campaignNumber || d.id) === campaignNumber);
+
+            try {
+                for await (const entry of dirHandle.values()) {
+                    if (entry.kind === 'directory') {
+                        // One level deep (date folders)
+                        for await (const subEntry of entry.values()) {
+                            if (subEntry.kind === 'file') {
+                                const ext = subEntry.name.toLowerCase().split('.').pop();
+                                if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'].includes(ext)) {
+                                    const file = await subEntry.getFile();
+                                    const objectUrl = URL.createObjectURL(file);
+
+                                    let installDate = new Date();
+                                    const dateStr = entry.name;
+                                    if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/) || dateStr.match(/^\d{2}-\d{2}-\d{4}$/)) {
+                                        const parsed = new Date(dateStr);
+                                        if (!isNaN(parsed.getTime())) installDate = parsed;
+                                    }
+
+                                    photos.push({
+                                        id: `local-${campaignNumber}-${entry.name}-${subEntry.name}`,
+                                        campaignNumber,
+                                        market: matchedCampaign?.market || '',
+                                        advertiser: matchedCampaign?.advertiser || 'Unknown',
+                                        campaign: matchedCampaign?.campaign || campaignNumber,
+                                        product: matchedCampaign?.product || 'Unknown',
+                                        quantity: matchedCampaign?.quantity || matchedCampaign?.totalQty || '-',
+                                        installDate,
+                                        stage: matchedCampaign?.stage || 'Installed',
+                                        owner: matchedCampaign?.owner || '-',
+                                        photoUrl: objectUrl,
+                                        thumbnailUrl: objectUrl,
+                                        fileName: subEntry.name,
+                                        filePath: `${entry.name}/${subEntry.name}`,
+                                        fileSize: file.size,
+                                        isLocal: true,
+                                        fileHandle: subEntry
+                                    });
+                                }
+                            }
+                        }
+                    } else if (entry.kind === 'file') {
+                        const ext = entry.name.toLowerCase().split('.').pop();
+                        if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'].includes(ext)) {
+                            const file = await entry.getFile();
+                            const objectUrl = URL.createObjectURL(file);
+
+                            photos.push({
+                                id: `local-${campaignNumber}-${entry.name}`,
+                                campaignNumber,
+                                market: matchedCampaign?.market || '',
+                                advertiser: matchedCampaign?.advertiser || 'Unknown',
+                                campaign: matchedCampaign?.campaign || campaignNumber,
+                                product: matchedCampaign?.product || 'Unknown',
+                                quantity: matchedCampaign?.quantity || matchedCampaign?.totalQty || '-',
+                                installDate: new Date(),
+                                stage: matchedCampaign?.stage || 'Installed',
+                                owner: matchedCampaign?.owner || '-',
+                                photoUrl: objectUrl,
+                                thumbnailUrl: objectUrl,
+                                fileName: entry.name,
+                                filePath: entry.name,
+                                fileSize: file.size,
+                                isLocal: true,
+                                fileHandle: entry
+                            });
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error('Error scanning campaign folder:', err);
+            }
+
+            return photos.map((p, idx) => ({
+                ...p,
+                photoIndex: idx + 1,
+                totalPhotos: photos.length
+            }));
+        };
+
+        // Per-campaign folder link
+        const handleLinkCampaignFolder = async (campaignNumber) => {
+            try {
+                if (!window.showDirectoryPicker) {
+                    setFolderError('Your browser does not support folder selection. Please use Chrome, Edge, or another Chromium-based browser.');
+                    return;
+                }
+
+                setCampaignFolders(prev => ({
+                    ...prev,
+                    [campaignNumber]: { ...prev[campaignNumber], scanning: true, error: null }
+                }));
+
+                const dirHandle = await window.showDirectoryPicker({ mode: 'read' });
+                const photos = await scanCampaignFolder(dirHandle, campaignNumber);
+
+                setCampaignFolders(prev => ({
+                    ...prev,
+                    [campaignNumber]: { handle: dirHandle, photos, scanning: false, error: null }
+                }));
+                setShowDemoData(false);
+
+            } catch (err) {
+                if (err.name === 'AbortError') {
+                    setCampaignFolders(prev => ({
+                        ...prev,
+                        [campaignNumber]: { ...prev[campaignNumber], scanning: false }
+                    }));
+                    return;
+                }
+                setCampaignFolders(prev => ({
+                    ...prev,
+                    [campaignNumber]: { ...prev[campaignNumber], scanning: false, error: err.message }
+                }));
+            }
+        };
+
+        // Per-campaign folder unlink
+        const handleUnlinkCampaignFolder = (campaignNumber) => {
+            setCampaignFolders(prev => {
+                const next = { ...prev };
+                // Revoke object URLs to prevent memory leaks
+                if (next[campaignNumber]?.photos) {
+                    next[campaignNumber].photos.forEach(p => {
+                        if (p.photoUrl?.startsWith('blob:')) URL.revokeObjectURL(p.photoUrl);
+                    });
+                }
+                delete next[campaignNumber];
+                return next;
+            });
+        };
+
+        // Get POP tags for a campaign from metaOverrides
+        const getPopTags = (campaignNumber) => {
+            try {
+                const overrides = JSON.parse(localStorage.getItem('stap_meta_overrides') || '{}');
+                // Find the campaign's unique key
+                const campaign = data.find(d => (d.campaignNumber || d.id) === campaignNumber);
+                const key = campaign?.uniqueKey || campaign?.campaignNumber || campaign?.id || campaignNumber;
+                return overrides[key]?.popTags || { include: [], exclude: [] };
+            } catch { return { include: [], exclude: [] }; }
+        };
+
+        // Save POP tags to metaOverrides
+        const savePopTags = (campaignNumber, tags) => {
+            try {
+                const overrides = JSON.parse(localStorage.getItem('stap_meta_overrides') || '{}');
+                const campaign = data.find(d => (d.campaignNumber || d.id) === campaignNumber);
+                const key = campaign?.uniqueKey || campaign?.campaignNumber || campaign?.id || campaignNumber;
+                if (!overrides[key]) overrides[key] = {};
+                overrides[key].popTags = tags;
+                localStorage.setItem('stap_meta_overrides', JSON.stringify(overrides));
+            } catch (err) {
+                console.error('Failed to save POP tags:', err);
+            }
         };
 
         // Extract unique values from MASTER TRACKER data for filters
@@ -625,7 +834,7 @@
             if (selectedAdvertiser !== 'ALL') {
                 filtered = filtered.filter(d => d.advertiser === selectedAdvertiser);
             }
-            const trackerCampaigns = filtered.map(d => d.campaignNumber);
+            const trackerCampaigns = filtered.map(d => d.campaignNumber || d.id);
             // Add local photo campaigns
             const localCampaigns = localPhotos
                 .filter(p => selectedMarket === 'ALL' || p.market === selectedMarket)
@@ -636,11 +845,13 @@
         }, [data, localPhotos, selectedMarket, selectedAdvertiser]);
 
         // Create a lookup for expected quantities from Master Tracker
+        // NOTE: Tracker items use d.id for campaign number (not d.campaignNumber)
         const campaignExpectedQty = useMemo(() => {
             const lookup = {};
             data.forEach(d => {
-                if (d.campaignNumber) {
-                    lookup[d.campaignNumber] = {
+                const cid = d.campaignNumber || d.id;
+                if (cid) {
+                    lookup[cid] = {
                         expectedQty: parseInt(d.quantity) || parseInt(d.totalQty) || 0,
                         advertiser: d.advertiser,
                         product: d.product,
@@ -696,7 +907,7 @@
                 filtered = filtered.filter(p => p.campaignNumber === selectedCampaign);
             }
 
-            // Status filter (NEW)
+            // Status filter
             if (selectedStatus !== 'ALL') {
                 if (selectedStatus === 'POP Completed') {
                     filtered = filtered.filter(p => p.stage === 'POP Completed');
@@ -704,8 +915,11 @@
                     filtered = filtered.filter(p => p.stage === 'Photos Taken');
                 } else if (selectedStatus === 'Installed') {
                     filtered = filtered.filter(p => p.stage === 'Installed');
+                } else if (selectedStatus === 'Material Ready') {
+                    filtered = filtered.filter(p => p.stage === 'Material Ready For Install');
+                } else if (selectedStatus === 'Contracted') {
+                    filtered = filtered.filter(p => p.stage === 'Contracted');
                 } else if (selectedStatus === 'Needs Photos') {
-                    // Show installed campaigns that might need more photos
                     filtered = filtered.filter(p => p.stage === 'Installed' && !p.stage?.includes('POP'));
                 }
             }
@@ -774,7 +988,7 @@
             // Check each campaign in photos
             Object.keys(photosByCampaign).forEach(campaignId => {
                 const photos = photosByCampaign[campaignId];
-                const trackerEntry = data.find(d => d.campaignNumber === campaignId);
+                const trackerEntry = data.find(d => (d.campaignNumber || d.id) === campaignId);
                 
                 if (!trackerEntry) {
                     validation.notInTracker.push({
@@ -805,9 +1019,10 @@
                 d.stage === 'Installed' || d.stage === 'Photos Taken' || d.stage === 'POP Completed'
             );
             installedCampaigns.forEach(campaign => {
-                if (!photosByCampaign[campaign.campaignNumber]) {
+                const cnum = campaign.campaignNumber || campaign.id;
+                if (!photosByCampaign[cnum]) {
                     validation.missingPhotos.push({
-                        campaignNumber: campaign.campaignNumber,
+                        campaignNumber: cnum,
                         advertiser: campaign.advertiser,
                         expectedQty: campaign.quantity || campaign.totalQty || 0,
                         status: campaign.stage
@@ -836,15 +1051,15 @@
         }, [filteredPOP, localPhotos, showDemoData]);
 
         // Group photos by campaign for Campaign Cards view
+        // ALSO includes tracker campaigns without photos (POP-relevant stages)
         const campaignGroups = useMemo(() => {
             const groups = {};
-            
+
             filteredPOP.forEach(photo => {
                 const cid = photo.campaignNumber;
                 if (!cid) return;
-                
+
                 if (!groups[cid]) {
-                    // Get expected qty from tracker
                     const trackerInfo = campaignExpectedQty[cid] || {};
                     groups[cid] = {
                         campaignNumber: cid,
@@ -860,39 +1075,83 @@
                         latestDate: null
                     };
                 }
-                
+
                 groups[cid].photos.push(photo);
-                
-                // Set cover photo (first photo)
+
                 if (!groups[cid].coverPhoto) {
                     groups[cid].coverPhoto = photo;
                 }
-                
-                // Track latest date
+
                 if (photo.installDate && (!groups[cid].latestDate || photo.installDate > groups[cid].latestDate)) {
                     groups[cid].latestDate = photo.installDate;
                 }
             });
-            
+
+            // Merge ALL tracker campaigns in POP-relevant stages (even those without photos)
+            const popStages = ['contracted', 'material ready for install', 'installed', 'photos taken', 'pop completed'];
+            data.forEach(d => {
+                const cid = d.campaignNumber || d.id;
+                if (!cid || groups[cid]) return; // Skip if already has photos
+                if (!popStages.includes((d.stage || '').toLowerCase())) return;
+
+                // Apply current filters
+                if (selectedMarket !== 'ALL' && d.market !== selectedMarket) return;
+                if (selectedAdvertiser !== 'ALL' && d.advertiser !== selectedAdvertiser) return;
+                if (selectedCampaign !== 'ALL' && cid !== selectedCampaign) return;
+                if (selectedStatus !== 'ALL') {
+                    if (selectedStatus === 'Installed' && d.stage !== 'Installed') return;
+                    if (selectedStatus === 'Photos Taken' && d.stage !== 'Photos Taken') return;
+                    if (selectedStatus === 'POP Completed' && d.stage !== 'POP Completed') return;
+                    if (selectedStatus === 'Material Ready' && d.stage !== 'Material Ready For Install') return;
+                    if (selectedStatus === 'Contracted' && d.stage !== 'Contracted') return;
+                }
+                if (searchTerm) {
+                    const term = searchTerm.toLowerCase();
+                    const matchesSearch = [cid, d.advertiser, d.campaign, d.product, d.market]
+                        .some(v => v?.toLowerCase().includes(term));
+                    if (!matchesSearch) return;
+                }
+
+                groups[cid] = {
+                    campaignNumber: cid,
+                    advertiser: d.advertiser || 'Unknown',
+                    campaign: d.campaign || cid,
+                    market: d.market || 'Unknown',
+                    product: d.product || 'Unknown',
+                    stage: d.stage || 'Unknown',
+                    owner: d.owner || '-',
+                    expectedQty: parseInt(d.quantity) || parseInt(d.totalQty) || 0,
+                    photos: [],
+                    coverPhoto: null,
+                    latestDate: null,
+                    noPhotos: true // Placeholder flag for UI
+                };
+            });
+
             // Convert to array and calculate progress
             const groupArray = Object.values(groups).map(g => ({
                 ...g,
                 photoCount: g.photos.length,
                 progress: g.expectedQty > 0 ? Math.min(100, Math.round((g.photos.length / g.expectedQty) * 100)) : 0,
                 isComplete: g.expectedQty > 0 && g.photos.length >= g.expectedQty,
-                missing: g.expectedQty > 0 ? Math.max(0, g.expectedQty - g.photos.length) : 0
+                missing: g.expectedQty > 0 ? Math.max(0, g.expectedQty - g.photos.length) : 0,
+                folderLinked: !!campaignFolders[g.campaignNumber]?.handle,
+                folderPhotoCount: campaignFolders[g.campaignNumber]?.photos?.length || 0
             }));
-            
-            // Sort by latest date or photo count
+
+            // Sort: campaigns with photos first, then by selected sort
             groupArray.sort((a, b) => {
+                // Photos-first: campaigns with photos sort before those without
+                if (a.photoCount > 0 && b.photoCount === 0) return -1;
+                if (a.photoCount === 0 && b.photoCount > 0) return 1;
                 if (sortBy === 'date-desc') return (b.latestDate || 0) - (a.latestDate || 0);
                 if (sortBy === 'date-asc') return (a.latestDate || 0) - (b.latestDate || 0);
                 if (sortBy === 'advertiser') return (a.advertiser || '').localeCompare(b.advertiser || '');
                 return (a.campaignNumber || '').localeCompare(b.campaignNumber || '');
             });
-            
+
             return groupArray;
-        }, [filteredPOP, campaignExpectedQty, sortBy]);
+        }, [filteredPOP, campaignExpectedQty, sortBy, data, campaignFolders, selectedMarket, selectedAdvertiser, selectedCampaign, selectedStatus, searchTerm]);
 
         // Expanded Campaign Modal - shows all photos for a campaign
         const CampaignPhotosModal = ({ campaign, onClose }) => {
@@ -927,6 +1186,7 @@
                     case 'GRAFFITI_DETECTED': return 'bg-red-500 text-white';
                     case 'LOW_MATCH': return 'bg-amber-500 text-white';
                     case 'WRONG_POSTER': return 'bg-red-600 text-white';
+                    case 'EXCLUDE_MATCH': return 'bg-red-600 text-white animate-pulse';
                     case 'NO_TEXT_FOUND': return 'bg-gray-500 text-white';
                     case 'SCAN_ERROR': return 'bg-gray-600 text-white';
                     default: return 'bg-gray-500 text-white';
@@ -1067,10 +1327,12 @@
                                                     key={photo.id}
                                                     onClick={() => { setPhotoIndex(idx); setViewAllGrid(false); }}
                                                     className={`relative aspect-square bg-gray-800 rounded-lg overflow-hidden cursor-pointer transition-all group ${
-                                                        analysis?.flags?.includes('GRAFFITI_DETECTED') || analysis?.flags?.includes('WRONG_POSTER') 
-                                                            ? 'ring-2 ring-red-500' 
-                                                            : analysis?.flags?.includes('VERIFIED') 
-                                                                ? 'ring-2 ring-green-500' 
+                                                        analysis?.flags?.includes('EXCLUDE_MATCH')
+                                                            ? 'ring-2 ring-red-500 animate-pulse'
+                                                            : analysis?.flags?.includes('GRAFFITI_DETECTED') || analysis?.flags?.includes('WRONG_POSTER')
+                                                            ? 'ring-2 ring-red-500'
+                                                            : analysis?.flags?.includes('VERIFIED')
+                                                                ? 'ring-2 ring-green-500'
                                                                 : 'hover:ring-2 hover:ring-indigo-500'
                                                     }`}
                                                 >
@@ -1086,12 +1348,14 @@
                                                     {/* Analysis status badge */}
                                                     {analysis && !analysis.analyzing && (
                                                         <div className={`absolute top-1 right-1 px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                                                            analysis.flags?.includes('EXCLUDE_MATCH') ? 'bg-red-600 text-white animate-pulse' :
                                                             analysis.flags?.includes('VERIFIED') ? 'bg-green-500 text-white' :
                                                             analysis.flags?.includes('GRAFFITI_DETECTED') ? 'bg-red-500 text-white' :
                                                             analysis.flags?.includes('LOW_MATCH') ? 'bg-amber-500 text-white' :
                                                             'bg-gray-600 text-white'
                                                         }`}>
-                                                            {analysis.flags?.includes('VERIFIED') ? '✓' :
+                                                            {analysis.flags?.includes('EXCLUDE_MATCH') ? 'WRONG AD' :
+                                                             analysis.flags?.includes('VERIFIED') ? '✓' :
                                                              analysis.flags?.includes('GRAFFITI_DETECTED') ? '⚠️' :
                                                              analysis.flags?.includes('LOW_MATCH') ? '?' :
                                                              `${analysis.score || 0}%`}
@@ -1234,24 +1498,45 @@
                                         
                                         {/* Expected Keywords */}
                                         <div className="mb-4 p-3 bg-gray-800 rounded-lg">
-                                            <div className="text-xs text-gray-400 mb-2 font-bold uppercase">Looking For:</div>
+                                            <div className="text-xs text-gray-400 mb-2 font-bold uppercase">Looking For (Include):</div>
                                             <div className="flex flex-wrap gap-1">
-                                                {getExpectedKeywords(campaign).primary.slice(0, 10).map(kw => (
-                                                    <span key={kw} className="px-2 py-1 bg-indigo-600/50 text-indigo-200 rounded text-xs">
-                                                        {kw}
-                                                    </span>
-                                                ))}
+                                                {(() => {
+                                                    const tags = getPopTags(campaign.campaignNumber);
+                                                    const keywords = tags.include?.length > 0 ? tags.include : getExpectedKeywords(campaign).primary;
+                                                    return keywords.slice(0, 10).map(kw => (
+                                                        <span key={kw} className={`px-2 py-1 rounded text-xs ${tags.include?.length > 0 ? 'bg-green-600/50 text-green-200 border border-green-500/50' : 'bg-indigo-600/50 text-indigo-200'}`}>
+                                                            {kw}
+                                                        </span>
+                                                    ));
+                                                })()}
                                             </div>
+                                            {(() => {
+                                                const tags = getPopTags(campaign.campaignNumber);
+                                                if (!tags.exclude?.length) return null;
+                                                return (
+                                                    <div className="mt-2">
+                                                        <div className="text-xs text-red-400 mb-1 font-bold uppercase">Flag If Found (Exclude):</div>
+                                                        <div className="flex flex-wrap gap-1">
+                                                            {tags.exclude.map(kw => (
+                                                                <span key={kw} className="px-2 py-1 bg-red-600/50 text-red-200 border border-red-500/50 rounded text-xs">
+                                                                    {kw}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })()}
                                         </div>
                                         
                                         {/* Issue List */}
                                         <div className="mb-4">
                                             <div className="text-xs text-gray-400 mb-2 font-bold uppercase">⚠️ Photos Needing Review</div>
                                             <div className="space-y-2 max-h-64 overflow-auto">
-                                                {campaign.photos.filter(p => 
+                                                {campaign.photos.filter(p =>
                                                     photoAnalysis[p.id]?.flags?.includes('GRAFFITI_DETECTED') ||
                                                     photoAnalysis[p.id]?.flags?.includes('LOW_MATCH') ||
-                                                    photoAnalysis[p.id]?.flags?.includes('WRONG_POSTER')
+                                                    photoAnalysis[p.id]?.flags?.includes('WRONG_POSTER') ||
+                                                    photoAnalysis[p.id]?.flags?.includes('EXCLUDE_MATCH')
                                                 ).map((photo, idx) => (
                                                     <div 
                                                         key={photo.id}
@@ -1271,18 +1556,24 @@
                                                                     </span>
                                                                 ))}
                                                             </div>
+                                                            {photoAnalysis[photo.id]?.excludeMatches?.length > 0 && (
+                                                                <div className="text-[10px] text-red-300 mt-1 truncate font-bold">
+                                                                    WRONG AD: found '{photoAnalysis[photo.id].excludeMatches.join("', '")}'
+                                                                </div>
+                                                            )}
                                                             {photoAnalysis[photo.id]?.suspicious?.length > 0 && (
                                                                 <div className="text-[10px] text-red-300 mt-1 truncate">
-                                                                    Found: {photoAnalysis[photo.id].suspicious.join(', ')}
+                                                                    Graffiti: {photoAnalysis[photo.id].suspicious.join(', ')}
                                                                 </div>
                                                             )}
                                                         </div>
                                                     </div>
                                                 ))}
-                                                {campaign.photos.filter(p => 
+                                                {campaign.photos.filter(p =>
                                                     photoAnalysis[p.id]?.flags?.includes('GRAFFITI_DETECTED') ||
                                                     photoAnalysis[p.id]?.flags?.includes('LOW_MATCH') ||
-                                                    photoAnalysis[p.id]?.flags?.includes('WRONG_POSTER')
+                                                    photoAnalysis[p.id]?.flags?.includes('WRONG_POSTER') ||
+                                                    photoAnalysis[p.id]?.flags?.includes('EXCLUDE_MATCH')
                                                 ).length === 0 && (
                                                     <div className="text-center text-gray-500 text-sm py-4">
                                                         {analysisSummary ? 'No issues found ✓' : 'Run analysis to detect issues'}
@@ -1312,6 +1603,16 @@
                                                             <div className="flex flex-wrap gap-1 mt-1">
                                                                 {photoAnalysis[campaign.photos[photoIndex].id].matched.map(m => (
                                                                     <span key={m} className="px-1.5 py-0.5 bg-green-600/50 text-green-200 rounded text-[10px]">{m}</span>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                    {photoAnalysis[campaign.photos[photoIndex].id].excludeMatches?.length > 0 && (
+                                                        <div>
+                                                            <span className="text-red-400 text-xs font-bold">WRONG AD Detected:</span>
+                                                            <div className="flex flex-wrap gap-1 mt-1">
+                                                                {photoAnalysis[campaign.photos[photoIndex].id].excludeMatches.map(m => (
+                                                                    <span key={m} className="px-1.5 py-0.5 bg-red-600 text-white rounded text-[10px] font-bold animate-pulse">{m}</span>
                                                                 ))}
                                                             </div>
                                                         </div>
@@ -1747,7 +2048,19 @@
                                 >
                                     All
                                 </button>
-                                <button 
+                                <button
+                                    onClick={() => setSelectedStatus('Contracted')}
+                                    className={`px-2 py-1 text-[11px] font-bold rounded transition-all flex items-center gap-1 ${selectedStatus === 'Contracted' ? 'bg-indigo-500 text-white shadow' : 'text-gray-500 hover:text-gray-700'}`}
+                                >
+                                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span> Contracted
+                                </button>
+                                <button
+                                    onClick={() => setSelectedStatus('Material Ready')}
+                                    className={`px-2 py-1 text-[11px] font-bold rounded transition-all flex items-center gap-1 ${selectedStatus === 'Material Ready' ? 'bg-yellow-500 text-white shadow' : 'text-gray-500 hover:text-gray-700'}`}
+                                >
+                                    <span className="w-1.5 h-1.5 rounded-full bg-yellow-500"></span> Mat Ready
+                                </button>
+                                <button
                                     onClick={() => setSelectedStatus('Installed')}
                                     className={`px-2 py-1 text-[11px] font-bold rounded transition-all flex items-center gap-1 ${selectedStatus === 'Installed' ? 'bg-green-500 text-white shadow' : 'text-gray-500 hover:text-gray-700'}`}
                                 >
@@ -1969,7 +2282,7 @@
 
                 {/* Content */}
                 <div className="p-6">
-                    {filteredPOP.length === 0 ? (
+                    {filteredPOP.length === 0 && viewMode !== 'campaigns' ? (
                         <div className="text-center py-16">
                             <Icon name="Camera" size={48} className="mx-auto text-gray-300 mb-4" />
                             <h3 className="text-lg font-semibold text-gray-500">No photos found</h3>
@@ -1997,65 +2310,87 @@
                                     </button>
                                 </div>
                             )}
+                            {campaignGroups.length === 0 && (
+                                <div className="text-center py-16">
+                                    <Icon name="Camera" size={48} className="mx-auto text-gray-300 mb-4" />
+                                    <h3 className="text-lg font-semibold text-gray-500">No campaigns found</h3>
+                                    <p className="text-gray-400 text-sm mt-1">Try adjusting your filters or wait for tracker data to load</p>
+                                </div>
+                            )}
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {campaignGroups.map(campaign => (
-                                <div 
+                                <div
                                     key={campaign.campaignNumber}
-                                    onClick={() => setExpandedCampaign(campaign)}
-                                    className="group cursor-pointer bg-white border border-gray-200 rounded-xl overflow-hidden hover:shadow-xl hover:border-indigo-400 transition-all"
+                                    className="bg-white border border-gray-200 rounded-xl overflow-hidden hover:shadow-xl hover:border-indigo-400 transition-all"
                                 >
-                                    {/* Cover Photo with Stack Effect */}
-                                    <div className="relative h-48 bg-gray-100">
-                                        {/* Stacked effect background */}
-                                        <div className="absolute inset-0 bg-gray-300 rounded-lg transform rotate-2 translate-x-1 -translate-y-1 opacity-30"></div>
-                                        <div className="absolute inset-0 bg-gray-200 rounded-lg transform -rotate-1 translate-x-0.5 opacity-50"></div>
-                                        
-                                        {/* Main cover photo */}
-                                        <img 
-                                            src={campaign.coverPhoto?.thumbnailUrl || campaign.coverPhoto?.photoUrl}
-                                            alt={campaign.advertiser}
-                                            className="relative w-full h-full object-cover group-hover:scale-105 transition-transform z-10"
-                                        />
-                                        
-                                        {/* Photo count badge */}
-                                        <div className="absolute top-3 right-3 bg-black/80 text-white px-2 py-1 rounded-lg flex items-center gap-1.5 z-20">
-                                            <Icon name="Image" size={14} />
-                                            <span className="font-bold">{campaign.photoCount}</span>
-                                            <span className="text-gray-300 text-xs">photos</span>
+                                    {/* Cover Photo / Placeholder */}
+                                    {campaign.noPhotos ? (
+                                        /* Placeholder tile for campaigns without photos */
+                                        <div className="relative h-48 bg-gradient-to-br from-gray-100 to-gray-200 flex flex-col items-center justify-center">
+                                            <Icon name="FolderOpen" size={40} className="text-gray-400 mb-2" />
+                                            <span className="text-gray-500 text-sm font-medium">No photos yet</span>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); handleLinkCampaignFolder(campaign.campaignNumber); }}
+                                                className="mt-3 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-lg flex items-center gap-2 transition-colors"
+                                            >
+                                                {campaignFolders[campaign.campaignNumber]?.scanning
+                                                    ? <><Icon name="RefreshCw" size={14} className="animate-spin" /> Scanning...</>
+                                                    : <><Icon name="FolderOpen" size={14} /> Select Folder</>
+                                                }
+                                            </button>
                                         </div>
-                                        
-                                        {/* Progress overlay */}
-                                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 z-20">
-                                            <div className="flex items-center justify-between text-white mb-1">
-                                                <span className="text-xs font-medium">
-                                                    {campaign.photoCount} / {campaign.expectedQty || '?'} installed
-                                                </span>
-                                                {campaign.expectedQty > 0 && (
-                                                    <span className={`text-xs font-bold px-2 py-0.5 rounded ${
-                                                        campaign.isComplete ? 'bg-green-500' : 'bg-amber-500'
-                                                    }`}>
-                                                        {campaign.isComplete ? '✓ Complete' : `${campaign.missing} missing`}
+                                    ) : (
+                                        /* Cover photo with stack effect */
+                                        <div
+                                            className="relative h-48 bg-gray-100 cursor-pointer group"
+                                            onClick={() => setExpandedCampaign(campaign)}
+                                        >
+                                            <div className="absolute inset-0 bg-gray-300 rounded-lg transform rotate-2 translate-x-1 -translate-y-1 opacity-30"></div>
+                                            <div className="absolute inset-0 bg-gray-200 rounded-lg transform -rotate-1 translate-x-0.5 opacity-50"></div>
+
+                                            <img
+                                                src={campaign.coverPhoto?.thumbnailUrl || campaign.coverPhoto?.photoUrl}
+                                                alt={campaign.advertiser}
+                                                className="relative w-full h-full object-cover group-hover:scale-105 transition-transform z-10"
+                                            />
+
+                                            <div className="absolute top-3 right-3 bg-black/80 text-white px-2 py-1 rounded-lg flex items-center gap-1.5 z-20">
+                                                <Icon name="Image" size={14} />
+                                                <span className="font-bold">{campaign.photoCount}</span>
+                                                <span className="text-gray-300 text-xs">photos</span>
+                                            </div>
+
+                                            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 z-20">
+                                                <div className="flex items-center justify-between text-white mb-1">
+                                                    <span className="text-xs font-medium">
+                                                        {campaign.photoCount} / {campaign.expectedQty || '?'} installed
                                                     </span>
+                                                    {campaign.expectedQty > 0 && (
+                                                        <span className={`text-xs font-bold px-2 py-0.5 rounded ${
+                                                            campaign.isComplete ? 'bg-green-500' : 'bg-amber-500'
+                                                        }`}>
+                                                            {campaign.isComplete ? '✓ Complete' : `${campaign.missing} missing`}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {campaign.expectedQty > 0 && (
+                                                    <div className="w-full bg-gray-600 rounded-full h-1.5">
+                                                        <div
+                                                            className={`h-1.5 rounded-full transition-all ${campaign.isComplete ? 'bg-green-400' : 'bg-amber-400'}`}
+                                                            style={{ width: `${campaign.progress}%` }}
+                                                        ></div>
+                                                    </div>
                                                 )}
                                             </div>
-                                            {campaign.expectedQty > 0 && (
-                                                <div className="w-full bg-gray-600 rounded-full h-1.5">
-                                                    <div 
-                                                        className={`h-1.5 rounded-full transition-all ${campaign.isComplete ? 'bg-green-400' : 'bg-amber-400'}`}
-                                                        style={{ width: `${campaign.progress}%` }}
-                                                    ></div>
+
+                                            <div className="absolute inset-0 bg-indigo-600/0 group-hover:bg-indigo-600/20 transition-colors z-10 flex items-center justify-center">
+                                                <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-white px-4 py-2 rounded-lg shadow-lg">
+                                                    <span className="text-indigo-700 font-bold text-sm">View All Photos →</span>
                                                 </div>
-                                            )}
-                                        </div>
-                                        
-                                        {/* Hover overlay */}
-                                        <div className="absolute inset-0 bg-indigo-600/0 group-hover:bg-indigo-600/20 transition-colors z-10 flex items-center justify-center">
-                                            <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-white px-4 py-2 rounded-lg shadow-lg">
-                                                <span className="text-indigo-700 font-bold text-sm">View All Photos →</span>
                                             </div>
                                         </div>
-                                    </div>
-                                    
+                                    )}
+
                                     {/* Campaign Info */}
                                     <div className="p-4">
                                         <div className="flex items-start justify-between gap-2">
@@ -2067,9 +2402,12 @@
                                                 campaign.stage === 'POP Completed' ? 'bg-blue-100 text-blue-700' :
                                                 campaign.stage === 'Photos Taken' ? 'bg-purple-100 text-purple-700' :
                                                 campaign.stage === 'Installed' ? 'bg-green-100 text-green-700' :
+                                                campaign.stage === 'Material Ready For Install' ? 'bg-yellow-100 text-yellow-700' :
                                                 'bg-gray-100 text-gray-600'
                                             }`}>
-                                                {campaign.stage === 'POP Completed' ? '✓ POP' : campaign.stage}
+                                                {campaign.stage === 'POP Completed' ? '✓ POP' :
+                                                 campaign.stage === 'Material Ready For Install' ? 'Mat Ready' :
+                                                 campaign.stage}
                                             </span>
                                         </div>
                                         <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
@@ -2081,6 +2419,106 @@
                                                 Latest: {campaign.latestDate.toLocaleDateString()}
                                             </div>
                                         )}
+                                    </div>
+
+                                    {/* Per-Campaign Folder Link Footer */}
+                                    <div className="px-4 pb-3 border-t border-gray-100 pt-2">
+                                        {campaignFolders[campaign.campaignNumber]?.handle ? (
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-xs text-green-600 flex items-center gap-1">
+                                                    <Icon name="CheckCircle" size={12} />
+                                                    {campaignFolders[campaign.campaignNumber].photos?.length || 0} photos linked
+                                                </span>
+                                                <div className="flex items-center gap-1">
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); handleLinkCampaignFolder(campaign.campaignNumber); }}
+                                                        className="px-2 py-1 text-[10px] font-medium text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                                                    >
+                                                        Change
+                                                    </button>
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); handleUnlinkCampaignFolder(campaign.campaignNumber); }}
+                                                        className="px-2 py-1 text-[10px] font-medium text-red-500 hover:bg-red-50 rounded transition-colors"
+                                                    >
+                                                        Unlink
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ) : !campaign.noPhotos ? (
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); handleLinkCampaignFolder(campaign.campaignNumber); }}
+                                                className="w-full px-2 py-1.5 text-xs font-medium text-indigo-600 hover:bg-indigo-50 border border-indigo-200 rounded-lg transition-colors flex items-center justify-center gap-1"
+                                            >
+                                                <Icon name="FolderOpen" size={12} /> Select Folder
+                                            </button>
+                                        ) : null}
+
+                                        {/* Tag Editor Toggle */}
+                                        <div className="mt-2">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    if (tagEditorOpen === campaign.campaignNumber) {
+                                                        setTagEditorOpen(null);
+                                                    } else {
+                                                        const tags = getPopTags(campaign.campaignNumber);
+                                                        setEditingTags({
+                                                            include: tags.include.join(', '),
+                                                            exclude: tags.exclude.join(', ')
+                                                        });
+                                                        setTagEditorOpen(campaign.campaignNumber);
+                                                    }
+                                                }}
+                                                className="text-[10px] font-medium text-gray-500 hover:text-indigo-600 flex items-center gap-1 transition-colors"
+                                            >
+                                                <Icon name="Tag" size={10} />
+                                                Tags
+                                                {(() => {
+                                                    const tags = getPopTags(campaign.campaignNumber);
+                                                    const count = (tags.include?.length || 0) + (tags.exclude?.length || 0);
+                                                    return count > 0 ? <span className="px-1 py-0.5 bg-indigo-100 text-indigo-700 rounded text-[9px]">{count}</span> : null;
+                                                })()}
+                                                <Icon name={tagEditorOpen === campaign.campaignNumber ? "ChevronUp" : "ChevronDown"} size={10} />
+                                            </button>
+
+                                            {tagEditorOpen === campaign.campaignNumber && (
+                                                <div className="mt-2 space-y-2" onClick={(e) => e.stopPropagation()}>
+                                                    <div>
+                                                        <label className="text-[9px] font-bold text-green-600 uppercase block mb-0.5">Look for (include)</label>
+                                                        <input
+                                                            type="text"
+                                                            value={editingTags.include}
+                                                            onChange={(e) => setEditingTags(prev => ({ ...prev, include: e.target.value }))}
+                                                            placeholder={`e.g. ${campaign.advertiser?.toLowerCase().split(/[\s-]+/).slice(0, 2).join(', ')}`}
+                                                            className="w-full px-2 py-1 text-xs border-2 border-green-300 rounded bg-green-50 focus:border-green-500 focus:outline-none"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[9px] font-bold text-red-600 uppercase block mb-0.5">Flag if found (exclude)</label>
+                                                        <input
+                                                            type="text"
+                                                            value={editingTags.exclude}
+                                                            onChange={(e) => setEditingTags(prev => ({ ...prev, exclude: e.target.value }))}
+                                                            placeholder="e.g. old advertiser, competitor"
+                                                            className="w-full px-2 py-1 text-xs border-2 border-red-300 rounded bg-red-50 focus:border-red-500 focus:outline-none"
+                                                        />
+                                                    </div>
+                                                    <button
+                                                        onClick={() => {
+                                                            const tags = {
+                                                                include: editingTags.include.split(',').map(t => t.trim()).filter(Boolean),
+                                                                exclude: editingTags.exclude.split(',').map(t => t.trim()).filter(Boolean)
+                                                            };
+                                                            savePopTags(campaign.campaignNumber, tags);
+                                                            setTagEditorOpen(null);
+                                                        }}
+                                                        className="w-full px-2 py-1 text-[10px] font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded transition-colors"
+                                                    >
+                                                        Save Tags
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             ))}
@@ -2309,10 +2747,10 @@
                                     </div>
                                     <div>
                                         <p className="font-semibold text-green-700 flex items-center gap-2">
-                                            <Icon name="CheckCircle" size={16} /> Folder Linked
+                                            <Icon name="CheckCircle" size={16} /> Bulk Folder Linked
                                         </p>
                                         <p className="text-sm text-gray-600">
-                                            <strong>{linkedFolder.name}</strong> • {localPhotos.length} photos found
+                                            <strong>{linkedFolder.name}</strong> • {localPhotos.length} photos across {Object.keys(campaignFolders).length} campaigns
                                         </p>
                                     </div>
                                 </div>
@@ -2326,10 +2764,10 @@
                                         {scanningFolder ? 'Scanning...' : 'Refresh'}
                                     </button>
                                     <button
-                                        onClick={() => { setLinkedFolder(null); setLocalPhotos([]); }}
+                                        onClick={() => { setLinkedFolder(null); setCampaignFolders({}); }}
                                         className="px-3 py-2 bg-white hover:bg-red-50 border border-gray-300 text-red-600 rounded-lg text-sm font-medium transition-colors"
                                     >
-                                        Unlink
+                                        Unlink All
                                     </button>
                                 </div>
                             </div>
