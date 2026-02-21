@@ -145,9 +145,66 @@ The `parseDate()` function handles multiple formats:
 - ISO format: `YYYY-MM-DD`
 - Shorthand: `MM/DD/YY`
 
-### Campaign Stages
-Campaigns flow through stages defined in `ALL_STAGES` array:
-`RFP` -> `Initial Proposal` -> `Contracted` -> `Proofs Approved` -> `Material Ready For Install` -> `Installed` -> `POP Completed` -> `Takedown Complete`
+### Campaign Stages & Visibility Rules
+
+#### Stage Pipeline (`ALL_STAGES`, index.html ~line 2406)
+```
+RFP → Initial Proposal → Client Feedback → Pending Hold → On Hold →
+Pending Client Approval → Pending Finance Approval → Contracted →
+Proofs Approved → Working On It → Proofs Out For Approval → Artwork Received →
+Material Ready For Install → Installed → Photos Taken → POP Completed →
+Takedown Complete → Lost Opportunity → Canceled
+```
+
+#### Charted Qty (`adjustedQty`) — The System Trigger
+- **Set in:** Detail Modal (Schedule box → click "Charted" to edit, stored in `metaOverrides`)
+- **Hold Report** is the central place to review/confirm charted numbers (read-only display with color badges: green ✓ = matched, amber ⚠ = under, blue ↑ = over, gray `--` = unset)
+- **Charted qty gates the Daily Digest:** campaigns without confirmed `adjustedQty > 0` are excluded from ALL digest sections
+- **Pending calculation:** `Math.max(0, effectiveQty - installed)` where `effectiveQty = adjustedQty || totalQty`
+
+#### View Visibility by Stage & Charted Status
+
+| View | What Shows | Key Conditions |
+|------|-----------|----------------|
+| **Hold Report** | ALL campaigns | No filters — master inventory sorted by start date |
+| **Master Tracking** | All except ghosts/lost | Grouped by installTier (overdue/review/scheduled/inProgress/planned/complete) |
+| **Active Installs** | Material Ready + Installed | Only if `pending > 0` |
+| **Awaiting POP** | Installed only | Only if `pending === 0` (fully installed, needs proof photos) |
+| **Completed Campaigns** | Takedown Complete only | — |
+| **Pending Removals** | Installed/Photos Taken/POP/Takedown | Past end date, within 45-day removal window |
+
+#### Digest Email Visibility (digestModal.js + generateDigestHtml)
+
+**Global rule:** ALL digest sections require `adjustedQty > 0` (confirmed charted qty).
+
+| Digest Section | Source Category | Additional Filters |
+|---------------|----------------|-------------------|
+| **Delayed Flights** | `delayedFlights` + `pastDue` | Exclude: Installed, Photos Taken, POP Completed, Takedown Complete, Canceled, Pending Hold, On Hold, RFP, Initial Proposal. Contracted/Proofs Approved/Out for Approval only if 30+ days stale |
+| **In-Progress** | `inProgressFlights` | Charted only |
+| **Upcoming** | `upcoming` | Charted only |
+| **Installed This Week** | `fullyInstalledThisWeek` | Charted only |
+| **Recent Installs** | `recentInstalls` | Charted only |
+| **Removals Due** | `expiredFlights` | Charted only |
+| **Pipeline Summary** | Aggregate counts | Charted filter on underlying data |
+
+#### processedData Categorization (index.html ~line 9900-10100)
+
+| Category | Condition | Time Window |
+|----------|-----------|-------------|
+| `delayedFlights` | Not completed stage, past grace period (7d) | Last 3 weeks (7-21 days late) |
+| `pastDue` | Not completed stage, past start date | Older than 3 weeks |
+| `inProgressFlights` | Material Ready + started, OR Installed with pending | Last 4 weeks |
+| `upcoming` | Start date = next week, not canceled | Next week only |
+| `fullyInstalledThisWeek` | Installed stage, completion this week | Current formula week (Sun-Sat) |
+| `recentInstalls` | Installed stage | Last 30 days |
+| `expiredFlights` | Installed/POP stages, past end date | Last 45 days (deduplicated) |
+| `activeInstalls` | Material Ready or Installed with pending > 0 | No time limit |
+| `awaitingPop` | Installed with pending === 0 | No time limit |
+| `rotations` | Rotation advertisers (Rideshare Amigo, Jacob Emrani, etc.) | Current week through year-end |
+
+**isCompletedStage** (line ~10003): `['installed', 'photos taken', 'pop completed', 'takedown complete', 'canceled', 'cancelled', 'lost opportunity']` AND no outstanding work (`pending === 0` for Installed)
+
+**Excluded from delayed:** Warner Bros Perms, Adriana's Insurance, Filler campaigns
 
 ### Detail Modal (`detailModal.js`)
 Unified campaign detail view with **4-column layout**:
