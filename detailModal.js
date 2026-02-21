@@ -176,6 +176,7 @@
         const [hasReplacement, setHasReplacement] = useState(false);
         const [editingRemoval, setEditingRemoval] = useState(false);
         const [matExpanded, setMatExpanded] = useState(false);
+        const [breakdownExpanded, setBreakdownExpanded] = useState(false);
         const [commsDrawerOpen, setCommsDrawerOpen] = useState(false);
         const [historyExpanded, setHistoryExpanded] = useState(false);
 
@@ -865,9 +866,26 @@
                 setNewStage(item.previousStage);
             }
 
+            // Also reset removal tracking — no charted qty means no removals to track
+            saveData.removalQty = 0;
+            saveData.removedCount = 0;
+            saveData.removalStatus = 'scheduled';
+            saveData.removalAssignee = null;
+            saveData.removalPhotosLink = null;
+            saveData.hasReplacement = false;
+
             onSave(uniqueKey, finalStage, saveData);
             setAdjustedQty(null);
             setEditingAdjustedQty(false);
+
+            // Reset removal state to match
+            setRemovalQty(0);
+            setRemovedCount(0);
+            setRemovalStatus('scheduled');
+            setRemovalAssignee('');
+            setRemovalPhotosLink('');
+            setHasReplacement(false);
+            setEditingRemoval(false);
         };
 
         // UNIFIED SAVE - saves all data at once
@@ -1357,6 +1375,38 @@
                                 <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-2 mb-3">
                                     <div className={`h-2 rounded-full transition-all ${matIsSufficient ? 'bg-green-500' : matReceived > 0 ? 'bg-amber-500' : 'bg-gray-300'}`} style={{ width: `${Math.min(pct, 100)}%` }} />
                                 </div>
+                                {/* Inventory Breakdown toggle */}
+                                <button onClick={() => setBreakdownExpanded(!breakdownExpanded)} className="w-full flex items-center justify-between text-[10px] text-blue-500 hover:text-blue-700 transition-colors cursor-pointer py-1 mb-1">
+                                    <span className="flex items-center gap-1">
+                                        <Icon name="Table" size={10} /> Breakdown
+                                        {(() => { const r = getReconciliationStatus(); return r.status !== 'none' ? React.createElement('span', { className: `ml-1 px-1 py-0.5 rounded text-[8px] font-bold ${r.status === 'matched' ? 'bg-green-100 text-green-700' : r.status === 'under' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}` }, r.status === 'matched' ? '\u2713' : r.status === 'under' ? '\u26A0' : '!') : null; })()}
+                                    </span>
+                                    <Icon name={breakdownExpanded ? 'ChevronUp' : 'ChevronDown'} size={10} />
+                                </button>
+                                {breakdownExpanded && (
+                                    <div className="bg-gray-50 dark:bg-slate-900 border dark:border-slate-600 rounded p-2 mb-2">
+                                        <div className="flex justify-between items-center mb-1">
+                                            <span className={`text-[10px] font-bold ${getInventoryStatus().isSufficient ? 'text-green-600' : 'text-red-500'}`}>
+                                                Recv: {getInventoryStatus().currentTotal} / {customQty || 0}
+                                            </span>
+                                            {materialBreakdown.some(r => r.code || r.qty) && <button onClick={() => { if (confirm('Clear all breakdown rows?')) setMaterialBreakdown([{ code: '', qty: '', scheduled: '', scheduledLocked: false, link: '' }]); }} className="text-[9px] text-red-400 hover:text-red-600">Clear all</button>}
+                                        </div>
+                                        {(() => { const recon = getReconciliationStatus(); if (recon.status === 'none') return null; const colorMap = { matched: 'text-green-600', under: 'text-amber-600', over: 'text-red-600' }; const labelMap = { matched: 'Matched', under: 'Under', over: 'Over' }; return React.createElement('div', { className: `mb-1 text-[10px] font-bold ${colorMap[recon.status]}` }, `${recon.status === 'matched' ? '\u2713' : recon.status === 'under' ? '\u26A0' : '\u26D4'} Sched: ${recon.totalScheduled} / ${recon.charted} (${labelMap[recon.status]})`); })()}
+                                        <div className="space-y-2 mb-1.5">{materialBreakdown.map((row, idx) => { return React.createElement('div', { key: idx, className: 'bg-white dark:bg-slate-800 rounded border border-gray-200 dark:border-slate-600 p-1.5' },
+                                            React.createElement('div', { className: 'flex items-center gap-1 mb-1' },
+                                                React.createElement('input', { placeholder: 'Design code', value: row.code, onChange: e => updateRow(idx, 'code', e.target.value), className: 'flex-1 min-w-0 text-[11px] font-medium border rounded px-1.5 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200' }),
+                                                React.createElement('button', { onClick: () => removeRow(idx), className: 'shrink-0 p-1 rounded text-gray-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors', title: 'Delete row' }, React.createElement(Icon, { name: 'Trash2', size: 12 }))),
+                                            React.createElement('div', { className: 'grid grid-cols-2 gap-1.5' },
+                                                React.createElement('div', null,
+                                                    React.createElement('div', { className: 'text-[9px] text-gray-400 mb-0.5' }, 'Recv'),
+                                                    React.createElement('input', { type: 'number', value: row.qty, onChange: e => updateRow(idx, 'qty', e.target.value), className: 'w-full text-[11px] border rounded px-1.5 py-1 text-center dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200' })),
+                                                React.createElement('div', null,
+                                                    React.createElement('div', { className: 'text-[9px] text-gray-400 mb-0.5 flex items-center justify-between' }, 'Sched', row.scheduledLocked && React.createElement('button', { onClick: () => unlockScheduled(idx), className: 'text-amber-500 hover:text-amber-700' }, React.createElement(Icon, { name: 'Lock', size: 9 }))),
+                                                    React.createElement('input', { type: 'number', value: row.scheduled, onChange: e => updateScheduled(idx, e.target.value), className: `w-full text-[11px] border rounded px-1.5 py-1 text-center dark:bg-slate-700 dark:text-gray-200 ${row.scheduledLocked ? 'border-amber-400 bg-amber-50 dark:bg-amber-500/10 dark:border-amber-500/40' : 'dark:border-slate-600'}` })))
+                                        ); })}</div>
+                                        <button onClick={addRow} className="text-[10px] text-blue-600 font-bold hover:underline">+ Add</button>
+                                    </div>
+                                )}
                                 {item.proofLink && <div className="flex items-center gap-1 mb-2 text-[10px]"><a href={item.proofLink.startsWith('http') ? item.proofLink : `https://${item.proofLink}`} target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:underline flex items-center gap-0.5 truncate"><Icon name="ExternalLink" size={10} /> Proof</a></div>}
                                 {linkedMaterials.length > 0 ? (
                                     <div>
@@ -1414,7 +1464,11 @@
                                         {removalAssignee && <div className="text-[10px] text-gray-500 mb-1">Assignee: {removalAssignee}</div>}
                                         {item.daysUntilDeadline !== undefined && <div className={`text-[10px] font-bold ${item.daysUntilDeadline < 0 ? 'text-red-600 animate-pulse' : item.daysUntilDeadline <= 7 ? 'text-orange-600' : 'text-green-600'}`}>{item.daysUntilDeadline < 0 ? `${Math.abs(item.daysUntilDeadline)}d overdue` : `${item.daysUntilDeadline}d left`}</div>}
                                         {hasReplacement && <div className="text-[10px] text-green-600 flex items-center gap-1 mt-1"><Icon name="RefreshCw" size={10} /> Replacement</div>}
-                                        <button onClick={() => setEditingRemoval(true)} className="w-full mt-2 px-2 py-1 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 text-[10px] font-medium rounded hover:bg-gray-200 dark:hover:bg-slate-600 flex items-center justify-center gap-1"><Icon name="Edit" size={10} /> Edit</button>
+                                        {adjustedQty != null && adjustedQty > 0 ? (
+                                            <button onClick={() => setEditingRemoval(true)} className="w-full mt-2 px-2 py-1 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 text-[10px] font-medium rounded hover:bg-gray-200 dark:hover:bg-slate-600 flex items-center justify-center gap-1"><Icon name="Edit" size={10} /> Edit</button>
+                                        ) : (
+                                            <div className="mt-2 text-center text-[9px] text-gray-400">Set charted qty to enable removal tracking</div>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -1515,16 +1569,11 @@
                                                 {selectedTemplate === 'delay' && <div className="mt-2"><label className="text-xs font-bold dark:text-gray-300">New Date</label><input type="text" value={newEta} onChange={(e)=>setNewEta(e.target.value)} className="w-full text-sm border rounded px-2 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200"/></div>}
                                             </div>)}
 
-                                            {selectedTemplate === 'material_received' && (<div>
-                                                <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">Inventory Breakdown</div>
-                                                <div className="bg-gray-50 dark:bg-slate-900 border dark:border-slate-600 rounded p-3">
-                                                    <div className="flex justify-between items-center mb-1"><span className={`text-xs font-bold ${getInventoryStatus().isSufficient ? 'text-green-600' : 'text-red-500'}`}>Received: {getInventoryStatus().currentTotal} / {customQty || 0}</span></div>
-                                                    {(() => { const recon = getReconciliationStatus(); if (recon.status === 'none') return null; const colorMap = { matched: 'text-green-600', under: 'text-amber-600', over: 'text-red-600' }; const iconMap = { matched: '✓', under: '⚠', over: '🚫' }; const labelMap = { matched: 'Matched', under: 'Under-scheduled', over: 'Over-scheduled' }; return React.createElement('div', { className: `flex justify-between items-center mb-2 text-xs font-bold ${colorMap[recon.status]}` }, React.createElement('span', null, `${iconMap[recon.status]} Scheduled: ${recon.totalScheduled} / ${recon.charted} (${labelMap[recon.status]})`), recon.status === 'over' ? React.createElement('span', { className: 'bg-red-100 text-red-700 px-2 py-0.5 rounded text-xs' }, `+${recon.totalScheduled - recon.charted} over charted`) : null); })()}
-                                                    <div className="flex gap-2 mb-1 text-xs font-bold text-gray-400 uppercase tracking-wide"><span className="flex-1">Design Code</span><span className="w-16 text-center">Recv</span><span className="w-20 text-center">Sched</span><span className="w-12 text-center">+/−</span><span className="flex-1">Drive Link</span><span className="w-6"></span></div>
-                                                    <div className="space-y-2 mb-2">{materialBreakdown.map((row, idx) => { const recv = parseFloat(row.qty) || 0; const sched = parseFloat(row.scheduled) || 0; const rowOvr = recv - sched; return (<div key={idx} className="flex gap-2 items-center"><input placeholder="Code" value={row.code} onChange={e => updateRow(idx, 'code', e.target.value)} className="flex-1 text-sm border rounded px-2 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200" /><input placeholder="Recv" type="number" value={row.qty} onChange={e => updateRow(idx, 'qty', e.target.value)} className="w-16 text-sm border rounded px-2 py-1 text-center dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200" /><div className="w-20 flex items-center gap-0.5"><input placeholder="Sched" type="number" value={row.scheduled} onChange={e => updateScheduled(idx, e.target.value)} className={`w-14 text-sm border rounded px-1 py-1 text-center dark:bg-slate-700 dark:text-gray-200 ${row.scheduledLocked ? 'border-amber-400 bg-amber-50 dark:bg-amber-500/10 dark:border-amber-500/40' : 'dark:border-slate-600'}`} />{row.scheduledLocked && <button onClick={() => unlockScheduled(idx)} className="text-amber-500 hover:text-amber-700"><Icon name="Lock" size={12} /></button>}</div><span className={`w-12 text-xs font-bold text-center ${rowOvr > 0 ? 'text-green-600' : rowOvr < 0 ? 'text-red-500' : 'text-gray-400'}`}>{(row.code || row.qty) ? (rowOvr > 0 ? `+${rowOvr}` : rowOvr < 0 ? `${rowOvr}` : '—') : ''}</span><input placeholder="Drive Link" value={row.link} onChange={e => updateRow(idx, 'link', e.target.value)} className="flex-1 text-sm border border-purple-200 dark:border-purple-500/30 rounded px-2 py-1 dark:bg-slate-700 dark:text-gray-200" /><button onClick={() => removeRow(idx)} className="text-red-400 hover:text-red-600"><Icon name="X" size={16} /></button></div>);})}</div>
-                                                    <button onClick={addRow} className="text-xs text-blue-600 font-bold hover:underline">+ Add Row</button>
-                                                </div>
-                                            </div>)}
+                                            {selectedTemplate === 'material_received' && (
+                                                <button onClick={() => setBreakdownExpanded(true)} className="w-full p-2 bg-blue-50 dark:bg-blue-500/10 rounded text-[10px] text-blue-600 hover:bg-blue-100 transition-colors flex items-center gap-1">
+                                                    <Icon name="ArrowUp" size={10} /> Edit breakdown in Materials card above
+                                                </button>
+                                            )}
 
                                             <div className="border-b border-gray-100 dark:border-slate-700" />
 

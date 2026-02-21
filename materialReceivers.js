@@ -2938,9 +2938,15 @@ function doGet(e) {
         }
         if (!printer && upperText.includes('CIRCLE GRAPHICS')) printer = 'Circle Graphics';
 
-        let posterCode = receiptNumber;
-        const cm = fullText.match(/(?:POSTER\s*CODE|CODE|SKU)[:\s]*([A-Z0-9\-]+)/i);
-        if (cm) posterCode = cm[1].trim();
+        // Primary: derive poster code from filename (strip extension)
+        // e.g., "STF-NETFLIX-S5.pdf" → "STF-NETFLIX-S5"
+        let posterCode = file.name.replace(/\.[^/.]+$/, '').trim();
+
+        // If filename looks generic, fall back to OCR then receipt number
+        if (/^(document|scan|img|image|file|untitled|receipt|invoice|download)\d*$/i.test(posterCode)) {
+            const cm = fullText.match(/(?:POSTER\s*CODE|CODE|SKU)[:\s]*([A-Z0-9\-]+)/i);
+            posterCode = cm ? cm[1].trim() : receiptNumber;
+        }
 
         let pdfComments = '';
         const commMatch = fullText.match(/(?:COMMENTS|NOTES|REMARKS)[:\s]*(.+?)(?=\s*(?:Receipt|Invoice|Poster|Transaction|Total|Summary|Client|Printer|Date|Qty|\b[A-Z][a-z]+:))/i)
