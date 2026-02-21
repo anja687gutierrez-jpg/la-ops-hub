@@ -1928,6 +1928,25 @@
         // --- EMAIL DIGEST GENERATION LOGIC ---
         
         const generateDigestHtml = (processedData, weatherForecast, settings) => {
+            // Filter: exclude completed-stage campaigns from delay/pastDue in digest
+            const DIGEST_EXCLUDED_STAGES = ['installed', 'photos taken', 'pop completed', 'takedown complete', 'canceled', 'cancelled', 'pending hold', 'on hold', 'rfp', 'initial proposal'];
+            const DIGEST_STALE_ONLY_STAGES = ['contracted', 'proofs approved', 'out for approval'];
+            // Global: exclude uncharted campaigns from all digest tables
+            const hasCharted = (item) => item.adjustedQty && item.adjustedQty > 0;
+            const isDigestDelayExcluded = (item) => {
+                // Must have confirmed charted qty — applies to ALL stages
+                if (!item.adjustedQty || item.adjustedQty <= 0) return true;
+                const stageLower = (item.stage || '').toLowerCase();
+                if (DIGEST_EXCLUDED_STAGES.includes(stageLower)) return true;
+                if (DIGEST_STALE_ONLY_STAGES.includes(stageLower)) {
+                    const startDate = item.dateObj instanceof Date ? item.dateObj : (item.dateObj ? new Date(item.dateObj) : null);
+                    if (!startDate) return true;
+                    const now = new Date(); now.setHours(0,0,0,0);
+                    return Math.floor((now - startDate) / (1000 * 60 * 60 * 24)) < 30;
+                }
+                return false;
+            };
+
             // Dynamic date label based on title keywords (Daily/Weekly/Monthly)
             const now = new Date();
             const fmtDate = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -2094,11 +2113,12 @@
                     w.push('6%', '5%');
 
                     // Unified: delayed + pastDue, newest on top (oldest at bottom)
+                    // Exclude manually overridden completed-stage campaigns
                     const twoWeeksAgo = new Date(); twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
                     const allOverdue = [
                         ...(processedData.delayedFlights || []),
                         ...(processedData.pastDue || [])
-                    ].sort((a, b) => (b.dateObj || 0) - (a.dateObj || 0));
+                    ].filter(i => !isDigestDelayExcluded(i)).sort((a, b) => (b.dateObj || 0) - (a.dateObj || 0));
                     // Highlight rows from last 2 weeks
                     allOverdue.forEach(item => {
                         if (item.dateObj && item.dateObj >= twoWeeksAgo) item._rowHighlight = '#fff8e1';
@@ -2127,7 +2147,7 @@
                     h.push('Progress');
                     w.push('20%');
 
-                    return createHtmlTable(processedData.inProgressFlights, h, w, item => {
+                    return createHtmlTable(processedData.inProgressFlights.filter(hasCharted), h, w, item => {
                         const row = [formatCampaignCell(item.advertiser, item.name, item.productionProof, item.product || item.media)];
                         if (showMarket) row.push(formatMarket(item.market));
                         if (showOwner) row.push(item.owner);
@@ -2165,7 +2185,7 @@
                     h.push('Start', 'Mat. Rcvd');
                     w.push('8%', '6%');
 
-                    return createHtmlTable(processedData.upcoming, h, w, item => {
+                    return createHtmlTable(processedData.upcoming.filter(hasCharted), h, w, item => {
                         const row = [item.stage, formatCampaignCell(item.advertiser, item.name, item.productionProof, item.product || item.media)];
                         if (showMarket) row.push(formatMarket(item.market));
                         if (showOwner) row.push(item.owner);
@@ -2182,7 +2202,7 @@
                     h.push('Start', '1st Install', 'Units');
                     w.push('8%', '8%', '12%');
 
-                    return createHtmlTable(processedData.fullyInstalledThisWeek, h, w, item => {
+                    return createHtmlTable(processedData.fullyInstalledThisWeek.filter(hasCharted), h, w, item => {
                         const row = [formatCampaignCell(item.advertiser, item.name, item.productionProof, item.product || item.media)];
                         if (showMarket) row.push(formatMarket(item.market));
                         if (showOwner) row.push(item.owner);
@@ -2210,10 +2230,10 @@
                     };
 
                     const stats = [
-                        { label: 'Anticipated This Week', count: countUnique(processedData.thisWeek || processedData.upcoming), faces: sumFaces(processedData.thisWeek || processedData.upcoming) },
-                        { label: 'In-Progress', count: countUnique(processedData.inProgressFlights), faces: sumFaces(processedData.inProgressFlights) },
-                        { label: 'On Hold', count: countUnique(processedData.onHoldCampaigns), faces: sumFaces(processedData.onHoldCampaigns) },
-                        { label: 'Removals Due', count: countUnique(processedData.expiredFlights), faces: sumFaces(processedData.expiredFlights) },
+                        { label: 'Anticipated This Week', count: countUnique((processedData.thisWeek || processedData.upcoming).filter(hasCharted)), faces: sumFaces((processedData.thisWeek || processedData.upcoming).filter(hasCharted)) },
+                        { label: 'In-Progress', count: countUnique(processedData.inProgressFlights.filter(hasCharted)), faces: sumFaces(processedData.inProgressFlights.filter(hasCharted)) },
+                        { label: 'On Hold', count: countUnique((processedData.onHoldCampaigns || []).filter(hasCharted)), faces: sumFaces((processedData.onHoldCampaigns || []).filter(hasCharted)) },
+                        { label: 'Removals Due', count: countUnique(processedData.expiredFlights.filter(hasCharted)), faces: sumFaces(processedData.expiredFlights.filter(hasCharted)) },
                     ].filter(s => s.count > 0);
 
                     let html = `<table class="data-table" style="font-size: ${fontSize};"><tr><th style="font-size: ${headerSize}; padding: ${padding};" width="55%">Category</th><th style="font-size: ${headerSize}; padding: ${padding};" width="22%">Campaigns</th><th style="font-size: ${headerSize}; padding: ${padding};" width="23%">Faces</th></tr>`;
@@ -2226,7 +2246,7 @@
 
                 removal: (() => {
                     // Sort most overdue first
-                    const sorted = [...(processedData.expiredFlights || [])].sort((a, b) => {
+                    const sorted = [...(processedData.expiredFlights || [])].filter(hasCharted).sort((a, b) => {
                         const dA = a.endDateObj ? (new Date() - a.endDateObj) : 0;
                         const dB = b.endDateObj ? (new Date() - b.endDateObj) : 0;
                         return dB - dA;
@@ -2264,7 +2284,8 @@
             let sectionsHtml = '';
 
             // Unified delayed count (delayed + pastDue, matching the table)
-            const allOverdueCount = (processedData.delayedFlights || []).length + (processedData.pastDue || []).length;
+            // Exclude manually overridden completed-stage campaigns
+            const allOverdueCount = (processedData.delayedFlights || []).filter(i => !isDigestDelayExcluded(i)).length + (processedData.pastDue || []).filter(i => !isDigestDelayExcluded(i)).length;
 
             // 1. Summary KPIs + In-House vs Client count
             if (settings.sections.summary) {
@@ -2276,9 +2297,9 @@
                 <h2>THIS WEEK AT A GLANCE</h2>
                 <div class="summary-grid">
                     <div class="summary-item"><div class="count" style="color: ${allOverdueCount > 0 ? '#d32f2f' : '#4caf50'};">${allOverdueCount}</div><div class="label">DELAYED</div></div>
-                    <div class="summary-item"><div class="count normal">${processedData.inProgressFlights.length}</div><div class="label">IN-PROGRESS</div></div>
-                    <div class="summary-item"><div class="count normal">${processedData.upcoming.length}</div><div class="label">UPCOMING</div></div>
-                    <div class="summary-item"><div class="count" style="color: #4caf50;">${processedData.fullyInstalledThisWeek.length}</div><div class="label">INSTALLED</div></div>
+                    <div class="summary-item"><div class="count normal">${processedData.inProgressFlights.filter(hasCharted).length}</div><div class="label">IN-PROGRESS</div></div>
+                    <div class="summary-item"><div class="count normal">${processedData.upcoming.filter(hasCharted).length}</div><div class="label">UPCOMING</div></div>
+                    <div class="summary-item"><div class="count" style="color: #4caf50;">${processedData.fullyInstalledThisWeek.filter(hasCharted).length}</div><div class="label">INSTALLED</div></div>
                 </div>
                 ${prodLine}
                 </td></tr>`;
@@ -4046,7 +4067,7 @@
             </div>
         );
 
-        const MasterTrackingTable = ({ data, onRowClick, onBack, onOpenSettings }) => {
+        const MasterTrackingTable = ({ data, onRowClick, onBack, onOpenSettings, onBulkUpdateStage }) => {
             // Column presets
             const allColumns = {
                 date: true, id: true, market: true, advertiser: true,
@@ -4065,6 +4086,47 @@
             const [compactMode, setCompactMode] = useState(false); // Default to full view
             const [viewMode, setViewMode] = useState('grouped'); // 'grouped' or 'flat'
 
+            // Bulk selection state
+            const [bulkMode, setBulkMode] = useState(false);
+            const [selectedKeys, setSelectedKeys] = useState(new Set());
+            const [bulkStage, setBulkStage] = useState('');
+
+            // Build composite key matching override system
+            const getCampaignKey = (row) => `${row.id}_${row.date}_${row.product || row.media}`;
+
+            // Toggle a single row's selection
+            const toggleRowSelection = (row) => {
+                const key = getCampaignKey(row);
+                setSelectedKeys(prev => {
+                    const next = new Set(prev);
+                    if (next.has(key)) next.delete(key); else next.add(key);
+                    return next;
+                });
+            };
+
+            // Toggle all rows in a section
+            const toggleSectionSelection = (rows) => {
+                const keys = rows.map(getCampaignKey);
+                setSelectedKeys(prev => {
+                    const next = new Set(prev);
+                    const allSelected = keys.every(k => next.has(k));
+                    keys.forEach(k => allSelected ? next.delete(k) : next.add(k));
+                    return next;
+                });
+            };
+
+            // Toggle all visible rows
+            const toggleAllSelection = () => {
+                const allKeys = data.map(getCampaignKey);
+                setSelectedKeys(prev => {
+                    const allSelected = allKeys.every(k => prev.has(k));
+                    return allSelected ? new Set() : new Set(allKeys);
+                });
+            };
+
+            // Clear selections when data changes
+            useEffect(() => { setSelectedKeys(new Set()); }, [data]);
+
             // Toggle compact mode and update visible columns
             const toggleCompactMode = () => {
                 const newCompactMode = !compactMode;
@@ -4073,7 +4135,7 @@
             };
 
             // Calculate visible column count for colSpan
-            const visibleColCount = Object.values(visibleCols).filter(Boolean).length;
+            const visibleColCount = Object.values(visibleCols).filter(Boolean).length + (bulkMode ? 1 : 0);
 
             // Calculate summary stats (6-tier: overdue, review, scheduled, inProgress, planned, pending)
             const stats = useMemo(() => {
@@ -4185,30 +4247,6 @@
             const cellPad = compactMode ? 'px-2 py-1.5' : 'px-4 py-3';
             const fontSize = compactMode ? 'text-xs' : 'text-sm';
 
-            // Render a single table section (for grouped view)
-            const renderTableSection = (sectionData, sectionTitle, sectionColor, sectionIcon) => {
-                if (!sectionData || sectionData.length === 0) return null;
-
-                return (
-                    <div className="mb-4">
-                        {sectionTitle && (
-                            <div className={`px-4 py-2 ${sectionColor} border-l-4 flex items-center justify-between`}>
-                                <div className="flex items-center gap-2">
-                                    <Icon name={sectionIcon} size={14} />
-                                    <span className="font-semibold text-sm">{sectionTitle}</span>
-                                    <span className="text-xs opacity-75">({sectionData.length})</span>
-                                </div>
-                            </div>
-                        )}
-                        <table className="w-full text-left border-collapse">
-                            <tbody className="divide-y divide-gray-100">
-                                {sectionData.map((row, idx) => renderTableRow(row, idx))}
-                            </tbody>
-                        </table>
-                    </div>
-                );
-            };
-
             // Tier-based row background styling
             const getTierRowClass = (row) => {
                 if (row.isGhost) return 'bg-orange-50';
@@ -4235,12 +4273,18 @@
             };
 
             // Render a single row (extracted for reuse)
-            const renderTableRow = (row, idx) => (
+            const renderTableRow = (row, idx) => {
+                const rowKey = getCampaignKey(row);
+                const isSelected = bulkMode && selectedKeys.has(rowKey);
+                return (
                 <tr
                     key={`${row.id}-${row.date}-${idx}`}
-                    onClick={() => onRowClick(row)}
-                    className={`hover:bg-gray-50 transition-colors cursor-pointer ${getTierRowClass(row)}`}
+                    onClick={() => bulkMode ? toggleRowSelection(row) : onRowClick(row)}
+                    className={`hover:bg-gray-50 transition-colors cursor-pointer ${getTierRowClass(row)} ${isSelected ? 'ring-2 ring-inset ring-purple-400 bg-purple-50/40' : ''}`}
                 >
+                    {bulkMode && <td className={`${cellPad} text-center`} onClick={(e) => e.stopPropagation()}>
+                        <input type="checkbox" checked={isSelected} onChange={() => toggleRowSelection(row)} className="rounded text-purple-600 cursor-pointer" />
+                    </td>}
                     {visibleCols.date && <td className={`${cellPad} ${fontSize} text-gray-600 whitespace-nowrap ${getTierCellBg(row)}`}>
                         {row.rawDate || row.date}
                     </td>}
@@ -4338,6 +4382,7 @@
                     </td>}
                 </tr>
             );
+            };
 
             return (
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -4423,6 +4468,17 @@
                                 <Icon name="Settings" size={16} />
                             </button>
                         )}
+                        {/* Bulk Select Toggle */}
+                        {onBulkUpdateStage && (
+                            <button
+                                onClick={() => { setBulkMode(!bulkMode); if (bulkMode) { setSelectedKeys(new Set()); setBulkStage(''); } }}
+                                className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded transition-colors ${bulkMode ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                                title={bulkMode ? 'Exit bulk select mode' : 'Enter bulk select mode'}
+                            >
+                                <Icon name="CheckSquare" size={12} />
+                                {bulkMode ? 'Done' : 'Select'}
+                            </button>
+                        )}
                         {/* View Mode Toggle - Grouped vs Flat */}
                         <button
                             onClick={() => setViewMode(viewMode === 'grouped' ? 'flat' : 'grouped')}
@@ -4485,6 +4541,14 @@
                     <table className="w-full text-left border-collapse" style={{ minWidth: compactMode ? '800px' : '1200px' }}>
                     <thead>
                         <tr className={`${compactMode ? 'text-[10px]' : 'text-xs'} font-semibold text-gray-500 bg-gray-50 border-b border-gray-200 uppercase tracking-wider`}>
+                        {bulkMode && <th className={`${cellPad} text-center w-8`}>
+                            <input type="checkbox"
+                                checked={data.length > 0 && data.every(r => selectedKeys.has(getCampaignKey(r)))}
+                                ref={el => { if (el) el.indeterminate = selectedKeys.size > 0 && !data.every(r => selectedKeys.has(getCampaignKey(r))); }}
+                                onChange={toggleAllSelection}
+                                className="rounded text-purple-600 cursor-pointer"
+                            />
+                        </th>}
                         {visibleCols.date && <th className={`${cellPad} sticky left-0 bg-gray-50 z-10`}>Date</th>}
                         {visibleCols.id && <th className={`${cellPad} ${visibleCols.date ? '' : 'sticky left-0 bg-gray-50 z-10'}`}>ID</th>}
                         {visibleCols.market && <th className={cellPad}>Market</th>}
@@ -4509,6 +4573,11 @@
                                 <tr>
                                     <td colSpan={visibleColCount} className="px-4 py-2 bg-red-50 border-l-4 border-l-red-500">
                                         <div className="flex items-center gap-2 text-red-700">
+                                            {bulkMode && <input type="checkbox"
+                                                checked={groupedData.overdue.every(r => selectedKeys.has(getCampaignKey(r)))}
+                                                onChange={() => toggleSectionSelection(groupedData.overdue)}
+                                                className="rounded text-purple-600 cursor-pointer"
+                                            />}
                                             <Icon name="Clock" size={14} />
                                             <span className="font-semibold text-sm">Overdue (&gt;7 Days)</span>
                                             <span className="text-xs opacity-75 bg-red-200 px-1.5 py-0.5 rounded-full">{groupedData.overdue.length}</span>
@@ -4525,6 +4594,11 @@
                                 <tr>
                                     <td colSpan={visibleColCount} className="px-4 py-2 bg-amber-50 border-l-4 border-l-amber-400">
                                         <div className="flex items-center gap-2 text-amber-700">
+                                            {bulkMode && <input type="checkbox"
+                                                checked={groupedData.needsReview.every(r => selectedKeys.has(getCampaignKey(r)))}
+                                                onChange={() => toggleSectionSelection(groupedData.needsReview)}
+                                                className="rounded text-purple-600 cursor-pointer"
+                                            />}
                                             <Icon name="AlertTriangle" size={14} />
                                             <span className="font-semibold text-sm">Needs Review</span>
                                             <span className="text-xs opacity-75 bg-amber-200 px-1.5 py-0.5 rounded-full">{groupedData.needsReview.length}</span>
@@ -4541,6 +4615,11 @@
                                 <tr>
                                     <td colSpan={visibleColCount} className="px-4 py-2 bg-blue-50 border-l-4 border-l-blue-400">
                                         <div className="flex items-center gap-2 text-blue-700">
+                                            {bulkMode && <input type="checkbox"
+                                                checked={groupedData.scheduled.every(r => selectedKeys.has(getCampaignKey(r)))}
+                                                onChange={() => toggleSectionSelection(groupedData.scheduled)}
+                                                className="rounded text-purple-600 cursor-pointer"
+                                            />}
                                             <Icon name="CalendarClock" size={14} />
                                             <span className="font-semibold text-sm">Scheduled</span>
                                             <span className="text-xs opacity-75 bg-blue-200 px-1.5 py-0.5 rounded-full">{groupedData.scheduled.length}</span>
@@ -4557,6 +4636,11 @@
                                 <tr>
                                     <td colSpan={visibleColCount} className="px-4 py-2 bg-blue-50 border-l-4 border-l-blue-400">
                                         <div className="flex items-center gap-2 text-blue-700">
+                                            {bulkMode && <input type="checkbox"
+                                                checked={groupedData.inProgress.every(r => selectedKeys.has(getCampaignKey(r)))}
+                                                onChange={() => toggleSectionSelection(groupedData.inProgress)}
+                                                className="rounded text-purple-600 cursor-pointer"
+                                            />}
                                             <Icon name="Hammer" size={14} />
                                             <span className="font-semibold text-sm">In Progress</span>
                                             <span className="text-xs opacity-75 bg-blue-200 px-1.5 py-0.5 rounded-full">{groupedData.inProgress.length}</span>
@@ -4572,6 +4656,11 @@
                                 <tr>
                                     <td colSpan={visibleColCount} className="px-4 py-2 bg-slate-50 border-l-4 border-l-slate-300">
                                         <div className="flex items-center gap-2 text-slate-600">
+                                            {bulkMode && <input type="checkbox"
+                                                checked={groupedData.planned.every(r => selectedKeys.has(getCampaignKey(r)))}
+                                                onChange={() => toggleSectionSelection(groupedData.planned)}
+                                                className="rounded text-purple-600 cursor-pointer"
+                                            />}
                                             <Icon name="CalendarDays" size={14} />
                                             <span className="font-semibold text-sm">Planned</span>
                                             <span className="text-xs opacity-75 bg-slate-200 px-1.5 py-0.5 rounded-full">{groupedData.planned.length}</span>
@@ -4588,6 +4677,11 @@
                                 <tr>
                                     <td colSpan={visibleColCount} className="px-4 py-2 bg-green-50 border-l-4 border-l-green-400">
                                         <div className="flex items-center gap-2 text-green-700">
+                                            {bulkMode && <input type="checkbox"
+                                                checked={groupedData.complete.every(r => selectedKeys.has(getCampaignKey(r)))}
+                                                onChange={() => toggleSectionSelection(groupedData.complete)}
+                                                className="rounded text-purple-600 cursor-pointer"
+                                            />}
                                             <Icon name="CheckCircle" size={14} />
                                             <span className="font-semibold text-sm">Installed / Complete</span>
                                             <span className="text-xs opacity-75 bg-green-200 px-1.5 py-0.5 rounded-full">{groupedData.complete.length}</span>
@@ -4606,6 +4700,48 @@
                     )}
                     </table>
                 </div>
+
+                {/* Floating Bulk Actions Bar — fixed to viewport top */}
+                {bulkMode && selectedKeys.size > 0 && (
+                    <div className="fixed top-0 left-0 right-0 bg-white border-b-2 border-purple-300 shadow-[0_4px_12px_rgba(0,0,0,0.1)] px-6 py-3 flex items-center justify-between z-50">
+                        <div className="flex items-center gap-3">
+                            <span className="inline-flex items-center gap-1 bg-purple-100 text-purple-700 px-2.5 py-1 rounded-full text-sm font-semibold">
+                                <Icon name="CheckSquare" size={14} />
+                                {selectedKeys.size} selected
+                            </span>
+                            <button
+                                onClick={() => setSelectedKeys(new Set())}
+                                className="text-xs text-gray-500 hover:text-gray-700 underline"
+                            >Clear</button>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <select
+                                value={bulkStage}
+                                onChange={(e) => setBulkStage(e.target.value)}
+                                className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:ring-2 focus:ring-purple-300 focus:border-purple-400"
+                            >
+                                <option value="">Choose stage...</option>
+                                {ALL_STAGES.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                            <button
+                                onClick={() => {
+                                    if (!bulkStage) return;
+                                    if (!confirm(`Update ${selectedKeys.size} campaign${selectedKeys.size > 1 ? 's' : ''} to "${bulkStage}"?`)) return;
+                                    const updates = Array.from(selectedKeys).map(campaignKey => ({ campaignKey, newStage: bulkStage }));
+                                    onBulkUpdateStage(updates);
+                                    setSelectedKeys(new Set());
+                                    setBulkStage('');
+                                    setBulkMode(false);
+                                }}
+                                disabled={!bulkStage}
+                                className={`flex items-center gap-1 text-sm font-medium px-4 py-1.5 rounded-lg transition-colors ${bulkStage ? 'bg-purple-600 text-white hover:bg-purple-700' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
+                            >
+                                <Icon name="Zap" size={14} />
+                                Apply
+                            </button>
+                        </div>
+                    </div>
+                )}
                 </div>
             );
         };
@@ -8411,6 +8547,13 @@
                 });
             };
 
+            // Bulk stage update — applies the same stage to multiple campaigns at once
+            const handleBulkUpdateStage = (updates) => {
+                updates.forEach(({ campaignKey, newStage }) => {
+                    handleUpdateStage(campaignKey, newStage, {});
+                });
+            };
+
             // Quick update for install count only (from inline edit)
             const handleUpdateInstallCount = (id, installedCount) => {
                 updateManualOverride(id, { installed: installedCount });
@@ -11561,11 +11704,12 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                                     {/* --- DATA TABLES (Non-Dashboard Views) --- */}
                                     {view !== 'dashboard' && (
                                     (view === 'master' || view === 'activeInstalls' || view === 'history') ? (
-                                        <MasterTrackingTable 
-                                            data={filteredData} 
+                                        <MasterTrackingTable
+                                            data={filteredData}
                                             onRowClick={setSelectedItem}
                                             onBack={() => setView('dashboard')}
                                             onOpenSettings={() => setShowSheetSettings(true)}
+                                            onBulkUpdateStage={handleBulkUpdateStage}
                                         />
                                     ) : view === 'pipelineSummary' ? (
                                         <PipelineSummaryTable data={filteredData} totals={filteredStats.pipelineSummaryTotals} setView={setView} />

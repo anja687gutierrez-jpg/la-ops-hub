@@ -182,6 +182,28 @@
                 return arr.filter(item => matchesMarket(item) && matchesProduct(item));
             };
 
+            // --- Digest-specific filters (applied synchronously in useMemo, not async useEffect) ---
+            const EXCLUDED_STAGES = ['installed', 'photos taken', 'pop completed', 'takedown complete', 'canceled', 'cancelled', 'pending hold', 'on hold', 'rfp', 'initial proposal'];
+            const STALE_ONLY_STAGES = ['contracted', 'proofs approved', 'out for approval'];
+            const hasCharted = (item) => item.adjustedQty && item.adjustedQty > 0;
+            const now = new Date(); now.setHours(0,0,0,0);
+
+            // Delay/pastDue filter: stage exclusions + stale-only + must have charted
+            const filterDelay = (arr) => filterArray(arr).filter(item => {
+                if (!hasCharted(item)) return false;
+                const stageLower = (item.stage || '').toLowerCase();
+                if (EXCLUDED_STAGES.includes(stageLower)) return false;
+                if (STALE_ONLY_STAGES.includes(stageLower)) {
+                    const startDate = item.dateObj instanceof Date ? item.dateObj : (item.dateObj ? new Date(item.dateObj) : null);
+                    if (!startDate) return false;
+                    return Math.floor((now - startDate) / (1000 * 60 * 60 * 24)) >= 30;
+                }
+                return true;
+            });
+
+            // All other sections: must have charted qty
+            const filterCharted = (arr) => filterArray(arr).filter(hasCharted);
+
             const filteredAll = filterArray(processedData.all);
             const pipelineCounts = {};
             filteredAll.forEach(item => {
@@ -195,18 +217,18 @@
             return {
                 ...processedData,
                 all: filteredAll,
-                upcoming: filterArray(processedData.upcoming),
-                delayedFlights: filterArray(processedData.delayedFlights),
-                inProgressFlights: filterArray(processedData.inProgressFlights),
-                fullyInstalledThisWeek: filterArray(processedData.fullyInstalledThisWeek),
-                recentInstalls: filterArray(processedData.recentInstalls),
-                expiredFlights: filterArray(processedData.expiredFlights),
-                pastDue: filterArray(processedData.pastDue),
+                delayedFlights: filterDelay(processedData.delayedFlights),
+                pastDue: filterDelay(processedData.pastDue),
+                inProgressFlights: filterCharted(processedData.inProgressFlights),
+                upcoming: filterCharted(processedData.upcoming),
+                fullyInstalledThisWeek: filterCharted(processedData.fullyInstalledThisWeek),
+                recentInstalls: filterCharted(processedData.recentInstalls),
+                expiredFlights: filterCharted(processedData.expiredFlights),
                 pipelineSummary: filteredPipeline
             };
         }, [processedData, digestMarkets, digestProducts]);
 
-        // Initialize editable data when filtered data changes
+        // Initialize editable data when filtered data changes (data already filtered in useMemo above)
         useEffect(() => {
             if (filteredDigestData) {
                 setEditableData({
@@ -377,6 +399,7 @@
                 fullyInstalledThisWeek: editableData.fullyInstalledThisWeek,
                 recentInstalls: editableData.recentInstalls,
                 expiredFlights: editableData.expiredFlights,
+                pastDue: editableData.pastDue,
                 pipelineSummary: editableData.pipelineSummary
             };
         }, [editableData, filteredDigestData]);
