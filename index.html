@@ -4067,7 +4067,7 @@
             </div>
         );
 
-        const MasterTrackingTable = ({ data, onRowClick, onBack, onOpenSettings, onBulkUpdateStage }) => {
+        const MasterTrackingTable = ({ data, onRowClick, onBack, onOpenSettings, onBulkUpdateStage, unchartedCount, onViewUncharted }) => {
             // Column presets
             const allColumns = {
                 date: true, id: true, market: true, advertiser: true,
@@ -4456,6 +4456,16 @@
                             </span>
                         ) : null;
                     })()}
+                    {unchartedCount > 0 && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onViewUncharted && onViewUncharted(); }}
+                            className="bg-gray-100 text-gray-600 text-xs py-0.5 px-2 rounded-full flex items-center gap-1 hover:bg-amber-100 hover:text-amber-700 transition-colors"
+                            title="Campaigns without confirmed charted qty — click to open Hold Report"
+                        >
+                            <Icon name="HelpCircle" size={10} />
+                            {unchartedCount} Unconfirmed
+                        </button>
+                    )}
                     </h3>
                     <div className="flex items-center gap-2">
                         {/* Settings Gear - Hidden feature, requires 5 clicks to open */}
@@ -5446,7 +5456,10 @@
         };
 
         // 📋 HOLD REPORT TABLE (Simplified View - No Install Metrics)
-        const HoldReportTable = ({ data, onRowClick, onBack }) => {
+        // Central entry point for confirming charted qty (inline click-to-edit)
+        const HoldReportTable = ({ data, onRowClick, onSaveCharted, onBack }) => {
+            const [editingRow, setEditingRow] = useState(null);
+            const [editValue, setEditValue] = useState('');
             const downloadCSV = () => {
                 const headers = ['Campaign #', 'Start Date', 'End Date', 'Market', 'Advertiser', 'Campaign', 'Product', 'Stage', 'Owner', 'Qty', 'Charted'];
                 const csvContent = [
@@ -5556,18 +5569,38 @@
                                         </td>
                                         <td className="px-2 py-2 text-xs text-gray-600 truncate" title={row.owner}>{row.owner}</td>
                                         <td className="px-2 py-2 text-right text-xs font-semibold text-gray-900">{row.quantity || row.totalQty}</td>
-                                        <td className="px-2 py-2 text-center">
+                                        <td className="px-2 py-2 text-center" onClick={(e) => e.stopPropagation()}>
                                             {(() => {
                                                 const booked = row.quantity || row.totalQty || 0;
                                                 const charted = row.adjustedQty;
+                                                const rowKey = `${row.id}_${row.date}_${row.product || row.media}`;
+                                                if (editingRow === rowKey) {
+                                                    return <input type="number" value={editValue}
+                                                        onChange={(e) => setEditValue(e.target.value)}
+                                                        onBlur={() => {
+                                                            const val = parseInt(editValue);
+                                                            if (!isNaN(val) && val >= 0 && onSaveCharted) onSaveCharted(rowKey, val);
+                                                            setEditingRow(null); setEditValue('');
+                                                        }}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') { e.target.blur(); }
+                                                            if (e.key === 'Escape') { setEditingRow(null); setEditValue(''); }
+                                                        }}
+                                                        className="w-16 px-1.5 py-0.5 border-2 border-orange-400 rounded text-[10px] font-mono font-bold text-center bg-orange-50 focus:outline-none focus:ring-2 focus:ring-orange-300"
+                                                        min="0" placeholder={booked} autoFocus />;
+                                                }
+                                                const startEdit = () => {
+                                                    const startVal = charted != null ? charted : booked;
+                                                    setEditingRow(rowKey); setEditValue(startVal.toString());
+                                                };
                                                 if (charted === null || charted === undefined) {
-                                                    return <span className="text-[10px] text-gray-400">--</span>;
+                                                    return <span onClick={startEdit} className="text-[10px] text-gray-400 cursor-pointer hover:text-orange-500 hover:underline" title="Click to confirm charted qty">--</span>;
                                                 } else if (charted === booked) {
-                                                    return <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-[10px] font-medium">{charted} ✓</span>;
+                                                    return <span onClick={startEdit} className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-[10px] font-medium cursor-pointer hover:ring-2 hover:ring-green-300" title="Click to edit">{charted} ✓</span>;
                                                 } else if (charted < booked) {
-                                                    return <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[10px] font-medium">{charted} ⚠</span>;
+                                                    return <span onClick={startEdit} className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[10px] font-medium cursor-pointer hover:ring-2 hover:ring-amber-300" title="Click to edit">{charted} ⚠</span>;
                                                 } else {
-                                                    return <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-medium">{charted} ↑</span>;
+                                                    return <span onClick={startEdit} className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-medium cursor-pointer hover:ring-2 hover:ring-blue-300" title="Click to edit">{charted} ↑</span>;
                                                 }
                                             })()}
                                         </td>
@@ -9517,7 +9550,7 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                 const categories = {
                     pastDue: [], thisWeek: [], nextMonth: [], upcoming: [], recentInstalls: [],
                     pipelineSummary: [], activeInstalls: [], lostOpportunities: [], specialMedia: [], all: [],
-                    masterTracking: [], sixMonthHistory: [], inProgressFlights: [], delayedFlights: [],
+                    masterTracking: [], unchartedMasterCount: 0, sixMonthHistory: [], inProgressFlights: [], delayedFlights: [],
                     fullyInstalledThisWeek: [], rotations: [], expiredFlights: [],
                     holdReport: [], // Simple pipeline view
                     ghostBookings: [], // Ghost bookings
@@ -10241,9 +10274,11 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                 categories.completedCampaigns.sort((a,b) => b.endDateObj - a.endDateObj); // Most recently completed first
                 categories.awaitingPop.sort((a,b) => a.dateObj - b.dateObj); // Oldest first (longest waiting for POP)
 
-                // 2. Master Tracking: Everything EXCEPT Lost Opportunities and Ghosts (unless included)
+                // 2. Master Tracking: Only campaigns with confirmed charted qty (adjustedQty > 0)
+                // Uncharted campaigns tracked via unchartedMasterCount badge
                 if (baseData.installs) {
-                    categories.masterTracking = [...baseData.installs]
+                    let unchartedCount = 0;
+                    const allMasterItems = [...baseData.installs]
                         .map(item => {
                             const newItem = { ...item };
                             // Reconvert dates from localStorage strings to Date objects
@@ -10317,6 +10352,13 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                             if (stageLower === 'canceled' || stageLower === 'cancelled') return false;
                             return true;
                         });
+                    // Gate: only include campaigns with confirmed charted qty
+                    categories.masterTracking = allMasterItems.filter(i => {
+                        if (i.adjustedQty && i.adjustedQty > 0) return true;
+                        unchartedCount++;
+                        return false;
+                    });
+                    categories.unchartedMasterCount = unchartedCount;
                     // Ensure sorting consistency
                     categories.masterTracking.sort((a,b) => b.dateObj - a.dateObj);
                 }
@@ -10455,7 +10497,8 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                     completedCampaigns: filterArray(processedData.completedCampaigns),
                     awaitingPop: filterArray(processedData.awaitingPop),
                     pipelineSummary: processedData.pipelineSummary, // Keep pipeline summary as-is (it's aggregated)
-                    pipelineSummaryTotals: processedData.pipelineSummaryTotals
+                    pipelineSummaryTotals: processedData.pipelineSummaryTotals,
+                    unchartedMasterCount: processedData.unchartedMasterCount || 0
                 };
             }, [processedData, marketFilters, productFilters, productionFilter]);
 
@@ -11706,11 +11749,13 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                                             onBack={() => setView('dashboard')}
                                             onOpenSettings={() => setShowSheetSettings(true)}
                                             onBulkUpdateStage={handleBulkUpdateStage}
+                                            unchartedCount={filteredStats?.unchartedMasterCount || 0}
+                                            onViewUncharted={() => setView('holdReport')}
                                         />
                                     ) : view === 'pipelineSummary' ? (
                                         <PipelineSummaryTable data={filteredData} totals={filteredStats.pipelineSummaryTotals} setView={setView} />
                                     ) : view === 'holdReport' ? (
-                                        <HoldReportTable data={filteredData} onRowClick={setSelectedItem} onBack={() => setView('dashboard')} />
+                                        <HoldReportTable data={filteredData} onRowClick={setSelectedItem} onSaveCharted={(key, val) => updateManualOverride(key, { adjustedQty: val })} onBack={() => setView('dashboard')} />
                                     ) : view === 'pendingRemovals' ? (
                                         <RemovalsTable data={filteredData} completedData={filteredStats.completedRemovals} onRowClick={setSelectedItem} onBack={() => setView('dashboard')} />
                                     ) : view === 'ghostBookings' ? (
