@@ -204,7 +204,7 @@ Takedown Complete → Lost Opportunity → Canceled
 
 **isCompletedStage** (line ~10003): `['installed', 'photos taken', 'pop completed', 'takedown complete', 'canceled', 'cancelled', 'lost opportunity']` AND no outstanding work (`pending === 0` for Installed)
 
-**Excluded from delayed:** Warner Bros Perms, Adriana's Insurance, Filler campaigns
+**No advertiser exclusions** — all campaigns (including Warner Bros Perms, Adriana's Insurance, Filler) are eligible for delayed/pastDue. Visibility is controlled by stage + charted qty filters only.
 
 ### Detail Modal (`detailModal.js`)
 Unified campaign detail view with **4-column layout**:

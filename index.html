@@ -10008,10 +10008,7 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                         // --- DELAYED / AT RISK FLIGHTS 🔥 ---
                         // Shows campaigns that are past their start date but not completed
                         // Lookback: 3 weeks - balances visibility with manageable list size
-                        const isExcludedDelay = advName.includes("warner bros. | perms") ||
-                                                advName.includes("adriana's insurance") ||
-                                                campId.includes("filler campaign") ||
-                                                isFiller;
+                        const isExcludedDelay = false; // No advertiser exclusions — all campaigns eligible for delayed
                         
                         // "Installed" is NOT completed if there's still pending work (rotation/copy change scenario)
                         // Use adjustedQty (charted) as effective target when present — booked=100, charted=50, installed=50 is COMPLETE
@@ -10040,10 +10037,9 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
 
                         // --- PAST DUE (all older backlog - everything older than 3 weeks) ---
                         // Non-overlapping with Delayed Flights (which covers last 3 weeks)
-                        const isExcludedPastDue = advName.includes("filler") || campId.includes("filler campaign");
                         const isOlderThanDelayedWindow = item.dateObj < delayedLookback; // Older than 3 weeks, no upper limit
-                        
-                        if (!isExcludedPastDue && !isCompletedStage && isPastStartDate && isOlderThanDelayedWindow) {
+
+                        if (!isCompletedStage && isPastStartDate && isOlderThanDelayedWindow) {
                             categories.pastDue.push(item);
                         }
 
