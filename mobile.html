@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>STAP Mobile - Field Operations</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * { -webkit-tap-highlight-color: transparent; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f3f4f6;
+            overscroll-behavior: none;
+        }
+        .safe-top { padding-top: env(safe-area-inset-top); }
+        .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+        .card-shadow { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+        .pull-indicator { 
+            height: 4px; 
+            width: 40px; 
+            background: #d1d5db; 
+            border-radius: 2px; 
+            margin: 8px auto;
+        }
+        @keyframes slideUp {
+            from { transform: translateY(100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .slide-up { animation: slideUp 0.3s ease-out; }
+        .tab-active { 
+            background: white; 
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .animate-spin { animation: spin 1s linear infinite; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useCallback } = React;
+        
+        // Icon Component
+        const Icon = ({ name, size = 20, className = '', style = {} }) => {
+            const icons = {
+                'package': 'fa-box',
+                'camera': 'fa-camera',
+                'search': 'fa-search',
+                'plus': 'fa-plus',
+                'check': 'fa-check',
+                'clock': 'fa-clock',
+                'truck': 'fa-truck',
+                'x': 'fa-times',
+                'filter': 'fa-filter',
+                'wrench': 'fa-wrench',
+                'pause': 'fa-pause-circle',
+                'minus-circle': 'fa-minus-circle',
+                'images': 'fa-images',
+                'link': 'fa-link',
+                'map-pin': 'fa-map-marker-alt',
+                'trash': 'fa-trash',
+                'calendar': 'fa-calendar-alt',
+                'building': 'fa-building',
+                'chevron-right': 'fa-chevron-right',
+                'cog': 'fa-cog',
+                'sync': 'fa-sync-alt',
+                'cloud': 'fa-cloud',
+                'database': 'fa-database',
+                'check-circle': 'fa-check-circle',
+                'exclamation': 'fa-exclamation-triangle',
+            };
+            return <i className={`fas ${icons[name] || 'fa-circle'} ${className}`} style={{ fontSize: size, ...style }}></i>;
+        };
+        
+        // Module Definitions
+        const MODULES = {
+            installs: {
+                id: 'installs', name: 'Installs', icon: 'wrench',
+                color: '#22c55e', bgColor: '#dcfce7', gradient: 'from-green-500 to-emerald-500',
+                statuses: ['Scheduled', 'In Progress', 'Completed', 'Issue']
+            },
+            holds: {
+                id: 'holds', name: 'Holds', icon: 'pause',
+                color: '#f59e0b', bgColor: '#fef3c7', gradient: 'from-amber-500 to-yellow-500',
+                statuses: ['Pending', 'On Hold', 'Resolved', 'Escalated']
+            },
+            removals: {
+                id: 'removals', name: 'Removals', icon: 'minus-circle',
+                color: '#ef4444', bgColor: '#fee2e2', gradient: 'from-red-500 to-rose-500',
+                statuses: ['Scheduled', 'In Progress', 'Completed', 'Cancelled']
+            },
+            pops: {
+                id: 'pops', name: 'POPs', icon: 'images',
+                color: '#8b5cf6', bgColor: '#ede9fe', gradient: 'from-violet-500 to-purple-500',
+                statuses: ['Pending', 'Submitted', 'Approved', 'Rejected']
+            },
+            materials: {
+                id: 'materials', name: 'Materials', icon: 'package',
+                color: '#f97316', bgColor: '#ffedd5', gradient: 'from-orange-500 to-amber-500',
+                statuses: ['Received', 'In Warehouse', 'Partially Deployed', 'Fully Deployed']
+            },
+        };
+        
+        // CSV Parser
+        const parseCSV = (text) => {
+            const lines = text.split('\n');
+            if (lines.length < 2) return [];
+            
+            const headers = [];
+            let current = '';
+            let inQuotes = false;
+            
+            for (let i = 0; i < lines[0].length; i++) {
+                const char = lines[0][i];
+                if (char === '"') {
+                    inQuotes = !inQuotes;
+                } else if (char === ',' && !inQuotes) {
+                    headers.push(current.trim());
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            headers.push(current.trim());
+            
+            const data = [];
+            for (let i = 1; i < lines.length; i++) {
+                if (!lines[i].trim()) continue;
+                
+                const row = {};
+                let colIndex = 0;
+                let cellValue = '';
+                let inQuotes = false;
+                
+                for (let j = 0; j < lines[i].length; j++) {
+                    const char = lines[i][j];
+                    if (char === '"') {
+                        inQuotes = !inQuotes;
+                    } else if (char === ',' && !inQuotes) {
+                        if (headers[colIndex]) {
+                            row[headers[colIndex]] = cellValue.trim();
+                        }
+                        cellValue = '';
+                        colIndex++;
+                    } else {
+                        cellValue += char;
+                    }
+                }
+                if (headers[colIndex]) {
+                    row[headers[colIndex]] = cellValue.trim();
+                }
+                
+                if (Object.keys(row).length > 0) {
+                    row.id = row['Campaign ID'] || `row_${i}`;
+                    data.push(row);
+                }
+            }
+            
+            return data;
+        };
+        
+        // Status Badge
+        const StatusBadge = ({ status, module }) => {
+            const mod = MODULES[module];
+            return (
+                <span 
+                    className="px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                    style={{ backgroundColor: mod?.bgColor || '#f3f4f6', color: mod?.color || '#6b7280' }}
+                >
+                    {status}
+                </span>
+            );
+        };
+        
+        // Item Card
+        const ItemCard = ({ item, module, onClick }) => {
+            const mod = MODULES[module];
+            return (
+                <div onClick={onClick} className="bg-white rounded-xl p-3 card-shadow active:scale-[0.98] transition-transform">
+                    <div className="flex gap-3">
+                        <div className="w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0"
+                             style={{ backgroundColor: mod?.bgColor }}>
+                            {item.posterImage ? (
+                                <img src={item.posterImage} alt="" className="w-full h-full object-cover rounded-lg" />
+                            ) : (
+                                <Icon name={mod?.icon} size={20} style={{ color: mod?.color }} />
+                            )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-2">
+                                <span className="font-semibold text-gray-800 truncate text-sm">
+                                    {item.client || item['Advertiser'] || 'Unknown'}
+                                </span>
+                                {item.quantity && (
+                                    <span className="text-base font-bold" style={{ color: mod?.color }}>{item.quantity}</span>
+                                )}
+                            </div>
+                            <div className="text-xs text-gray-500 truncate">{item.description || item['Flight Name'] || '-'}</div>
+                            <div className="text-[10px] text-orange-600 font-mono mt-0.5">
+                                {item.campaignId || item['Campaign ID'] || item.receiptNumber || '-'}
+                            </div>
+                            <div className="flex items-center justify-between mt-1.5">
+                                <StatusBadge status={item.status} module={module} />
+                                <span className="text-[10px] text-gray-400">{item.dateReceived || item.date || ''}</span>
+                            </div>
+                        </div>
+                        <Icon name="chevron-right" size={14} className="text-gray-300 self-center" />
+                    </div>
+                </div>
+            );
+        };
+        
+        // Settings Modal
+        const SettingsModal = ({ isOpen, onClose, sheetUrl, setSheetUrl, onSync, isSyncing, lastSync, campaignCount, onLogout }) => {
+            const [tempUrl, setTempUrl] = useState(sheetUrl);
+            
+            if (!isOpen) return null;
+            
+            return (
+                <div className="fixed inset-0 z-50 bg-black/50" onClick={onClose}>
+                    <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl max-h-[85vh] overflow-auto slide-up safe-bottom"
+                         onClick={e => e.stopPropagation()}>
+                        <div className="pull-indicator"></div>
+                        <div className="p-4">
+                            <h3 className="text-lg font-bold text-gray-800 mb-4">
+                                <Icon name="cog" size={18} className="mr-2 text-gray-400" />
+                                Settings
+                            </h3>
+                            
+                            {/* Sync Status */}
+                            <div className="bg-gray-50 rounded-xl p-4 mb-4">
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className="text-sm font-medium text-gray-700">
+                                        <Icon name="database" size={14} className="mr-2 text-orange-500" />
+                                        Data Status
+                                    </span>
+                                    {campaignCount > 0 ? (
+                                        <span className="text-xs text-green-600 flex items-center gap-1">
+                                            <Icon name="check-circle" size={12} />
+                                            {campaignCount.toLocaleString()} campaigns
+                                        </span>
+                                    ) : (
+                                        <span className="text-xs text-amber-600 flex items-center gap-1">
+                                            <Icon name="exclamation" size={12} />
+                                            Not connected
+                                        </span>
+                                    )}
+                                </div>
+                                {lastSync && (
+                                    <div className="text-[10px] text-gray-400">
+                                        Last synced: {new Date(lastSync).toLocaleString()}
+                                    </div>
+                                )}
+                            </div>
+                            
+                            {/* Google Sheet URL */}
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <Icon name="cloud" size={14} className="mr-2 text-blue-500" />
+                                    Google Sheet URL
+                                </label>
+                                <input
+                                    type="url"
+                                    value={tempUrl}
+                                    onChange={e => setTempUrl(e.target.value)}
+                                    placeholder="https://docs.google.com/spreadsheets/d/..."
+                                    className="w-full px-3 py-3 bg-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
+                                />
+                                <p className="text-[10px] text-gray-400 mt-2">
+                                    Paste your Google Sheet URL. Make sure it's published to web or shared as "Anyone with link".
+                                </p>
+                            </div>
+                            
+                            {/* Save & Sync Button */}
+                            <button
+                                onClick={() => {
+                                    setSheetUrl(tempUrl);
+                                    localStorage.setItem('stap_mobile_sheet_url', tempUrl);
+                                    onSync(tempUrl);
+                                }}
+                                disabled={isSyncing}
+                                className="w-full py-3 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl text-sm font-semibold active:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                {isSyncing ? (
+                                    <>
+                                        <Icon name="sync" size={14} className="animate-spin" />
+                                        Syncing...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Icon name="sync" size={14} />
+                                        Save & Sync Now
+                                    </>
+                                )}
+                            </button>
+                            
+                            {/* Clear Data */}
+                            <button
+                                onClick={() => {
+                                    if (confirm('Clear all local data?')) {
+                                        localStorage.removeItem('stap_campaign_data');
+                                        localStorage.removeItem('stap_materials_data');
+                                        localStorage.removeItem('stap_mobile_sheet_url');
+                                        localStorage.removeItem('stap_mobile_last_sync');
+                                        window.location.reload();
+                                    }
+                                }}
+                                className="w-full mt-3 py-3 bg-red-50 text-red-600 rounded-xl text-sm font-medium active:bg-red-100"
+                            >
+                                <Icon name="trash" size={14} className="mr-2" />
+                                Clear All Data
+                            </button>
+                            
+                            {/* Desktop Link */}
+                            <a
+                                href="./index.html"
+                                className="block w-full mt-3 py-3 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium text-center active:bg-gray-200"
+                            >
+                                <Icon name="building" size={14} className="mr-2" />
+                                Switch to Desktop
+                            </a>
+
+                            {/* Logout */}
+                            <button
+                                onClick={onLogout}
+                                className="w-full mt-3 py-3 bg-gray-800 text-white rounded-xl text-sm font-medium active:bg-gray-900"
+                            >
+                                <Icon name="x" size={14} className="mr-2" />
+                                Logout
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+        
+        // Campaign Search Modal
+        const CampaignSearchModal = ({ isOpen, onClose, onSelect, campaigns }) => {
+            const [search, setSearch] = useState('');
+            
+            const filtered = useMemo(() => {
+                if (search.length < 2) return [];
+                const s = search.toLowerCase();
+                const seen = new Set();
+                return campaigns.filter(c => {
+                    const id = c['Campaign ID'] || c.id || '';
+                    if (seen.has(id)) return false;
+                    const match = (c['Advertiser'] || '').toLowerCase().includes(s) ||
+                                  (c['Campaign ID'] || '').toLowerCase().includes(s) ||
+                                  (c['Flight Name'] || '').toLowerCase().includes(s) ||
+                                  (c['Market'] || '').toLowerCase().includes(s);
+                    if (match) seen.add(id);
+                    return match;
+                }).slice(0, 30);
+            }, [search, campaigns]);
+            
+            if (!isOpen) return null;
+            
+            return (
+                <div className="fixed inset-0 z-50 bg-black/50" onClick={onClose}>
+                    <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl max-h-[80vh] slide-up safe-bottom"
+                         onClick={e => e.stopPropagation()}>
+                        <div className="pull-indicator"></div>
+                        <div className="p-4">
+                            <h3 className="text-lg font-bold text-gray-800 mb-3">Search Campaigns</h3>
+                            <div className="relative mb-4">
+                                <Icon name="search" size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                                <input
+                                    type="text"
+                                    placeholder="Search advertiser, campaign ID..."
+                                    value={search}
+                                    onChange={e => setSearch(e.target.value)}
+                                    className="w-full pl-10 pr-10 py-3 bg-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
+                                    autoFocus
+                                />
+                                {search && (
+                                    <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+                                        <Icon name="x" size={14} />
+                                    </button>
+                                )}
+                            </div>
+                            <div className="max-h-[50vh] overflow-auto">
+                                {campaigns.length === 0 ? (
+                                    <div className="text-center py-8 text-gray-400 text-sm">
+                                        <Icon name="exclamation" size={24} className="mx-auto mb-2 text-amber-400" />
+                                        No campaigns loaded<br/>
+                                        <span className="text-xs">Tap the ⚙️ icon to connect your Google Sheet</span>
+                                    </div>
+                                ) : search.length < 2 ? (
+                                    <div className="text-center py-8 text-gray-400 text-sm">
+                                        Type 2+ characters to search<br/>
+                                        <span className="text-xs">{campaigns.length.toLocaleString()} campaigns available</span>
+                                    </div>
+                                ) : filtered.length === 0 ? (
+                                    <div className="text-center py-8 text-gray-400 text-sm">No results for "{search}"</div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {filtered.map((c, i) => (
+                                            <div key={`${c['Campaign ID']}-${i}`}
+                                                 onClick={() => { onSelect(c); onClose(); setSearch(''); }}
+                                                 className="p-3 bg-gray-50 rounded-xl active:bg-gray-100">
+                                                <div className="font-semibold text-gray-800">{c['Advertiser'] || 'Unknown'}</div>
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    <span className="text-xs font-mono text-orange-600">{c['Campaign ID']}</span>
+                                                    {c['Flight Name'] && <span className="text-xs text-gray-500 truncate">• {c['Flight Name']}</span>}
+                                                </div>
+                                                {c['Market'] && (
+                                                    <div className="text-[10px] text-gray-400 mt-1">
+                                                        <Icon name="map-pin" size={10} className="mr-1" />{c['Market']}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+        
+        // Detail Modal
+        const DetailModal = ({ item, module, onClose, onDelete, onStatusChange }) => {
+            if (!item) return null;
+            const mod = MODULES[module];
+            
+            return (
+                <div className="fixed inset-0 z-50 bg-black/50" onClick={onClose}>
+                    <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl max-h-[85vh] overflow-auto slide-up safe-bottom"
+                         onClick={e => e.stopPropagation()}>
+                        <div className="pull-indicator"></div>
+                        <div className="h-28 flex items-center justify-center relative" style={{ backgroundColor: mod?.bgColor }}>
+                            {item.posterImage ? (
+                                <img src={item.posterImage} alt="" className="h-full object-contain" />
+                            ) : (
+                                <Icon name={mod?.icon} size={40} style={{ color: mod?.color }} />
+                            )}
+                            <button onClick={onClose} className="absolute top-3 right-3 w-8 h-8 bg-black/30 rounded-full flex items-center justify-center text-white">
+                                <Icon name="x" size={16} />
+                            </button>
+                        </div>
+                        <div className="p-4">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <h2 className="text-xl font-bold text-gray-800">{item.client || item['Advertiser'] || 'Unknown'}</h2>
+                                    <p className="text-sm text-gray-500">{item.description || item['Flight Name'] || '-'}</p>
+                                </div>
+                                {item.quantity && (
+                                    <div className="text-right">
+                                        <div className="text-2xl font-bold" style={{ color: mod?.color }}>{item.quantity}</div>
+                                        <div className="text-xs text-gray-400">units</div>
+                                    </div>
+                                )}
+                            </div>
+                            
+                            <div className="mt-4 space-y-2 text-sm">
+                                {[
+                                    ['Campaign ID', item.campaignId || item['Campaign ID'], true],
+                                    ['Receipt #', item.receiptNumber],
+                                    ['Date', item.dateReceived || item.date],
+                                    ['Market', item.market || item['Market']],
+                                    ['Printer', item.printer],
+                                ].filter(([_, v]) => v).map(([label, value, mono]) => (
+                                    <div key={label} className="flex justify-between py-2 border-b border-gray-100">
+                                        <span className="text-gray-500">{label}</span>
+                                        <span className={mono ? 'font-mono text-orange-600' : ''}>{value}</span>
+                                    </div>
+                                ))}
+                                <div className="flex justify-between py-2 border-b border-gray-100">
+                                    <span className="text-gray-500">Status</span>
+                                    <StatusBadge status={item.status} module={module} />
+                                </div>
+                            </div>
+                            
+                            <div className="mt-6">
+                                <p className="text-xs text-gray-500 mb-2">Change Status</p>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {mod?.statuses?.map(s => (
+                                        <button key={s} onClick={() => onStatusChange(item.id, s)}
+                                                className="py-2 px-3 rounded-lg text-xs font-medium"
+                                                style={{
+                                                    backgroundColor: item.status === s ? mod?.color : '#f3f4f6',
+                                                    color: item.status === s ? 'white' : '#6b7280'
+                                                }}>
+                                            {s}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            
+                            <button onClick={() => { if (confirm('Delete?')) { onDelete(item.id); onClose(); } }}
+                                    className="mt-4 w-full py-3 bg-red-50 text-red-600 rounded-xl text-sm font-medium active:bg-red-100">
+                                <Icon name="trash" size={14} className="mr-2" />Delete
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+        
+        // Main App
+        const App = () => {
+            // Auth check - redirect to login if not authenticated
+            const [isAuthenticated, setIsAuthenticated] = useState(() => {
+                const user = localStorage.getItem('opshub_user');
+                return !!user;
+            });
+
+            // Redirect to login if not authenticated
+            useEffect(() => {
+                if (!isAuthenticated) {
+                    window.location.replace('./index.html');
+                }
+            }, [isAuthenticated]);
+
+            // Show nothing while redirecting
+            if (!isAuthenticated) {
+                return (
+                    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+                        <div className="text-center">
+                            <Icon name="sync" size={24} className="animate-spin text-orange-500 mx-auto mb-2" />
+                            <p className="text-sm text-gray-500">Redirecting to login...</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            // Logout handler
+            const handleLogout = () => {
+                localStorage.removeItem('opshub_user');
+                window.location.replace('./index.html');
+            };
+
+            const [activeModule, setActiveModule] = useState('materials');
+            const [materials, setMaterials] = useState(() => {
+                try { return JSON.parse(localStorage.getItem('stap_materials_data') || '[]'); } catch { return []; }
+            });
+            const [campaigns, setCampaigns] = useState(() => {
+                try { return JSON.parse(localStorage.getItem('stap_campaign_data') || '[]'); } catch { return []; }
+            });
+            const [selectedItem, setSelectedItem] = useState(null);
+            const [searchTerm, setSearchTerm] = useState('');
+            const [statusFilter, setStatusFilter] = useState('ALL');
+            const [showCampaignSearch, setShowCampaignSearch] = useState(false);
+            const [selectedCampaign, setSelectedCampaign] = useState(null);
+            const [showSettings, setShowSettings] = useState(false);
+            const [sheetUrl, setSheetUrl] = useState(() => localStorage.getItem('stap_mobile_sheet_url') || '');
+            const [isSyncing, setIsSyncing] = useState(false);
+            const [lastSync, setLastSync] = useState(() => localStorage.getItem('stap_mobile_last_sync'));
+            
+            const mod = MODULES[activeModule];
+            
+            // Fetch data from Google Sheet
+            const fetchSheetData = useCallback(async (url) => {
+                if (!url) return;
+                
+                setIsSyncing(true);
+                try {
+                    // Extract sheet ID and convert to CSV export URL
+                    let csvUrl = url;
+                    const sheetIdMatch = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+                    if (sheetIdMatch) {
+                        const sheetId = sheetIdMatch[1];
+                        // Try to get gid from URL
+                        const gidMatch = url.match(/gid=(\d+)/);
+                        const gid = gidMatch ? gidMatch[1] : '0';
+                        csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`;
+                    }
+                    
+                    console.log('📊 Fetching from:', csvUrl);
+                    const response = await fetch(csvUrl);
+                    
+                    if (!response.ok) throw new Error('Failed to fetch');
+                    
+                    const text = await response.text();
+                    const data = parseCSV(text);
+                    
+                    console.log(`✅ Loaded ${data.length} campaigns`);
+                    
+                    setCampaigns(data);
+                    localStorage.setItem('stap_campaign_data', JSON.stringify(data));
+                    
+                    const now = new Date().toISOString();
+                    setLastSync(now);
+                    localStorage.setItem('stap_mobile_last_sync', now);
+                    
+                } catch (err) {
+                    console.error('❌ Sync error:', err);
+                    alert('Failed to sync. Make sure the sheet is shared publicly or published to web.');
+                } finally {
+                    setIsSyncing(false);
+                }
+            }, []);
+            
+            // Auto-sync on load if URL exists
+            useEffect(() => {
+                if (sheetUrl && campaigns.length === 0) {
+                    fetchSheetData(sheetUrl);
+                }
+            }, []);
+            
+            // Save materials
+            useEffect(() => {
+                if (materials.length > 0) localStorage.setItem('stap_materials_data', JSON.stringify(materials));
+            }, [materials]);
+            
+            const items = useMemo(() => {
+                let list = materials;
+                if (selectedCampaign) {
+                    const cid = selectedCampaign['Campaign ID'] || selectedCampaign.id;
+                    list = list.filter(m => m.campaignId === cid);
+                }
+                if (searchTerm) {
+                    const s = searchTerm.toLowerCase();
+                    list = list.filter(m => 
+                        (m.client || '').toLowerCase().includes(s) ||
+                        (m.receiptNumber || '').toLowerCase().includes(s) ||
+                        (m.campaignId || '').toLowerCase().includes(s) ||
+                        (m.description || '').toLowerCase().includes(s)
+                    );
+                }
+                if (statusFilter !== 'ALL') list = list.filter(m => m.status === statusFilter);
+                return list.sort((a, b) => new Date(b.dateReceived || 0) - new Date(a.dateReceived || 0));
+            }, [materials, searchTerm, statusFilter, selectedCampaign]);
+            
+            const stats = { total: items.length, units: items.reduce((s, m) => s + (parseInt(m.quantity) || 0), 0) };
+            
+            return (
+                <div className="min-h-screen bg-gray-100 safe-top">
+                    {/* Header */}
+                    <div className={`bg-gradient-to-r ${mod.gradient} text-white px-4 pt-4 pb-16`}>
+                        <div className="flex items-center justify-between mb-2">
+                            <div>
+                                <h1 className="text-xl font-bold">{mod.name}</h1>
+                                <p className="text-white/70 text-xs flex items-center gap-1">
+                                    LA STAP Operations
+                                    {campaigns.length > 0 && (
+                                        <span className="bg-white/20 px-1.5 py-0.5 rounded text-[9px]">
+                                            {campaigns.length.toLocaleString()} campaigns
+                                        </span>
+                                    )}
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => setShowCampaignSearch(true)}
+                                        className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                                    <Icon name="search" size={18} />
+                                </button>
+                                <button onClick={() => setShowSettings(true)}
+                                        className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                                    <Icon name="cog" size={18} />
+                                </button>
+                            </div>
+                        </div>
+                        
+                        {selectedCampaign && (
+                            <div className="flex items-center gap-2 bg-white/20 rounded-full px-3 py-1.5 mb-3">
+                                <Icon name="link" size={12} />
+                                <span className="text-xs truncate flex-1">
+                                    {selectedCampaign['Advertiser']} • {selectedCampaign['Campaign ID']}
+                                </span>
+                                <button onClick={() => setSelectedCampaign(null)}><Icon name="x" size={12} /></button>
+                            </div>
+                        )}
+                        
+                        <div className="flex gap-6">
+                            <div>
+                                <div className="text-3xl font-bold">{stats.total}</div>
+                                <div className="text-[10px] text-white/70">Items</div>
+                            </div>
+                            <div>
+                                <div className="text-3xl font-bold">{stats.units.toLocaleString()}</div>
+                                <div className="text-[10px] text-white/70">Units</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {/* Module Tabs */}
+                    <div className="px-4 -mt-10">
+                        <div className="bg-gray-200/80 backdrop-blur rounded-2xl p-1 flex gap-1">
+                            {Object.values(MODULES).map(m => (
+                                <button key={m.id}
+                                        onClick={() => { setActiveModule(m.id); setStatusFilter('ALL'); }}
+                                        className={`flex-1 py-2 px-1 rounded-xl text-[10px] font-medium transition-all flex flex-col items-center gap-1 ${activeModule === m.id ? 'tab-active' : 'text-gray-500'}`}>
+                                    <Icon name={m.icon} size={16} style={{ color: activeModule === m.id ? m.color : undefined }} />
+                                    {m.name}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    
+                    {/* Search & Filter */}
+                    <div className="px-4 mt-4 flex gap-2">
+                        <div className="flex-1 relative">
+                            <Icon name="search" size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                            <input type="text" placeholder="Search..." value={searchTerm}
+                                   onChange={e => setSearchTerm(e.target.value)}
+                                   className="w-full pl-9 pr-3 py-2.5 bg-white rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 card-shadow" />
+                        </div>
+                        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+                                className="px-3 py-2.5 bg-white rounded-xl text-sm card-shadow">
+                            <option value="ALL">All</option>
+                            {mod.statuses.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                    </div>
+                    
+                    {/* List */}
+                    <div className="px-4 py-4">
+                        <h2 className="text-sm font-semibold text-gray-500 mb-3">
+                            {statusFilter === 'ALL' ? 'Recent' : statusFilter}
+                            <span className="text-gray-400 font-normal ml-1">({items.length})</span>
+                        </h2>
+                        
+                        {items.length === 0 ? (
+                            <div className="text-center py-12 bg-white rounded-2xl card-shadow">
+                                <Icon name={mod.icon} size={40} className="mx-auto mb-3" style={{ color: mod.bgColor }} />
+                                <p className="text-gray-500">No {mod.name.toLowerCase()} found</p>
+                                {selectedCampaign && (
+                                    <button onClick={() => setSelectedCampaign(null)} className="mt-2 text-sm text-orange-500">
+                                        Clear campaign filter
+                                    </button>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                {items.map(item => (
+                                    <ItemCard key={item.id} item={item} module={activeModule} onClick={() => setSelectedItem(item)} />
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    
+                    <div className="h-8 safe-bottom"></div>
+                    
+                    {/* Modals */}
+                    <DetailModal item={selectedItem} module={activeModule} onClose={() => setSelectedItem(null)}
+                                 onDelete={id => setMaterials(p => p.filter(m => m.id !== id))}
+                                 onStatusChange={(id, s) => {
+                                     setMaterials(p => p.map(m => m.id === id ? { ...m, status: s } : m));
+                                     setSelectedItem(p => p ? { ...p, status: s } : null);
+                                 }} />
+                    
+                    <CampaignSearchModal isOpen={showCampaignSearch} onClose={() => setShowCampaignSearch(false)}
+                                         onSelect={c => { setSelectedCampaign(c); setShowCampaignSearch(false); }}
+                                         campaigns={campaigns} />
+                    
+                    <SettingsModal
+                        isOpen={showSettings}
+                        onClose={() => setShowSettings(false)}
+                        sheetUrl={sheetUrl}
+                        setSheetUrl={setSheetUrl}
+                        onSync={fetchSheetData}
+                        isSyncing={isSyncing}
+                        lastSync={lastSync}
+                        campaignCount={campaigns.length}
+                        onLogout={handleLogout}
+                    />
+                </div>
+            );
+        };
+        
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>

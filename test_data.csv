@@ -1,0 +1,21 @@
+Campaign Number,Advertiser,Campaign,Product,Market,Product Start Date,Product End Date,Inventory Opportunity Stage,Quantity,Installed,Pending,Opportunity Owner,Production Proof
+CAM-001,Nike,Spring Running 2026,Transit Shelter-Panel-Targeted,Los Angeles - STAP,01/06/2026,01/20/2026,POP Completed,50,50,0,Sarah Johnson,https://drive.google.com/proof1
+CAM-002,Coca-Cola,Super Bowl Promo,Transit Shelter-Digital Network-Spot,Los Angeles - STAP,01/01/2026,01/15/2026,Installed,30,30,0,Mike Chen,
+CAM-003,Amazon,Winter Sale,Transit Buses-King,Los Angeles - STAP,12/15/2025,01/05/2026,POP Completed,25,25,0,Sarah Johnson,https://drive.google.com/proof3
+CAM-004,Apple,iPhone 17 Launch,Transit Shelter-Panel-Targeted,Los Angeles - STAP,01/19/2026,02/28/2026,Material Ready For Install,100,45,55,Emily Davis,https://drive.google.com/proof4
+CAM-005,Netflix,New Series Launch,Transit Shelter-Digital Network-Spot,Los Angeles - STAP,01/22/2026,03/15/2026,Proofs Approved,40,0,40,Mike Chen,
+CAM-006,Target,Valentine's Day Sale,Transit Buses-Tail,Los Angeles - STAP,01/25/2026,02/14/2026,Contracted,60,0,60,Sarah Johnson,
+CAM-007,McDonald's,McRib Return,Transit Shelter-Panel-Targeted,Los Angeles - STAP,12/01/2025,12/20/2025,Takedown Complete,35,35,0,Emily Davis,
+CAM-008,Spotify,Wrapped 2025,Transit Shelter-Digital Network-Spot,Los Angeles - STAP,12/10/2025,01/05/2026,POP Completed,45,45,0,Mike Chen,https://drive.google.com/proof8
+CAM-009,Disney,Moana 2 Premiere,Transit Buses-King,Los Angeles - STAP,12/15/2025,01/10/2026,Installed,55,55,0,Sarah Johnson,
+CAM-010,Uber,New Year Rides,Transit Shelter-Panel-Targeted,Los Angeles - STAP,12/20/2025,01/08/2026,POP Completed,20,20,0,Emily Davis,
+CAM-011,Samsung,Galaxy S26 Pre-Order,Transit Shelter-Digital Network-Spot,Los Angeles - STAP,01/20/2026,02/20/2026,Material Ready For Install,75,30,45,Mike Chen,https://drive.google.com/proof11
+CAM-012,Adidas,Marathon Training,Transit Buses-Tail,Los Angeles - STAP,01/15/2026,03/01/2026,Installed,40,40,0,Sarah Johnson,
+CAM-013,Hulu,Award Season Stream,Transit Shelter-Panel-Targeted,Los Angeles - STAP,01/10/2026,02/28/2026,Working On It,30,0,30,Emily Davis,
+CAM-014,CVS,Flu Season Awareness,Transit Shelter-Panel-Targeted,Los Angeles - STAP,12/01/2025,12/31/2025,POP Completed,50,50,0,Mike Chen,
+CAM-015,Starbucks,Holiday Drinks,Transit Shelter-Digital Network-Spot,Los Angeles - STAP,12/10/2025,01/10/2026,Installed,65,65,0,Sarah Johnson,https://drive.google.com/proof15
+CAM-016,Honda,Accord 2026,Transit Buses-King,Los Angeles - STAP,01/05/2026,02/15/2026,Material Ready For Install,45,20,25,Emily Davis,
+CAM-017,Paramount,Mission Impossible 9,Transit Shelter-Panel-Targeted,Los Angeles - STAP,02/01/2026,03/31/2026,Proofs Approved,80,0,80,Mike Chen,
+CAM-018,T-Mobile,5G Expansion,Transit Shelter-Digital Network-Spot,Los Angeles - STAP,12/15/2025,01/12/2026,POP Completed,35,35,0,Sarah Johnson,
+CAM-019,Whole Foods,New Year Healthy,Transit Buses-Tail,Los Angeles - STAP,01/02/2026,01/31/2026,Installed,25,25,0,Emily Davis,
+CAM-020,Meta,Quest 4 Launch,Transit Shelter-Panel-Targeted,Los Angeles - STAP,12/05/2025,12/28/2025,Takedown Complete,40,40,0,Mike Chen,
