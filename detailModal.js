@@ -176,6 +176,8 @@
         const [hasReplacement, setHasReplacement] = useState(false);
         const [editingRemoval, setEditingRemoval] = useState(false);
         const [matExpanded, setMatExpanded] = useState(false);
+        const [commsDrawerOpen, setCommsDrawerOpen] = useState(false);
+        const [historyExpanded, setHistoryExpanded] = useState(false);
 
         // Helper: Calculate inventory status
         const getInventoryStatus = () => {
@@ -723,19 +725,21 @@
             }
         };
 
+        // Resolve effective template mode (handles 'auto' detection)
+        const getResolvedMode = () => {
+            const currentStage = newStage || (item ? item.stage : '') || '';
+            if (selectedTemplate !== 'auto') return selectedTemplate;
+            if (currentStage === "Installed") return 'complete';
+            if (currentStage === "Material Ready For Install") return 'material_received';
+            if (currentStage.includes("Pending")) return 'missing';
+            if (currentStage.includes("Expired") || currentStage.includes("Completed") || currentStage === "Takedown Complete") return 'removal';
+            return 'schedule';
+        };
+
         // Template router effect — uses live edited stage (newStage) for auto-detection
         useEffect(() => {
             if (!item) return;
-            let mode = selectedTemplate;
-            const currentStage = newStage || item.stage || '';
-
-            if (mode === 'auto') {
-                if (currentStage === "Installed") mode = 'complete';
-                else if (currentStage === "Material Ready For Install") mode = 'material_received';
-                else if (currentStage.includes("Pending")) mode = 'missing';
-                else if (currentStage.includes("Expired") || currentStage.includes("Completed") || currentStage === "Takedown Complete") mode = 'removal';
-                else mode = 'schedule';
-            }
+            const mode = getResolvedMode();
 
             // Generate subject line
             setSubjectLine(generateSubjectLine(mode));
@@ -997,17 +1001,15 @@
 
         return (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm animate-fade-in" onClick={handleClose}>
-                <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden flex flex-col max-h-[90vh] dark:border dark:border-slate-600" onClick={e => e.stopPropagation()}>
-                    {/* Header */}
-                    <div className="px-8 py-6 border-b bg-gray-50 dark:bg-slate-900 dark:border-slate-700 flex justify-between items-start">
-                        <div>
-                            <div className="flex items-center gap-3 mb-2">
+                <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-5xl w-full overflow-hidden flex flex-col max-h-[92vh] dark:border dark:border-slate-600" onClick={e => e.stopPropagation()}>
+                    {/* Header — Row 1: Toolbar */}
+                    <div className="px-6 pt-4 pb-2 border-b bg-gray-50 dark:bg-slate-900 dark:border-slate-700">
+                        <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-3">
                                 {editMode ? (
-                                    <div className="flex items-center gap-2">
-                                        <select value={newStage} onChange={(e) => setNewStage(e.target.value)} className="border rounded px-2 py-1 text-sm">
-                                            {ALL_STAGES.map(s => <option key={s}>{s}</option>)}
-                                        </select>
-                                    </div>
+                                    <select value={newStage} onChange={(e) => setNewStage(e.target.value)} className="border rounded px-2 py-1 text-sm dark:bg-slate-800 dark:border-slate-600 dark:text-gray-200">
+                                        {ALL_STAGES.map(s => <option key={s}>{s}</option>)}
+                                    </select>
                                 ) : (
                                     <span onClick={() => setEditMode(true)} className={`px-3 py-1 rounded-full text-xs font-bold border cursor-pointer ${getStatusColor(item.stage, item.dateObj)}`}>
                                         {item.stage} <Icon name="Edit" size={10} className="inline ml-1 opacity-50"/>
@@ -1015,328 +1017,312 @@
                                 )}
                                 <span className="text-gray-400 text-xs font-mono">{item.id}</span>
                             </div>
-                            <h2 className="text-2xl font-bold">{item.advertiser}</h2>
-                            <h3 className="text-lg text-gray-600">{item.name}</h3>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            {/* Unified Save Button - only shows when there are unsaved changes */}
-                            {hasUnsavedChanges && (
+                            <div className="flex items-center gap-2">
                                 <button
-                                    onClick={handleUnifiedSave}
-                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                    title="Save all changes"
+                                    onClick={() => setCommsDrawerOpen(!commsDrawerOpen)}
+                                    className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors flex items-center gap-1.5 ${commsDrawerOpen ? 'border-blue-400 dark:border-blue-400 bg-blue-100 dark:bg-blue-500/20 text-blue-800 dark:text-blue-300' : 'border-blue-200 dark:border-blue-500/30 bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-500/20'}`}
                                 >
-                                    <Icon name="Save" size={20} />
+                                    <Icon name="MessageSquare" size={14} /> Comms Center
                                 </button>
-                            )}
-                            <button onClick={handleClose} className="p-2 hover:bg-gray-200 rounded-lg transition-colors">
-                                <Icon name="X" size={20} />
-                            </button>
+                                {hasUnsavedChanges && (
+                                    <button
+                                        onClick={handleUnifiedSave}
+                                        className="px-3 py-1.5 text-xs font-bold rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors flex items-center gap-1.5"
+                                        title="Save all changes"
+                                    >
+                                        <Icon name="Save" size={14} /> Save Changes
+                                    </button>
+                                )}
+                                <button onClick={handleClose} className="p-2 hover:bg-gray-200 dark:hover:bg-slate-700 rounded-lg transition-colors">
+                                    <Icon name="X" size={20} />
+                                </button>
+                            </div>
+                        </div>
+                        {/* Header — Row 2: Identity + Context pills */}
+                        <div className="flex items-end justify-between pb-2">
+                            <div>
+                                <h2 className="text-xl font-semibold dark:text-gray-100">{item.advertiser}</h2>
+                                <h3 className="text-sm text-gray-500 dark:text-gray-400">{item.name}</h3>
+                            </div>
+                            <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                                {item.market && (
+                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-slate-600">
+                                        {formatMarketName(item.market)}
+                                    </span>
+                                )}
+                                {(item.product || item.media) && (
+                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30">
+                                        {formatMediaType(item.product || item.media)}
+                                    </span>
+                                )}
+                                {item.owner && (
+                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-500/30">
+                                        {item.owner}
+                                    </span>
+                                )}
+                                {item.isPremium && (
+                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/30">
+                                        ★ Premium
+                                    </span>
+                                )}
+                            </div>
                         </div>
                     </div>
 
                     {/* Body */}
-                    <div className="p-8 overflow-y-auto">
-                        {/* Standard Data Grid - 4 columns */}
-                        <div className="grid gap-4 mb-4 grid-cols-4">
-                            <div className="bg-gray-50 dark:bg-slate-900 p-4 rounded border dark:border-slate-600">
-                                <h4 className="font-bold text-xs text-gray-500 mb-2">SCHEDULE</h4>
-                                <p className="text-sm"><strong>Start:</strong> {item.date}</p>
-                                <p className="text-sm mb-3"><strong>End:</strong> {item.endDate}</p>
+                    <div className="px-6 py-5 overflow-y-auto">
+                        {/* Campaign Timeline Bar */}
+                        {(() => {
+                            const TIMELINE_STAGES = [
+                                { key: 'RFP', label: 'RFP' },
+                                { key: 'Contracted', label: 'Contracted' },
+                                { key: 'Proofs Approved', label: 'Proofs' },
+                                { key: 'Material Ready For Install', label: 'Mat Ready' },
+                                { key: 'Installed', label: 'Installed' },
+                                { key: 'POP Completed', label: 'POP' },
+                                { key: 'Takedown Complete', label: 'Takedown' }
+                            ];
+                            const currentStage = newStage || item.stage || '';
+                            // Map current stage to nearest timeline node
+                            const allStages = ALL_STAGES.length > 0 ? ALL_STAGES : TIMELINE_STAGES.map(s => s.key);
+                            const currentIdx = allStages.indexOf(currentStage);
+                            const getTimelineIdx = (stageKey) => allStages.indexOf(stageKey);
 
-                                {/* Quantity Reconciliation */}
-                                {(() => {
-                                    const booked = originalQty || 0;
-                                    // Calculate charted - prefer local state if set, then item value
-                                    let charted = null;
-                                    if (adjustedQty !== null && adjustedQty !== '' && adjustedQty !== undefined) {
-                                        const parsed = parseInt(adjustedQty);
-                                        if (!isNaN(parsed)) charted = parsed;
-                                    } else if (item.adjustedQty) {
-                                        charted = item.adjustedQty;
-                                    }
-                                    const statusConfig = charted === null
-                                        ? { color: 'text-gray-400', icon: '○', text: 'Not Verified' }
-                                        : charted === booked
-                                            ? { color: 'text-green-600', icon: '✓', text: 'Matched' }
-                                            : charted < booked
-                                                ? { color: 'text-amber-600', icon: '⚠', text: `${booked - charted} Unlinked` }
-                                                : { color: 'text-blue-600', icon: '↑', text: `+${charted - booked} Over` };
-                                    return (
-                                        <div className="pt-2 border-t border-gray-200">
-                                            <div className="flex items-center justify-between text-sm mb-1">
-                                                <span className="text-gray-500">Booked:</span>
-                                                <span className="font-mono font-bold">{booked}</span>
-                                            </div>
-                                            <div className="flex items-center justify-between text-sm">
-                                                <span className="text-gray-500">Charted:</span>
-                                                {editingAdjustedQty ? (
-                                                    <div className="flex items-center gap-1">
-                                                        <input
-                                                            type="number"
-                                                            value={adjustedQty || ''}
-                                                            onChange={(e) => setAdjustedQty(e.target.value)}
-                                                            className="w-14 px-1.5 py-0.5 border border-blue-300 rounded text-xs bg-blue-50 focus:outline-none focus:ring-1 focus:ring-blue-400"
-                                                            min="0"
-                                                            placeholder={booked}
-                                                            autoFocus
-                                                        />
-                                                        <button onClick={() => setEditingAdjustedQty(false)} className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded" title="Done editing">
-                                                            <Icon name="Check" size={12} />
-                                                        </button>
-                                                    </div>
-                                                ) : (
-                                                    <span
-                                                        onClick={() => {
-                                                            // Keep current value if set, otherwise use item value or booked as starting point
-                                                            const startVal = adjustedQty !== null && adjustedQty !== '' ? adjustedQty : (item.adjustedQty || booked);
-                                                            setAdjustedQty(startVal);
-                                                            setEditingAdjustedQty(true);
-                                                        }}
-                                                        className={`font-mono font-bold cursor-pointer hover:opacity-70 ${charted !== null ? 'text-blue-700' : 'text-gray-400'}`}
-                                                        title="Click to edit"
-                                                    >
-                                                        {charted !== null ? charted : '--'} <Icon name="Edit" size={8} className="inline opacity-50"/>
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <div className={`text-[10px] mt-1 ${statusConfig.color} font-medium`}>
-                                                {statusConfig.icon} {statusConfig.text}
-                                                {charted !== null && !editingAdjustedQty && (
-                                                    <button onClick={handleClearAdjustedQty} className="ml-1 text-gray-400 hover:text-red-500" title="Clear">
-                                                        <Icon name="X" size={10} />
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
-                                    );
-                                })()}
-                            </div>
-                            <div className="bg-gray-50 dark:bg-slate-900 p-4 rounded border dark:border-slate-600">
-                                <h4 className="font-bold text-xs text-gray-500 mb-2">INSTALL PROGRESS</h4>
-                                {/* Progress Bar and Stats */}
-                                {(() => {
-                                    const parsedTargetQty = parseInt(adjustedQty);
-                                    const targetQty = !isNaN(parsedTargetQty) ? parsedTargetQty : (item.adjustedQty != null ? item.adjustedQty : originalQty || 0);
-                                    const installed = newInstalledCount || 0;
-                                    const pending = Math.max(0, targetQty - installed);
-                                    const pct = targetQty > 0 ? Math.round((installed / targetQty) * 100) : 0;
-                                    return (
-                                        <>
-                                            {/* Progress bar */}
-                                            <div className="mb-2">
-                                                <div className="flex justify-between items-center mb-1">
-                                                    <span className="text-[10px] text-gray-600">{installed}/{targetQty}</span>
-                                                    <span className={`text-[10px] font-bold ${pct >= 100 ? 'text-green-600' : pct >= 50 ? 'text-amber-600' : 'text-red-500'}`}>
-                                                        {pct}%
-                                                    </span>
-                                                </div>
-                                                <div className="w-full bg-gray-200 rounded-full h-1.5">
-                                                    <div className={`h-1.5 rounded-full transition-all ${
-                                                        pct >= 100 ? 'bg-green-500' : pct >= 50 ? 'bg-amber-500' : 'bg-red-400'
-                                                    }`} style={{ width: `${Math.min(100, pct)}%` }} />
-                                                </div>
-                                            </div>
-                                            {/* Installed Row */}
-                                            <div className="flex items-center justify-between text-sm mb-1">
-                                                <span className="text-gray-500">Installed:</span>
-                                                {editingInstallCount ? (
-                                                    <div className="flex items-center gap-1">
-                                                        <input
-                                                            type="number"
-                                                            value={newInstalledCount}
-                                                            onChange={(e) => setNewInstalledCount(parseInt(e.target.value) || 0)}
-                                                            className="w-14 px-1.5 py-0.5 border border-blue-300 rounded text-xs bg-blue-50 focus:outline-none focus:ring-1 focus:ring-blue-400"
-                                                            min="0"
-                                                            max={targetQty || 999}
-                                                            autoFocus
-                                                        />
-                                                        <button onClick={() => setEditingInstallCount(false)} className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded" title="Done editing">
-                                                            <Icon name="Check" size={12} />
-                                                        </button>
-                                                    </div>
-                                                ) : (
-                                                    <span
-                                                        onClick={() => setEditingInstallCount(true)}
-                                                        className="font-mono font-bold text-blue-700 cursor-pointer hover:opacity-70"
-                                                        title="Click to edit"
-                                                    >
-                                                        {installed} <Icon name="Edit" size={8} className="inline opacity-50"/>
-                                                    </span>
-                                                )}
-                                            </div>
-                                            {/* Pending Row */}
-                                            <div className="flex items-center justify-between text-sm">
-                                                <span className="text-gray-500">Pending:</span>
-                                                <span className={`font-mono font-bold ${pending > 0 ? 'text-orange-600' : 'text-green-600'}`}>
-                                                    {pending}
-                                                </span>
-                                            </div>
-                                            {pending === 0 && installed > 0 && (
-                                                <div className="text-[10px] text-green-600 font-medium mt-1">✓ Complete</div>
-                                            )}
-                                            {/* INSTALL VELOCITY — SLA tracking */}
-                                            {item.firstInstall && (() => {
-                                                const firstDate = item.firstInstallDate || (item.firstInstall ? new Date(item.firstInstall) : null);
-                                                if (!firstDate) return null;
-                                                const endDate = item.completionDate || (item.completion ? new Date(item.completion) : null);
-                                                const now = new Date();
-                                                const isComplete = pending === 0 && installed > 0;
-                                                const refDate = isComplete && endDate ? endDate : now;
-                                                const startNorm = new Date(firstDate); startNorm.setHours(0,0,0,0);
-                                                const endNorm = new Date(refDate); endNorm.setHours(0,0,0,0);
-                                                const duration = Math.floor((endNorm - startNorm) / 86400000);
-                                                const isOverdue = duration > 7 && !isComplete;
-                                                const wasOverdue = duration > 7 && isComplete;
-                                                const fmtDate = (d) => { const dt = d instanceof Date ? d : new Date(d); return isNaN(dt) ? '—' : dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); };
-                                                return (
-                                                    <div className={`mt-2 pt-2 border-t border-dashed ${isOverdue ? 'border-red-200' : 'border-gray-200'}`}>
-                                                        <div className="flex items-center justify-between text-[11px]">
-                                                            <span className="text-gray-500">1st Install:</span>
-                                                            <span className="font-mono text-gray-700">{fmtDate(firstDate)}</span>
-                                                        </div>
-                                                        {isComplete ? (
-                                                            <div className="flex items-center justify-between text-[11px] mt-0.5">
-                                                                <span className="text-gray-500">Completed:</span>
-                                                                <span className={`font-mono font-bold ${wasOverdue ? 'text-amber-600' : 'text-green-600'}`}>
-                                                                    {endDate ? fmtDate(endDate) : 'Now'} ({duration}d)
-                                                                </span>
-                                                            </div>
-                                                        ) : isOverdue ? (
-                                                            <div className="flex items-center justify-between text-[11px] mt-0.5">
-                                                                <span className="text-red-500 font-medium flex items-center gap-0.5">
-                                                                    <Icon name="Clock" size={10} /> Duration:
-                                                                </span>
-                                                                <span className="font-mono font-bold text-red-600">
-                                                                    {duration}d <span className="text-[9px]">(SLA exceeded)</span>
-                                                                </span>
-                                                            </div>
-                                                        ) : (
-                                                            <div className="flex items-center justify-between text-[11px] mt-0.5">
-                                                                <span className="text-gray-500">Duration:</span>
-                                                                <span className="font-mono text-gray-600">{duration}d ongoing</span>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                );
-                                            })()}
-                                        </>
-                                    );
-                                })()}
-                            </div>
+                            // Extract history touchpoints: look for "Stage:" entries
+                            const historyDates = {};
+                            if (item.history && item.history.length > 0) {
+                                item.history.forEach(entry => {
+                                    if (!entry.changes) return;
+                                    entry.changes.forEach(c => {
+                                        const match = c.match(/Stage:.*→\s*(.+)/);
+                                        if (match) {
+                                            const targetStage = match[1].trim();
+                                            const ts = new Date(entry.timestamp);
+                                            if (!isNaN(ts)) {
+                                                historyDates[targetStage] = ts.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                                            }
+                                        }
+                                    });
+                                });
+                            }
+                            // Add firstInstall date to Installed node
+                            if (item.firstInstall) {
+                                const d = item.firstInstallDate || new Date(item.firstInstall);
+                                if (d && !isNaN(new Date(d))) {
+                                    historyDates['Installed'] = historyDates['Installed'] || new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                                }
+                            }
 
-                            {/* REMOVAL TRACKING BOX - Always shown for consistent layout */}
-                            <div className={`p-4 rounded border ${item.isAdCouncilTrigger ? 'bg-red-50 border-red-200' : 'bg-gray-50 dark:bg-slate-900 dark:border-slate-600'}`}>
-                                    <div className="flex items-center justify-between mb-2">
-                                        <h4 className="font-bold text-xs text-gray-500 flex items-center gap-1">
-                                            <Icon name="Trash2" size={12} /> REMOVAL
-                                        </h4>
-                                        {item.isAdCouncilTrigger && (
-                                            <span className="px-1 py-0.5 bg-red-600 text-white rounded text-[8px] font-bold">AC</span>
-                                        )}
+                            return (
+                                <div className="mb-5 px-1">
+                                    {/* Top row: circles + connectors, vertically centered */}
+                                    <div className="flex items-center w-full" style={{ height: '18px' }}>
+                                        {TIMELINE_STAGES.map((stage, i) => {
+                                            const stagePos = getTimelineIdx(stage.key);
+                                            const nextTimelineIdx = i < TIMELINE_STAGES.length - 1 ? getTimelineIdx(TIMELINE_STAGES[i + 1].key) : 999;
+                                            const isActive = currentIdx >= stagePos && currentIdx < nextTimelineIdx;
+                                            const isPast = currentIdx >= nextTimelineIdx;
+                                            const isFuture = !isActive && !isPast;
+
+                                            return React.createElement(React.Fragment, { key: stage.key },
+                                                // Circle node
+                                                React.createElement('div', {
+                                                    className: `rounded-full shrink-0 ${
+                                                        isActive
+                                                            ? 'w-[14px] h-[14px] border-[3px] border-purple-500 bg-white shadow-sm shadow-purple-200'
+                                                            : isPast
+                                                                ? 'w-[10px] h-[10px] bg-purple-500'
+                                                                : 'w-[10px] h-[10px] border-[1.5px] border-gray-300 bg-white'
+                                                    }`,
+                                                    title: stage.key
+                                                }),
+                                                // Connector (not after last)
+                                                i < TIMELINE_STAGES.length - 1 && React.createElement('div', {
+                                                    className: `flex-1 mx-0.5 ${isPast ? 'bg-purple-400' : ''}`,
+                                                    style: Object.assign(
+                                                        { height: '2px', minWidth: '8px' },
+                                                        isFuture ? { backgroundImage: 'repeating-linear-gradient(90deg, #d1d5db 0, #d1d5db 3px, transparent 3px, transparent 6px)', backgroundColor: 'transparent' } :
+                                                        isActive ? { backgroundImage: 'linear-gradient(90deg, #a855f7, #d1d5db)', backgroundColor: 'transparent' } : {}
+                                                    )
+                                                })
+                                            );
+                                        })}
                                     </div>
+                                    {/* Bottom row: labels + dates, aligned under each circle */}
+                                    <div className="flex w-full" style={{ marginTop: '2px' }}>
+                                        {TIMELINE_STAGES.map((stage, i) => {
+                                            const stagePos = getTimelineIdx(stage.key);
+                                            const nextTimelineIdx = i < TIMELINE_STAGES.length - 1 ? getTimelineIdx(TIMELINE_STAGES[i + 1].key) : 999;
+                                            const isActive = currentIdx >= stagePos && currentIdx < nextTimelineIdx;
+                                            const isPast = currentIdx >= nextTimelineIdx;
+                                            const dateLabel = historyDates[stage.key];
 
-                                    {editingRemoval ? (
-                                        <div className="space-y-2">
-                                            <div className="grid grid-cols-2 gap-2">
-                                                <div>
-                                                    <label className="text-[10px] font-bold text-gray-500">Qty</label>
-                                                    <input type="number" value={removalQty || ''} onChange={(e) => setRemovalQty(parseInt(e.target.value) || 0)} className="w-full text-xs border rounded px-1.5 py-1" min="0" placeholder="0" />
-                                                </div>
-                                                <div>
-                                                    <label className="text-[10px] font-bold text-gray-500">Done</label>
-                                                    <input type="number" value={removedCount || ''} onChange={(e) => setRemovedCount(parseInt(e.target.value) || 0)} className="w-full text-xs border rounded px-1.5 py-1" min="0" max={removalQty} placeholder="0" />
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <label className="text-[10px] font-bold text-gray-500">Status</label>
-                                                {removedCount === 0 ? (
-                                                    <select value={removalStatus} onChange={(e) => setRemovalStatus(e.target.value)} className="w-full text-xs border rounded px-1.5 py-1">
-                                                        <option value="scheduled">Scheduled</option>
-                                                        <option value="blocked">Blocked</option>
-                                                    </select>
-                                                ) : (
-                                                    <div className={`w-full text-xs border rounded px-1.5 py-1 bg-gray-100 ${
-                                                        removalStatus === 'removed' ? 'text-green-600' : 'text-blue-600'
-                                                    }`}>
-                                                        {removalStatus === 'removed' ? '✓ Removed' : '⏳ In Progress'} <span className="text-gray-400">(auto)</span>
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <div>
-                                                <label className="text-[10px] font-bold text-gray-500">Assignee</label>
-                                                <select value={removalAssignee} onChange={(e) => setRemovalAssignee(e.target.value)} className="w-full text-xs border rounded px-1.5 py-1">
-                                                    <option value="">-- Select --</option>
-                                                    <option value="Shelter Clean">Shelter Clean</option>
-                                                    <option value="In-House Ops">In-House Ops</option>
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label className="text-[10px] font-bold text-gray-500">Photos Link</label>
-                                                <input type="text" value={removalPhotosLink} onChange={(e) => setRemovalPhotosLink(e.target.value)} className="w-full text-xs border rounded px-1.5 py-1" placeholder="URL..." />
-                                            </div>
-                                            <div className="flex items-center justify-between pt-1">
-                                                <div className="flex items-center gap-1">
-                                                    <input type="checkbox" id="hasReplacementCompact" checked={hasReplacement} onChange={(e) => setHasReplacement(e.target.checked)} className="rounded w-3 h-3" />
-                                                    <label htmlFor="hasReplacementCompact" className="text-[10px] text-gray-600">Has replacement</label>
-                                                </div>
-                                                <button onClick={() => setEditingRemoval(false)} className="text-[10px] text-gray-500 hover:text-gray-700">Done</button>
-                                            </div>
-                                        </div>
+                                            return React.createElement(React.Fragment, { key: stage.key + '-label' },
+                                                React.createElement('div', { className: 'flex flex-col items-center', style: { minWidth: isActive ? '14px' : '10px' } },
+                                                    React.createElement('span', {
+                                                        className: `text-[8px] leading-none text-center whitespace-nowrap ${
+                                                            isActive ? 'font-bold text-purple-700' : isPast ? 'text-purple-400 font-medium' : 'text-gray-400'
+                                                        }`
+                                                    }, stage.label),
+                                                    dateLabel && React.createElement('span', {
+                                                        className: `text-[7px] leading-none mt-0.5 ${isActive ? 'text-purple-500 font-medium' : 'text-gray-400'}`
+                                                    }, dateLabel)
+                                                ),
+                                                // Spacer matching connectors
+                                                i < TIMELINE_STAGES.length - 1 && React.createElement('div', { className: 'flex-1' })
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            );
+                        })()}
+                        {/* ATTENTION ALERT BANNER */}
+                        {(() => {
+                            const alerts = [];
+                            if (item.firstInstall) {
+                                const firstDate = item.firstInstallDate || new Date(item.firstInstall);
+                                const parsedTarget = parseInt(adjustedQty);
+                                const tQty = !isNaN(parsedTarget) ? parsedTarget : (item.adjustedQty != null ? item.adjustedQty : originalQty || 0);
+                                const inst = newInstalledCount || 0;
+                                const pend = Math.max(0, tQty - inst);
+                                const isComp = pend === 0 && inst > 0;
+                                if (firstDate) {
+                                    const startN = new Date(firstDate); startN.setHours(0,0,0,0);
+                                    const nowN = new Date(); nowN.setHours(0,0,0,0);
+                                    const dur = Math.floor((nowN - startN) / 86400000);
+                                    if (dur > 7 && !isComp) alerts.push({ level: 'red', text: `Install SLA exceeded (${dur} days, target 7)` });
+                                }
+                            }
+                            const matReqCheck = parseInt(customQty) || (item.adjustedQty != null ? item.adjustedQty : (originalQty || 0));
+                            const matRecvCheck = linkedMaterials.reduce((a, m) => a + (parseInt(m.quantity) || 0), 0);
+                            const installStages = ['material ready for install', 'installed', 'photos taken', 'pop completed'];
+                            if (installStages.includes((newStage || '').toLowerCase()) && matRecvCheck < matReqCheck && matReqCheck > 0) {
+                                alerts.push({ level: 'amber', text: `Materials insufficient: ${matRecvCheck}/${matReqCheck} received` });
+                            }
+                            if (removalStatus === 'blocked') alerts.push({ level: 'red', text: 'Removal blocked' });
+                            if (item.daysUntilDeadline != null && item.daysUntilDeadline < 0) alerts.push({ level: 'red', text: `Removal overdue by ${Math.abs(item.daysUntilDeadline)} days` });
+                            if ((newStage || '').toLowerCase() === 'material ready for install' && (newInstalledCount || 0) === 0 && linkedMaterials.length > 0) {
+                                alerts.push({ level: 'amber', text: 'Stalled: materials linked but no installs started' });
+                            }
+                            if (alerts.length === 0) return null;
+                            const hasRed = alerts.some(a => a.level === 'red');
+                            return (
+                                <div className={`mb-3 flex items-start gap-2 px-3 py-2 rounded-lg border ${hasRed ? 'bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/30' : 'bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/30'}`}>
+                                    <Icon name="AlertTriangle" size={16} className={`${hasRed ? 'text-red-500' : 'text-amber-500'} mt-0.5 shrink-0`} />
+                                    <div className={`text-xs ${hasRed ? 'text-red-700 dark:text-red-300' : 'text-amber-700 dark:text-amber-300'}`}>
+                                        {alerts.map((a, i) => React.createElement('div', { key: i }, `• ${a.text}`))}
+                                    </div>
+                                </div>
+                            );
+                        })()}
+
+                        {/* Standard Data Grid - 4 columns with accent borders */}
+                        <div className="grid gap-3 mb-4 grid-cols-4">
+                            {/* CARD A: SCHEDULE */}
+                            {(() => {
+                                const booked = originalQty || 0;
+                                let charted = null;
+                                if (adjustedQty !== null && adjustedQty !== '' && adjustedQty !== undefined) { const parsed = parseInt(adjustedQty); if (!isNaN(parsed)) charted = parsed; }
+                                else if (item.adjustedQty) charted = item.adjustedQty;
+                                const statusConfig = charted === null
+                                    ? { bgColor: 'bg-gray-100 text-gray-600', icon: '○', text: 'Not Verified' }
+                                    : charted === booked ? { bgColor: 'bg-green-100 text-green-700', icon: '✓', text: 'Matched' }
+                                    : charted < booked ? { bgColor: 'bg-amber-100 text-amber-700', icon: '⚠', text: `${booked - charted} Unlinked` }
+                                    : { bgColor: 'bg-blue-100 text-blue-700', icon: '↑', text: `+${charted - booked} Over` };
+                                return (
+                            <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 border-l-[3px] border-l-indigo-400 p-4">
+                                <div className="flex items-center justify-between mb-3">
+                                    <h4 className="text-[11px] font-bold tracking-wider text-gray-400 uppercase">Schedule</h4>
+                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${statusConfig.bgColor}`}>{statusConfig.icon} {statusConfig.text}</span>
+                                </div>
+                                <div className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-300 mb-3">
+                                    <Icon name="Calendar" size={12} className="text-indigo-400 shrink-0" />
+                                    <span>{item.date || '—'} – {item.endDate || 'TBD'}</span>
+                                </div>
+                                <div className="flex items-center justify-between mb-1.5">
+                                    <span className="text-xs text-gray-500">Booked</span>
+                                    <span className="text-lg font-mono font-bold dark:text-gray-100">{booked}</span>
+                                </div>
+                                <div className="flex items-center justify-between group">
+                                    <span className="text-xs text-gray-500">Charted</span>
+                                    {editingAdjustedQty ? (
+                                        <input type="number" value={adjustedQty || ''} onChange={(e) => setAdjustedQty(e.target.value)}
+                                            onBlur={() => setEditingAdjustedQty(false)} onKeyDown={(e) => { if (e.key === 'Enter') setEditingAdjustedQty(false); }}
+                                            className="w-20 px-2 py-0.5 border border-indigo-300 rounded text-sm font-mono font-bold bg-indigo-50 dark:bg-indigo-500/10 dark:border-indigo-500/40 dark:text-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                            min="0" placeholder={booked} autoFocus />
                                     ) : (
-                                        <div>
-                                            {/* Progress bar */}
-                                            <div className="mb-2">
-                                                <div className="flex justify-between items-center mb-1">
-                                                    <span className="text-[10px] text-gray-600">{removedCount}/{removalQty}</span>
-                                                    <span className={`text-[10px] font-bold ${
-                                                        removalStatus === 'removed' ? 'text-green-600' :
-                                                        removalStatus === 'in_progress' ? 'text-blue-600' :
-                                                        removalStatus === 'blocked' ? 'text-red-600' : 'text-gray-500'
-                                                    }`}>
-                                                        {removalStatus === 'removed' ? '✓' : removalStatus === 'in_progress' ? '⏳' : removalStatus === 'blocked' ? '⛔' : '📅'}
-                                                    </span>
-                                                </div>
-                                                <div className="w-full bg-gray-200 rounded-full h-1.5">
-                                                    <div className={`h-1.5 rounded-full transition-all ${
-                                                        removalStatus === 'removed' ? 'bg-green-500' : removedCount / removalQty >= 0.5 ? 'bg-amber-500' : 'bg-red-400'
-                                                    }`} style={{ width: `${removalQty > 0 ? Math.min(100, (removedCount / removalQty) * 100) : 0}%` }} />
-                                                </div>
-                                            </div>
-                                            {/* Status & Assignee */}
-                                            <div className="text-[10px] mb-1 flex items-center gap-1">
-                                                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold ${
-                                                    removalStatus === 'removed' ? 'bg-green-100 text-green-700' :
-                                                    removalStatus === 'in_progress' ? 'bg-blue-100 text-blue-700' :
-                                                    removalStatus === 'blocked' ? 'bg-red-100 text-red-700' :
-                                                    'bg-gray-100 text-gray-600'
-                                                }`}>
-                                                    {removalStatus === 'blocked' && '⛔ '}{(removalStatus || 'scheduled').replace('_', ' ')}
-                                                </span>
-                                                {removalAssignee && <span className="text-gray-500">• {removalAssignee}</span>}
-                                            </div>
-                                            {/* Deadline */}
-                                            {item.daysUntilDeadline !== undefined && (
-                                                <div className={`text-[10px] font-bold ${
-                                                    item.daysUntilDeadline < 0 ? 'text-red-600' :
-                                                    item.daysUntilDeadline <= 7 ? 'text-orange-600' : 'text-green-600'
-                                                }`}>
-                                                    {item.daysUntilDeadline < 0 ? `${Math.abs(item.daysUntilDeadline)}d overdue` : `${item.daysUntilDeadline}d left`}
-                                                </div>
-                                            )}
-                                            {hasReplacement && (
-                                                <div className="text-[10px] text-green-600 flex items-center gap-1 mt-1">
-                                                    <Icon name="RefreshCw" size={10} /> Replacement
-                                                </div>
-                                            )}
-                                            <button onClick={() => setEditingRemoval(true)} className="w-full mt-2 px-2 py-1 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 text-[10px] font-medium rounded hover:bg-gray-200 dark:hover:bg-slate-600 flex items-center justify-center gap-1">
-                                                <Icon name="Edit" size={10} /> Edit
-                                            </button>
-                                        </div>
+                                        <span onClick={() => { const startVal = adjustedQty !== null && adjustedQty !== '' ? adjustedQty : (item.adjustedQty || booked); setAdjustedQty(startVal); setEditingAdjustedQty(true); }}
+                                            className={`text-lg font-mono font-bold cursor-pointer hover:opacity-70 ${charted !== null ? 'text-indigo-700 dark:text-indigo-300' : 'text-gray-400'}`} title="Click to edit">
+                                            {charted !== null ? charted : '--'}<Icon name="Edit" size={10} className="inline ml-1 opacity-0 group-hover:opacity-50 transition-opacity" />
+                                        </span>
                                     )}
                                 </div>
+                                {charted !== null && !editingAdjustedQty && <div className="text-right mt-0.5"><button onClick={handleClearAdjustedQty} className="text-[9px] text-gray-400 hover:text-red-500" title="Clear override">clear</button></div>}
+                            </div>
+                                );
+                            })()}
 
-                            {/* MATERIAL RECEIVER — compact summary with expandable detail */}
+                            {/* CARD B: INSTALL PROGRESS */}
+                            {(() => {
+                                const parsedTargetQty = parseInt(adjustedQty);
+                                const targetQty = !isNaN(parsedTargetQty) ? parsedTargetQty : (item.adjustedQty != null ? item.adjustedQty : originalQty || 0);
+                                const installed = newInstalledCount || 0;
+                                const pending = Math.max(0, targetQty - installed);
+                                const pct = targetQty > 0 ? Math.round((installed / targetQty) * 100) : 0;
+                                const borderColor = pct >= 100 ? 'border-l-green-500' : pct >= 50 ? 'border-l-amber-500' : 'border-l-red-400';
+                                let slaBadge = null;
+                                let slaOverdue = false;
+                                if (item.firstInstall) {
+                                    const firstDate = item.firstInstallDate || new Date(item.firstInstall);
+                                    const endDate = item.completionDate || (item.completion ? new Date(item.completion) : null);
+                                    const isComplete = pending === 0 && installed > 0;
+                                    const refDate = isComplete && endDate ? endDate : new Date();
+                                    const startNorm = new Date(firstDate); startNorm.setHours(0,0,0,0);
+                                    const endNorm = new Date(refDate); endNorm.setHours(0,0,0,0);
+                                    const duration = Math.floor((endNorm - startNorm) / 86400000);
+                                    const isOverdue = duration > 7 && !isComplete;
+                                    const wasOverdue = duration > 7 && isComplete;
+                                    slaOverdue = isOverdue;
+                                    slaBadge = isComplete
+                                        ? (wasOverdue ? { bg: 'bg-amber-100 text-amber-700', label: `${duration}d` } : { bg: 'bg-green-100 text-green-700', label: `${duration}d` })
+                                        : (isOverdue ? { bg: 'bg-red-100 text-red-700', label: `${duration}d` } : { bg: 'bg-gray-100 text-gray-600', label: `${duration}d` });
+                                }
+                                return (
+                            <div className={`bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 border-l-[3px] ${borderColor} p-4 ${slaOverdue ? 'ring-1 ring-red-200 dark:ring-red-500/30' : ''}`}>
+                                <div className="flex items-center justify-between mb-3">
+                                    <h4 className="text-[11px] font-bold tracking-wider text-gray-400 uppercase">Install Progress</h4>
+                                    {slaBadge && <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold ${slaBadge.bg}`}><Icon name="Clock" size={9} className="mr-0.5" />{slaBadge.label}</span>}
+                                </div>
+                                <div className="flex items-baseline gap-2 mb-2">
+                                    <span className={`text-3xl font-bold tabular-nums ${pct >= 100 ? 'text-green-600' : pct >= 50 ? 'text-amber-600' : 'text-red-500'}`}>{pct}%</span>
+                                    <span className="text-sm text-gray-400 font-mono">{installed}/{targetQty}</span>
+                                </div>
+                                <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-2 mb-3">
+                                    <div className={`h-2 rounded-full transition-all ${pct >= 100 ? 'bg-green-500' : pct >= 50 ? 'bg-amber-500' : 'bg-red-400'}`} style={{ width: `${Math.min(100, pct)}%` }} />
+                                </div>
+                                <div className="flex items-center justify-between mb-1 group">
+                                    <span className="text-xs text-gray-500">Installed</span>
+                                    {editingInstallCount ? (
+                                        <input type="number" value={newInstalledCount} onChange={(e) => setNewInstalledCount(parseInt(e.target.value) || 0)}
+                                            onBlur={() => setEditingInstallCount(false)} onKeyDown={(e) => { if (e.key === 'Enter') setEditingInstallCount(false); }}
+                                            className="w-20 px-2 py-0.5 border border-blue-300 rounded text-sm font-mono font-bold bg-blue-50 dark:bg-blue-500/10 dark:border-blue-500/40 dark:text-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                                            min="0" max={targetQty || 999} autoFocus />
+                                    ) : (
+                                        <span onClick={() => setEditingInstallCount(true)} className="font-mono font-bold text-blue-700 dark:text-blue-300 cursor-pointer hover:opacity-70" title="Click to edit">
+                                            {installed}<Icon name="Edit" size={10} className="inline ml-1 opacity-0 group-hover:opacity-50 transition-opacity" />
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs text-gray-500">Pending</span>
+                                    <span className={`font-mono font-bold ${pending > 0 ? 'text-orange-600' : 'text-green-600'}`}>{pending}</span>
+                                </div>
+                                {pending === 0 && installed > 0 && <div className="mt-2 text-center"><span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 dark:bg-green-500/15 text-green-700 dark:text-green-300">Fully Installed</span></div>}
+                            </div>
+                                );
+                            })()}
+
+                            {/* CARD C: MATERIALS & PROOFS */}
                             {(() => {
                                 const matReqQty = parseInt(customQty) || (item.adjustedQty != null ? item.adjustedQty : (originalQty || 0));
                                 const matReceived = linkedMaterials.reduce((a, m) => a + (parseInt(m.quantity) || 0), 0);
@@ -1345,82 +1331,90 @@
                                 const pct = matReqQty > 0 ? Math.min(100, Math.round((matReceived / matReqQty) * 100)) : 0;
                                 const overage = matReceived - matReqQty;
                                 const printers = [...new Set(linkedMaterials.map(m => m.printer || m.client || '').filter(Boolean))];
-                                const invoices = [...new Set(linkedMaterials.map(m => m.receiptNumber || '').filter(Boolean))];
-                                const statusColor = matIsSufficient ? 'green' : matIsPartial ? 'amber' : 'gray';
-                                const borderAccent = matIsSufficient ? 'border-green-300 dark:border-green-500/30' : matIsPartial ? 'border-amber-300 dark:border-amber-500/30' : 'border-gray-200 dark:border-slate-600';
+                                const borderColor = matIsSufficient ? 'border-l-green-500' : matIsPartial ? 'border-l-amber-500' : 'border-l-gray-300';
+                                const suffBadge = matIsSufficient ? { bg: 'bg-green-100 text-green-700', text: 'Complete' } : matIsPartial ? { bg: 'bg-amber-100 text-amber-700', text: `${pct}%` } : { bg: 'bg-gray-100 text-gray-600', text: 'Waiting' };
+                                const prodUniqueKey = `${item.id}_${item.date}_${item.product || item.media}`;
                                 return (
-                            <div className={`bg-gray-50 dark:bg-slate-900 p-4 rounded border ${linkedMaterials.length > 0 ? borderAccent : 'dark:border-slate-600'}`}>
-                                {/* Header */}
-                                <div className="flex items-center justify-between mb-2">
-                                    <h4 className="font-bold text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                                        <Icon name="Package" size={12} /> MATERIALS
-                                    </h4>
+                            <div className={`bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 border-l-[3px] ${borderColor} p-4`}>
+                                <div className="flex items-center justify-between mb-3">
+                                    <h4 className="text-[11px] font-bold tracking-wider text-gray-400 uppercase">Materials</h4>
+                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${suffBadge.bg}`}>{suffBadge.text}</span>
                                 </div>
-
+                                <div className="flex items-center gap-0.5 mb-3">
+                                    <span className="text-[9px] text-gray-400 shrink-0">Src</span>
+                                    <div className="inline-flex rounded overflow-hidden border border-gray-200 dark:border-slate-600">
+                                        {[{ key: 'in-house', label: 'IH', activeBg: 'bg-purple-500 text-white' }, { key: 'client', label: 'CL', activeBg: 'bg-blue-500 text-white' }, { key: 'mixed', label: 'MX', activeBg: 'bg-amber-500 text-white' }].map((opt, idx) => (
+                                            <button key={opt.key} onClick={() => onSave(prodUniqueKey, item.stage, { productionProof: opt.key })}
+                                                className={`px-1.5 py-0.5 text-[9px] font-bold transition-colors ${idx > 0 ? 'border-l border-gray-200 dark:border-slate-600' : ''} ${item.productionProof === opt.key ? opt.activeBg : 'bg-white dark:bg-slate-800 text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}>{opt.label}</button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="flex items-baseline gap-1.5 mb-2">
+                                    <span className={`text-2xl font-bold tabular-nums ${matIsSufficient ? 'text-green-600 dark:text-green-400' : matIsPartial ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400'}`}>{matReceived}</span>
+                                    <span className="text-xs text-gray-400">/ {matReqQty}</span>
+                                    {matIsSufficient && overage > 0 && <span className="text-[10px] text-green-500 ml-auto">+{overage}</span>}
+                                </div>
+                                <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-2 mb-3">
+                                    <div className={`h-2 rounded-full transition-all ${matIsSufficient ? 'bg-green-500' : matReceived > 0 ? 'bg-amber-500' : 'bg-gray-300'}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                                </div>
+                                {item.proofLink && <div className="flex items-center gap-1 mb-2 text-[10px]"><a href={item.proofLink.startsWith('http') ? item.proofLink : `https://${item.proofLink}`} target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:underline flex items-center gap-0.5 truncate"><Icon name="ExternalLink" size={10} /> Proof</a></div>}
                                 {linkedMaterials.length > 0 ? (
                                     <div>
-                                        {/* Status line — the single most important thing */}
-                                        <div className="flex items-baseline gap-1.5 mb-2">
-                                            <span className={`text-lg font-bold tabular-nums ${matIsSufficient ? 'text-green-600 dark:text-green-400' : matIsPartial ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400'}`}>
-                                                {matReceived}
-                                            </span>
-                                            <span className="text-xs text-gray-400 dark:text-gray-500">/ {matReqQty}</span>
-                                            <span className={`text-[10px] font-semibold ml-auto ${matIsSufficient ? 'text-green-600 dark:text-green-400' : matIsPartial ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400'}`}>
-                                                {matIsSufficient ? (overage > 0 ? `+${overage} extra` : 'Complete') : matIsPartial ? `${pct}%` : 'Waiting'}
-                                            </span>
-                                        </div>
-
-                                        {/* Progress bar */}
-                                        <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-1 mb-2">
-                                            <div className={`h-1 rounded-full transition-all ${matIsSufficient ? 'bg-green-500' : matReceived > 0 ? 'bg-amber-500' : 'bg-gray-300'}`}
-                                                style={{ width: `${Math.min(pct, 100)}%` }} />
-                                        </div>
-
-                                        {/* Summary line — printer + receipt count, clickable to expand */}
-                                        <button
-                                            onClick={() => setMatExpanded(!matExpanded)}
-                                            className="w-full flex items-center justify-between text-[10px] text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors group cursor-pointer"
-                                        >
-                                            <span className="truncate">
-                                                {linkedMaterials.length} receipt{linkedMaterials.length !== 1 ? 's' : ''}
-                                                {printers.length > 0 && <span className="text-gray-400 dark:text-gray-500"> · {printers[0]}{printers.length > 1 ? ` +${printers.length - 1}` : ''}</span>}
-                                            </span>
-                                            <Icon name={matExpanded ? 'ChevronUp' : 'ChevronDown'} size={10}
-                                                className="text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300 flex-shrink-0 ml-1 transition-colors" />
+                                        <button onClick={() => setMatExpanded(!matExpanded)} className="w-full flex items-center justify-between text-[10px] text-gray-500 hover:text-gray-700 transition-colors group cursor-pointer">
+                                            <span className="truncate">{linkedMaterials.length} receipt{linkedMaterials.length !== 1 ? 's' : ''}{printers.length > 0 && <span className="text-gray-400"> · {printers[0]}{printers.length > 1 ? ` +${printers.length - 1}` : ''}</span>}</span>
+                                            <Icon name={matExpanded ? 'ChevronUp' : 'ChevronDown'} size={10} className="text-gray-400 group-hover:text-gray-600 shrink-0 ml-1" />
                                         </button>
-
-                                        {/* Expandable detail */}
-                                        {matExpanded && (
-                                            <div className="mt-2 pt-2 border-t border-gray-200 dark:border-slate-700 space-y-1">
-                                                {linkedMaterials.map((m, i) => {
-                                                    const d = m.dateReceived || m.date_received || m.transactionDate || '';
-                                                    const fmtD = d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
-                                                    const code = m.posterCode || m.designCode || m.description || '';
-                                                    const qty = parseInt(m.quantity) || 0;
-                                                    const inv = m.receiptNumber || '';
-                                                    return (
-                                                        <div key={i} className="flex items-center gap-1.5 text-[10px]">
-                                                            <span className="font-mono font-bold text-gray-700 dark:text-gray-300 w-[20px] text-right">{qty}</span>
-                                                            <span className="text-gray-300 dark:text-gray-600">×</span>
-                                                            <span className="font-medium text-gray-600 dark:text-gray-300 truncate flex-1" title={code}>{code || 'Material'}</span>
-                                                            {fmtD && <span className="text-gray-400 dark:text-gray-500 whitespace-nowrap">{fmtD}</span>}
-                                                        </div>
-                                                    );
-                                                })}
-                                                {(printers.length > 0 || invoices.length > 0) && (
-                                                    <div className="pt-1 mt-1 border-t border-dashed border-gray-200 dark:border-slate-700 flex flex-wrap gap-x-3 gap-y-0.5 text-[9px] text-gray-400 dark:text-gray-500">
-                                                        {printers.length > 0 && <span>Printer: <span className="text-gray-600 dark:text-gray-400">{printers.join(', ')}</span></span>}
-                                                        {invoices.length > 0 && <span>Inv: <span className="font-mono text-gray-600 dark:text-gray-400">{invoices.join(', ')}</span></span>}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
+                                        {matExpanded && <div className="mt-2 pt-2 border-t border-gray-200 dark:border-slate-700 space-y-1">{linkedMaterials.map((m, i) => { const d = m.dateReceived || m.date_received || m.transactionDate || ''; const fmtD = d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''; return (<div key={i} className="flex items-center gap-1.5 text-[10px]"><span className="font-mono font-bold text-gray-700 dark:text-gray-300 w-[20px] text-right">{parseInt(m.quantity) || 0}</span><span className="text-gray-300">×</span><span className="font-medium text-gray-600 truncate flex-1">{m.posterCode || m.designCode || m.description || 'Material'}</span>{fmtD && <span className="text-gray-400 whitespace-nowrap">{fmtD}</span>}</div>);})}</div>}
                                     </div>
                                 ) : (
-                                    <div className="text-center py-3">
-                                        <Icon name="PackageOpen" size={18} className="mx-auto text-gray-300 dark:text-slate-600 mb-1" />
-                                        <div className="text-[10px] text-gray-400 dark:text-gray-500">No materials linked</div>
-                                        <div className="text-[9px] text-gray-400 dark:text-gray-600 mt-0.5">Upload via Comms Center ↓</div>
+                                    <div className="text-center py-1">
+                                        <div className="text-[10px] text-gray-400">No materials linked</div>
+                                        <button onClick={() => setCommsDrawerOpen(true)} className="text-[9px] text-blue-500 hover:text-blue-700 cursor-pointer">Add via Comms Center →</button>
+                                    </div>
+                                )}
+                            </div>
+                                );
+                            })()}
+
+                            {/* CARD D: REMOVAL */}
+                            {(() => {
+                                const borderColor = removalStatus === 'removed' ? 'border-l-green-500' : removalStatus === 'in_progress' ? 'border-l-blue-500' : removalStatus === 'blocked' ? 'border-l-red-500' : 'border-l-gray-300';
+                                const statusBadge = removalStatus === 'removed' ? { bg: 'bg-green-100 text-green-700', text: 'Complete' } : removalStatus === 'in_progress' ? { bg: 'bg-blue-100 text-blue-700', text: 'In Progress' } : removalStatus === 'blocked' ? { bg: 'bg-red-100 text-red-700', text: 'Blocked' } : { bg: 'bg-gray-100 text-gray-600', text: 'Scheduled' };
+                                const isOverdueOrBlocked = removalStatus === 'blocked' || (item.daysUntilDeadline != null && item.daysUntilDeadline < 0);
+                                const remPct = removalQty > 0 ? Math.min(100, Math.round((removedCount / removalQty) * 100)) : 0;
+                                return (
+                            <div className={`bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 border-l-[3px] ${borderColor} p-4 ${isOverdueOrBlocked ? 'ring-1 ring-red-200 dark:ring-red-500/30' : ''} ${item.isAdCouncilTrigger ? 'bg-red-50/50 dark:bg-red-500/5' : ''}`}>
+                                <div className="flex items-center justify-between mb-3">
+                                    <h4 className="text-[11px] font-bold tracking-wider text-gray-400 uppercase flex items-center gap-1">Removal{item.isAdCouncilTrigger && <span className="px-1 py-0.5 bg-red-600 text-white rounded text-[8px] font-bold ml-1">AC</span>}</h4>
+                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${statusBadge.bg}`}>{statusBadge.text}</span>
+                                </div>
+                                {editingRemoval ? (
+                                    <div className="space-y-2">
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div><label className="text-[10px] font-bold text-gray-500">Qty</label><input type="number" value={removalQty || ''} onChange={(e) => setRemovalQty(parseInt(e.target.value) || 0)} className="w-full text-xs border rounded px-1.5 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200" min="0" /></div>
+                                            <div><label className="text-[10px] font-bold text-gray-500">Done</label><input type="number" value={removedCount || ''} onChange={(e) => setRemovedCount(parseInt(e.target.value) || 0)} className="w-full text-xs border rounded px-1.5 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200" min="0" max={removalQty} /></div>
+                                        </div>
+                                        <div><label className="text-[10px] font-bold text-gray-500">Status</label>
+                                            {removedCount === 0 ? <select value={removalStatus} onChange={(e) => setRemovalStatus(e.target.value)} className="w-full text-xs border rounded px-1.5 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200"><option value="scheduled">Scheduled</option><option value="blocked">Blocked</option></select>
+                                            : <div className={`w-full text-xs border rounded px-1.5 py-1 bg-gray-100 dark:bg-slate-700 ${removalStatus === 'removed' ? 'text-green-600' : 'text-blue-600'}`}>{removalStatus === 'removed' ? 'Removed' : 'In Progress'} <span className="text-gray-400">(auto)</span></div>}
+                                        </div>
+                                        <div><label className="text-[10px] font-bold text-gray-500">Assignee</label><select value={removalAssignee} onChange={(e) => setRemovalAssignee(e.target.value)} className="w-full text-xs border rounded px-1.5 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200"><option value="">-- Select --</option><option value="Shelter Clean">Shelter Clean</option><option value="In-House Ops">In-House Ops</option></select></div>
+                                        <div><label className="text-[10px] font-bold text-gray-500">Photos Link</label><input type="text" value={removalPhotosLink} onChange={(e) => setRemovalPhotosLink(e.target.value)} className="w-full text-xs border rounded px-1.5 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200" placeholder="URL..." /></div>
+                                        <div className="flex items-center justify-between pt-1"><div className="flex items-center gap-1"><input type="checkbox" id="hasReplacementCompact" checked={hasReplacement} onChange={(e) => setHasReplacement(e.target.checked)} className="rounded w-3 h-3" /><label htmlFor="hasReplacementCompact" className="text-[10px] text-gray-600 dark:text-gray-400">Has replacement</label></div><button onClick={() => setEditingRemoval(false)} className="text-[10px] text-gray-500 hover:text-gray-700">Done</button></div>
+                                    </div>
+                                ) : (
+                                    <div>
+                                        <div className="flex items-baseline gap-2 mb-2">
+                                            <span className={`text-2xl font-bold tabular-nums ${removalStatus === 'removed' ? 'text-green-600' : removalStatus === 'blocked' ? 'text-red-600' : 'text-gray-700 dark:text-gray-200'}`}>{removedCount}</span>
+                                            <span className="text-sm text-gray-400 font-mono">/ {removalQty}</span>
+                                        </div>
+                                        <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-2 mb-3">
+                                            <div className={`h-2 rounded-full transition-all ${removalStatus === 'removed' ? 'bg-green-500' : remPct >= 50 ? 'bg-amber-500' : 'bg-red-400'}`} style={{ width: `${remPct}%` }} />
+                                        </div>
+                                        {removalAssignee && <div className="text-[10px] text-gray-500 mb-1">Assignee: {removalAssignee}</div>}
+                                        {item.daysUntilDeadline !== undefined && <div className={`text-[10px] font-bold ${item.daysUntilDeadline < 0 ? 'text-red-600 animate-pulse' : item.daysUntilDeadline <= 7 ? 'text-orange-600' : 'text-green-600'}`}>{item.daysUntilDeadline < 0 ? `${Math.abs(item.daysUntilDeadline)}d overdue` : `${item.daysUntilDeadline}d left`}</div>}
+                                        {hasReplacement && <div className="text-[10px] text-green-600 flex items-center gap-1 mt-1"><Icon name="RefreshCw" size={10} /> Replacement</div>}
+                                        <button onClick={() => setEditingRemoval(true)} className="w-full mt-2 px-2 py-1 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 text-[10px] font-medium rounded hover:bg-gray-200 dark:hover:bg-slate-600 flex items-center justify-center gap-1"><Icon name="Edit" size={10} /> Edit</button>
                                     </div>
                                 )}
                             </div>
@@ -1428,388 +1422,161 @@
                             })()}
                         </div>
 
-                        {/* Production Proof Selector */}
-                        <div className="mb-6 p-4 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-500/10 dark:to-blue-500/10 border border-purple-200 dark:border-purple-500/30 rounded-lg">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <h4 className="font-bold text-sm text-gray-700 flex items-center gap-2">
-                                        Production Source
-                                        {item.productionProof && <ProductionIcon type={item.productionProof} size={14} />}
-                                    </h4>
-                                    <p className="text-xs text-gray-500">Who produced the creative materials?</p>
-                                </div>
-                                <div className="flex gap-2">
-                                    <button
-                                        onClick={() => {
-                                            const uniqueKey = `${item.id}_${item.date}_${item.product || item.media}`;
-                                            onSave(uniqueKey, item.stage, { productionProof: 'in-house' });
-                                        }}
-                                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1 ${
-                                            item.productionProof === 'in-house'
-                                                ? 'bg-purple-600 text-white'
-                                                : 'bg-white dark:bg-slate-700 border border-purple-300 dark:border-purple-500/40 text-purple-700 dark:text-purple-300 hover:bg-purple-50'
-                                        }`}
-                                    >
-                                        <Icon name="Home" size={12} /> In-House
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            const uniqueKey = `${item.id}_${item.date}_${item.product || item.media}`;
-                                            onSave(uniqueKey, item.stage, { productionProof: 'client' });
-                                        }}
-                                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1 ${
-                                            item.productionProof === 'client'
-                                                ? 'bg-blue-600 text-white'
-                                                : 'bg-white dark:bg-slate-700 border border-blue-300 dark:border-blue-500/40 text-blue-700 dark:text-blue-300 hover:bg-blue-50'
-                                        }`}
-                                    >
-                                        <Icon name="Upload" size={12} /> Client
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            const uniqueKey = `${item.id}_${item.date}_${item.product || item.media}`;
-                                            onSave(uniqueKey, item.stage, { productionProof: 'mixed' });
-                                        }}
-                                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1 ${
-                                            item.productionProof === 'mixed'
-                                                ? 'bg-amber-600 text-white'
-                                                : 'bg-white dark:bg-slate-700 border border-amber-300 dark:border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-50'
-                                        }`}
-                                        title="Original from client, reprint from in-house (or vice versa)"
-                                    >
-                                        <Icon name="RefreshCw" size={12} /> Mixed
-                                    </button>
-                                </div>
-                            </div>
-                            {item.proofLink && (
-                                <div className="mt-3 pt-3 border-t border-purple-200">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xs text-gray-600">📄 Proof Document:</span>
-                                        <a
-                                            href={item.proofLink.startsWith('http') ? item.proofLink : `https://${item.proofLink}`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="text-xs text-purple-600 hover:text-purple-800 hover:underline flex items-center gap-1"
-                                        >
-                                            <Icon name="ExternalLink" size={12} />
-                                            {item.proofLink.length > 50 ? item.proofLink.substring(0, 50) + '...' : item.proofLink}
-                                        </a>
-                                    </div>
-                                </div>
-                            )}
-                            {item.productionProof === 'in-house' && item.proofLink && (
-                                <div className="mt-2 text-[10px] text-purple-500 flex items-center gap-1">
-                                    <Icon name="Zap" size={10} /> Auto-detected from proof link in Google Sheet
-                                </div>
-                            )}
-                        </div>
-
-                        {/* EMAIL GENERATOR UI */}
-                        <div className="flex justify-between items-center mb-4">
-                            <h4 className="text-sm font-bold flex items-center gap-2"><Icon name="Bot" size={16} /> Comms Center</h4>
-                            <select value={selectedTemplate} onChange={(e) => setSelectedTemplate(e.target.value)} className="text-xs border rounded px-2 py-1">
-                                <option value="auto">✨ Auto-Detect</option>
-                                <option value="schedule">📅 Scheduled</option>
-                                <option value="material_received">📦 Materials Landed</option>
-                                <option value="complete">✅ Installed</option>
-                                <option value="missing">⚠️ Missing Assets</option>
-                                <option value="delay">🚧 Delay Alert</option>
-                                <option value="maintenance">🛠️ Maintenance</option>
-                                <option value="removal">🗑️ Removal</option>
-                            </select>
-                        </div>
-
-                        {showInstallControls && (
-                            <div className="mb-4 p-4 bg-gray-50 dark:bg-slate-900 border dark:border-slate-600 rounded-lg">
-                                {/* Missing Asset Options */}
-                                {selectedTemplate === 'missing' && (
-                                    <div className="mb-3 p-3 bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20 rounded">
-                                        <div className="flex gap-4 mb-2 text-sm">
-                                            <label><input type="radio" checked={missingType==='instructions'} onChange={()=>setMissingType('instructions')}/> Instructions</label>
-                                            <label><input type="radio" checked={missingType==='material'} onChange={()=>setMissingType('material')}/> Material</label>
-                                            <label><input type="radio" checked={missingType==='both'} onChange={()=>setMissingType('both')}/> Both</label>
-                                        </div>
-                                        <input type="text" value={deadlineDate} onChange={(e)=>setDeadlineDate(e.target.value)} className="w-full text-sm border rounded px-2 py-1" placeholder="Deadline Date"/>
-                                    </div>
-                                )}
-
-                                {/* Inventory Breakdown or Standard Inputs */}
-                                {selectedTemplate === 'material_received' ? (
-                                    <div className="mb-4 bg-gray-50 dark:bg-slate-800 border dark:border-slate-600 rounded p-3">
-                                        {/* Required Qty and Media Type - Bug 1 & 5 fix */}
-                                        <div className="grid grid-cols-2 gap-3 mb-3 pb-3 border-b border-gray-200">
-                                            <div>
-                                                <label className="text-xs font-bold text-purple-600">Required Qty</label>
-                                                <input type="text" value={customQty} onChange={(e)=>setCustomQty(e.target.value)} className="w-full text-sm border border-purple-300 rounded px-2 py-1"/>
-                                            </div>
-                                            <div>
-                                                <label className="text-xs font-bold text-gray-500">Media Type</label>
-                                                <input type="text" value={customDesigns} onChange={(e)=>setCustomDesigns(e.target.value)} className="w-full text-sm border rounded px-2 py-1"/>
-                                            </div>
-                                        </div>
-                                        <div className="flex justify-between items-center mb-1">
-                                            <label className="text-xs font-bold text-gray-500">Inventory Breakdown</label>
-                                            <span className={`text-xs font-bold ${getInventoryStatus().isSufficient ? 'text-green-600' : 'text-red-500'}`}>
-                                                Received: {getInventoryStatus().currentTotal} / {customQty || 0}
-                                            </span>
-                                        </div>
-                                        {/* Reconciliation status bar */}
-                                        {(() => {
-                                            const recon = getReconciliationStatus();
-                                            if (recon.status === 'none') return null;
-                                            const colorMap = { matched: 'text-green-600', under: 'text-amber-600', over: 'text-red-600' };
-                                            const iconMap = { matched: '✓', under: '⚠', over: '🚫' };
-                                            const labelMap = { matched: 'Matched', under: 'Under-scheduled', over: 'Over-scheduled' };
-                                            return React.createElement('div', {
-                                                className: `flex justify-between items-center mb-2 text-xs font-bold ${colorMap[recon.status]}`
-                                            },
-                                                React.createElement('span', null, `${iconMap[recon.status]} Scheduled: ${recon.totalScheduled} / ${recon.charted} (${labelMap[recon.status]})`),
-                                                recon.status === 'over' ? React.createElement('span', {
-                                                    className: 'bg-red-100 text-red-700 px-2 py-0.5 rounded text-xs'
-                                                }, `+${recon.totalScheduled - recon.charted} over charted`) : null
-                                            );
-                                        })()}
-                                        {/* Column headers */}
-                                        <div className="flex gap-2 mb-1 text-xs font-bold text-gray-400 uppercase tracking-wide">
-                                            <span className="flex-1">Design Code</span>
-                                            <span className="w-16 text-center">Recv</span>
-                                            <span className="w-20 text-center">Sched</span>
-                                            <span className="w-12 text-center">+/−</span>
-                                            <span className="flex-1">Drive Link</span>
-                                            <span className="w-6"></span>
-                                        </div>
-                                        <div className="space-y-2 mb-2">
-                                            {materialBreakdown.map((row, idx) => {
-                                                const recv = parseFloat(row.qty) || 0;
-                                                const sched = parseFloat(row.scheduled) || 0;
-                                                const overage = recv - sched;
-                                                return (
-                                                <div key={idx} className="flex gap-2 items-center">
-                                                    <input
-                                                        placeholder="Design Code"
-                                                        value={row.code}
-                                                        onChange={e => updateRow(idx, 'code', e.target.value)}
-                                                        className="flex-1 text-sm border rounded px-2 py-1"
-                                                    />
-                                                    <input
-                                                        placeholder="Recv"
-                                                        type="number"
-                                                        value={row.qty}
-                                                        onChange={e => updateRow(idx, 'qty', e.target.value)}
-                                                        className="w-16 text-sm border rounded px-2 py-1 text-center"
-                                                    />
-                                                    <div className="w-20 flex items-center gap-0.5">
-                                                        <input
-                                                            placeholder="Sched"
-                                                            type="number"
-                                                            value={row.scheduled}
-                                                            onChange={e => updateScheduled(idx, e.target.value)}
-                                                            className={`w-14 text-sm border rounded px-1 py-1 text-center ${row.scheduledLocked ? 'border-amber-400 bg-amber-50' : ''}`}
-                                                            title={row.scheduledLocked ? 'Manually set (click lock to auto-distribute)' : 'Auto-distributed from charted qty'}
-                                                        />
-                                                        {row.scheduledLocked && (
-                                                            <button onClick={() => unlockScheduled(idx)} className="text-amber-500 hover:text-amber-700" title="Unlock for auto-distribution">
-                                                                <Icon name="Lock" size={12} />
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                    <span className={`w-12 text-xs font-bold text-center ${overage > 0 ? 'text-green-600' : overage < 0 ? 'text-red-500' : 'text-gray-400'}`}>
-                                                        {(row.code || row.qty) ? (overage > 0 ? `+${overage}` : overage < 0 ? `${overage}` : '—') : ''}
-                                                    </span>
-                                                    <input
-                                                        placeholder="Google Drive Link"
-                                                        value={row.link}
-                                                        onChange={e => updateRow(idx, 'link', e.target.value)}
-                                                        className="flex-1 text-sm border border-purple-200 rounded px-2 py-1"
-                                                        title="Paste Google Drive link for poster image/PDF"
-                                                    />
-                                                    <button onClick={() => removeRow(idx)} className="text-red-400"><Icon name="X" size={16} /></button>
-                                                </div>
-                                                );
-                                            })}
-                                        </div>
-                                        <button onClick={addRow} className="text-xs text-blue-600 font-bold hover:underline">+ Add Row</button>
-                                    </div>
-                                ) : (
-                                    <div className="mb-3">
-                                        <div><label className="text-xs font-bold text-gray-500">Media Type</label><input type="text" value={customDesigns} onChange={(e)=>setCustomDesigns(e.target.value)} className="w-full text-sm border rounded px-2 py-1"/></div>
-                                    </div>
-                                )}
-
-                                {/* Dynamic Inputs */}
-                                {(selectedTemplate === 'delay' || selectedTemplate === 'maintenance') && (
-                                    <div className="mb-3"><label className="text-xs font-bold">Reason/Action</label><input type="text" value={issueReason} onChange={(e)=>setIssueReason(e.target.value)} className="w-full text-sm border rounded px-2 py-1" placeholder="Details..."/></div>
-                                )}
-                                {selectedTemplate === 'delay' && (
-                                    <div className="mb-3"><label className="text-xs font-bold">New Date</label><input type="text" value={newEta} onChange={(e)=>setNewEta(e.target.value)} className="w-full text-sm border rounded px-2 py-1"/></div>
-                                )}
-
-                                {/* Photos & Receiver Links + Upload */}
-                                <div className="grid grid-cols-2 gap-2 mb-3">
-                                    <div><label className="text-xs font-bold text-green-700">📸 Photos Link</label><input type="text" value={customPhotosLink} onChange={(e)=>setCustomPhotosLink(e.target.value)} className="w-full text-sm border border-green-200 rounded px-2 py-1" placeholder="POP folder URL..."/></div>
-                                    <div><label className="text-xs font-bold text-blue-700">📄 Receiver Link</label><input type="text" value={customReceiverLink} onChange={(e)=>setCustomReceiverLink(e.target.value)} className="w-full text-sm border border-blue-200 rounded px-2 py-1" placeholder="Receiver PDF URL..."/></div>
-                                </div>
-                                <div className="mb-3 flex items-center gap-2">
-                                    <button
-                                        onClick={() => pdfInputRef.current?.click()}
-                                        disabled={pdfUploading}
-                                        className={`px-3 py-1.5 text-xs font-medium rounded flex items-center gap-1.5 transition-colors ${
-                                            pdfUploading
-                                                ? 'bg-gray-100 dark:bg-slate-700 text-gray-400'
-                                                : 'bg-orange-50 dark:bg-orange-500/15 text-orange-700 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-500/25 border border-orange-200 dark:border-orange-500/30'
-                                        }`}
-                                        title="Upload receiver PDF(s) — auto-creates material entries linked to this campaign"
-                                    >
-                                        <Icon name="Upload" size={12} />
-                                        {pdfUploading ? 'Processing...' : 'Upload Receiver PDF'}
-                                    </button>
-                                    <input
-                                        ref={pdfInputRef}
-                                        type="file"
-                                        accept=".pdf"
-                                        multiple
-                                        onChange={handleInlinePdfUpload}
-                                        className="hidden"
-                                    />
-                                    {pdfFeedback && (
-                                        <span className="text-[11px] text-green-600 dark:text-green-400 font-medium">{pdfFeedback}</span>
-                                    )}
-                                </div>
-
-                                {/* LINKED MATERIAL RECEIVERS — inline detail table */}
-                                {linkedMaterials.length > 0 && (
-                                    <div className="mb-3 border border-green-200 dark:border-green-500/30 rounded-lg overflow-hidden">
-                                        <div className="flex items-center justify-between px-3 py-1.5 bg-green-100/80 dark:bg-green-500/15">
-                                            <div className="flex items-center gap-1.5">
-                                                <Icon name="Package" size={12} className="text-green-600" />
-                                                <span className="text-[11px] font-bold text-green-800 dark:text-green-400">
-                                                    {linkedMaterials.length} Receiver{linkedMaterials.length !== 1 ? 's' : ''} Linked
-                                                </span>
-                                                <span className="text-[10px] text-green-600 dark:text-green-500">
-                                                    ({linkedMaterials.reduce((a, m) => a + (parseInt(m.quantity) || 0), 0)} units)
-                                                </span>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <button
-                                                    onClick={() => pdfInputRef.current?.click()}
-                                                    disabled={pdfUploading}
-                                                    className="text-[10px] text-green-700 dark:text-green-400 hover:underline flex items-center gap-0.5"
-                                                >
-                                                    <Icon name="Upload" size={10} /> Add PDF
-                                                </button>
-                                                {onOpenMaterialReceivers && (
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); onClose(); onOpenMaterialReceivers(); }}
-                                                        className="text-[10px] text-green-700 dark:text-green-400 hover:underline"
-                                                    >
-                                                        View All →
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <table className="w-full text-[11px]">
-                                            <thead>
-                                                <tr className="bg-green-50 dark:bg-green-500/5 text-gray-500 dark:text-gray-400">
-                                                    <th className="px-3 py-1 text-left font-medium">Date Rcvd</th>
-                                                    <th className="px-3 py-1 text-left font-medium">Design / Code</th>
-                                                    <th className="px-3 py-1 text-right font-medium">Qty</th>
-                                                    <th className="px-3 py-1 text-left font-medium">Source</th>
-                                                    <th className="px-3 py-1 w-6"></th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {linkedMaterials.map((m, i) => {
-                                                    const d = m.dateReceived || m.date_received || m.transactionDate || '';
-                                                    const fmtD = d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
-                                                    const code = m.posterCode || m.designCode || m.description || '—';
-                                                    const src = m.printer || m.client || '—';
-                                                    return (
-                                                        <tr key={m.id || i} className="border-t border-green-100 dark:border-green-500/10 group/row">
-                                                            <td className="px-3 py-1 font-mono text-gray-600 dark:text-gray-400">{fmtD}</td>
-                                                            <td className="px-3 py-1 font-medium text-gray-800 dark:text-gray-200">{code}</td>
-                                                            <td className="px-3 py-1 text-right font-mono font-bold text-gray-800 dark:text-gray-200">{m.quantity || 0}</td>
-                                                            <td className="px-3 py-1 text-gray-500 dark:text-gray-400 truncate max-w-[120px]" title={src}>{src}</td>
-                                                            <td className="px-1 py-1">
-                                                                {onRemoveMaterial && (
-                                                                    <button
-                                                                        onClick={() => {
-                                                                            if (confirm('Remove this receiver?')) onRemoveMaterial(m.id);
-                                                                        }}
-                                                                        className="p-0.5 text-gray-300 hover:text-red-500 transition-colors"
-                                                                        title="Remove receiver"
-                                                                    >
-                                                                        <Icon name="X" size={12} />
-                                                                    </button>
-                                                                )}
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
-                                        {pdfFeedback && (
-                                            <div className="px-3 py-1 text-[10px] text-green-600 dark:text-green-400 font-medium bg-green-50 dark:bg-green-500/5 border-t border-green-100">
-                                                {pdfFeedback}
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-
-                                <div className="flex gap-2">
-                                    <button onClick={handleCopyToWebmail} className="flex-1 px-4 py-2 bg-blue-600 text-white font-bold rounded flex justify-center gap-2 hover:bg-blue-700"><Icon name="Copy" size={16}/> {copyFeedback || "Copy Email"}</button>
-                                </div>
-                            </div>
+                        {/* LINKED PROOFS */}
+                        {linkedProofs.length > 0 && (
+                            <div className="mb-4"><div className="flex items-center justify-between p-2 bg-green-100/60 dark:bg-green-500/10 border border-green-200 dark:border-green-500/30 rounded-lg">
+                                <div className="flex items-center gap-2"><Icon name="Sparkles" size={14} className="text-green-600" /><span className="text-xs font-medium text-green-800 dark:text-green-300">{linkedProofs.length} proof{linkedProofs.length !== 1 ? 's' : ''} linked from Creative Hub</span></div>
+                                {onOpenCreativeHub && <button onClick={(e) => { e.stopPropagation(); onClose(); onOpenCreativeHub(); }} className="text-[10px] text-green-700 dark:text-green-400 hover:underline">View →</button>}
+                            </div></div>
                         )}
 
-                        {/* PREVIEW */}
-                        <div className="border dark:border-slate-600 rounded bg-gray-50 dark:bg-slate-950 p-4 h-64 overflow-y-auto">
-                            <div dangerouslySetInnerHTML={{ __html: emailDraft }} />
-                        </div>
-                    </div>
-
-                    {/* LINKED PROOFS */}
-                    {linkedProofs.length > 0 && (
-                        <div className="px-8 py-3 border-t dark:border-slate-700 bg-green-50/50 dark:bg-green-500/5">
-                            <div className="flex items-center justify-between p-2 bg-green-100/60 border border-green-200 rounded-lg">
-                                <div className="flex items-center gap-2">
-                                    <Icon name="Sparkles" size={14} className="text-green-600" />
-                                    <span className="text-xs font-medium text-green-800">
-                                        {linkedProofs.length} proof{linkedProofs.length !== 1 ? 's' : ''} linked from Creative Hub
-                                    </span>
-                                </div>
-                                {onOpenCreativeHub && (
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); onClose(); onOpenCreativeHub(); }}
-                                        className="text-[10px] text-green-700 hover:text-green-900 underline"
-                                    >
-                                        View →
-                                    </button>
+                        {/* ACTIVITY LOG — expandable */}
+                        {item.history && item.history.length > 0 && (
+                            <div className="mb-2">
+                                <button onClick={() => setHistoryExpanded(!historyExpanded)} className="w-full flex items-center justify-between bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors">
+                                    <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400"><Icon name="History" size={12} /><span className="font-medium">Activity Log</span><span className="text-gray-400">({item.history.length} change{item.history.length !== 1 ? 's' : ''})</span></div>
+                                    <Icon name={historyExpanded ? 'ChevronUp' : 'ChevronDown'} size={14} className="text-gray-400" />
+                                </button>
+                                {historyExpanded && (
+                                    <div className="mt-1 border border-gray-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 max-h-48 overflow-y-auto px-4 py-3">
+                                        <div className="relative border-l-2 border-gray-200 dark:border-slate-600 ml-1 space-y-3">
+                                            {[...item.history].reverse().map((entry, idx) => {
+                                                const date = new Date(entry.timestamp);
+                                                const timeStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ', ' + date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+                                                return (<div key={idx} className="pl-4 relative"><div className="absolute -left-[5px] top-1 w-2 h-2 rounded-full bg-gray-300 dark:bg-slate-500" /><div className="text-[10px] text-gray-400 dark:text-gray-500 mb-0.5">{timeStr}</div><div className="flex flex-wrap gap-1">{entry.changes.map((c, ci) => <span key={ci} className="inline-block bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300 text-[10px] rounded px-1.5 py-0.5">{c}</span>)}</div></div>);
+                                            })}
+                                        </div>
+                                    </div>
                                 )}
                             </div>
-                        </div>
-                    )}
+                        )}
+                        {/* COMMS CENTER — inline collapsible drawer */}
+                        <div className="mb-2">
+                            <button onClick={() => setCommsDrawerOpen(!commsDrawerOpen)} className={`w-full flex items-center justify-between rounded-xl px-4 py-3 cursor-pointer transition-all border-2 shadow-sm hover:shadow-md ${commsDrawerOpen ? 'bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-500/15 dark:to-indigo-500/15 border-blue-300 dark:border-blue-500/40 shadow-blue-100 dark:shadow-blue-500/10' : 'bg-gradient-to-r from-blue-50 to-blue-100/50 dark:from-blue-500/10 dark:to-blue-500/5 border-blue-200 dark:border-blue-500/25 hover:border-blue-300 dark:hover:border-blue-500/40 hover:from-blue-100 hover:to-indigo-50'}`}>
+                                <div className="flex items-center gap-2.5">
+                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${commsDrawerOpen ? 'bg-blue-600 text-white' : 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400'}`}><Icon name="MessageSquare" size={16} /></div>
+                                    <div className="text-left"><div className={`text-xs font-bold ${commsDrawerOpen ? 'text-blue-800 dark:text-blue-300' : 'text-blue-700 dark:text-blue-400'}`}>Comms Center</div><div className="text-[10px] text-blue-500/70 dark:text-blue-400/50">Email templates, materials, PDF upload</div></div>
+                                </div>
+                                <div className={`w-6 h-6 rounded-full flex items-center justify-center ${commsDrawerOpen ? 'bg-blue-200 dark:bg-blue-500/30' : 'bg-blue-100 dark:bg-blue-500/15'}`}><Icon name={commsDrawerOpen ? 'ChevronUp' : 'ChevronDown'} size={14} className="text-blue-600 dark:text-blue-400" /></div>
+                            </button>
+                            {commsDrawerOpen && (() => {
+                                const resolvedMode = getResolvedMode();
+                                const modeColorMap = { schedule: 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300', material_received: 'bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-300', complete: 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-300', missing: 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300', delay: 'bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300', maintenance: 'bg-teal-100 text-teal-700 dark:bg-teal-500/20 dark:text-teal-300', removal: 'bg-gray-100 text-gray-700 dark:bg-gray-500/20 dark:text-gray-300' };
+                                const modeNameMap = { schedule: 'Scheduled', material_received: 'Materials Landed', complete: 'Installed', missing: 'Missing Assets', delay: 'Delay Alert', maintenance: 'Maintenance', removal: 'Removal' };
+                                return (
+                                <div className="mt-1 border border-blue-200 dark:border-blue-500/30 rounded-lg bg-white dark:bg-slate-800 overflow-hidden">
+                                    <div className="grid grid-cols-2">
+                                        {/* ═══ LEFT PANEL — Data Inputs ═══ */}
+                                        <div className="p-4 border-r border-gray-200 dark:border-slate-600 overflow-y-auto max-h-[420px] space-y-4">
 
-                    {/* HISTORY FOOTER */}
-                    {item.history && item.history.length > 0 && (
-                        <div className="px-8 py-3 border-t dark:border-slate-700 bg-gray-50 dark:bg-slate-900 max-h-32 overflow-y-auto">
-                            <h4 className="text-[10px] font-bold text-gray-500 mb-2 flex items-center gap-1">
-                                <Icon name="History" size={10} /> CHANGE HISTORY
-                            </h4>
-                            <div className="space-y-2">
-                                {[...item.history].reverse().map((entry, idx) => {
-                                    const date = new Date(entry.timestamp);
-                                    const timeStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
-                                                   date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-                                    return (
-                                        <div key={idx} className="text-[10px]">
-                                            <span className="text-gray-400">{timeStr}</span>
-                                            <span className="text-gray-600 ml-2">{entry.changes.join(' • ')}</span>
+                                            {/* Section 1: Template & Campaign Info */}
+                                            <div>
+                                                <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">Template & Campaign</div>
+                                                <div className="flex justify-between items-center mb-3">
+                                                    <h4 className="text-xs font-bold flex items-center gap-1.5 text-gray-600 dark:text-gray-300"><Icon name="Bot" size={14} /> Template</h4>
+                                                    <select value={selectedTemplate} onChange={(e) => setSelectedTemplate(e.target.value)} className="text-xs border rounded px-2 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200">
+                                                        <option value="auto">Auto-Detect</option><option value="schedule">Scheduled</option><option value="material_received">Materials Landed</option><option value="complete">Installed</option><option value="missing">Missing Assets</option><option value="delay">Delay Alert</option><option value="maintenance">Maintenance</option><option value="removal">Removal</option>
+                                                    </select>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] bg-gray-50 dark:bg-slate-900 rounded p-2">
+                                                    <div className="text-gray-400">Advertiser</div><div className="font-medium text-gray-700 dark:text-gray-300 truncate">{item.advertiser || 'N/A'}</div>
+                                                    <div className="text-gray-400">Campaign</div><div className="font-medium text-gray-700 dark:text-gray-300 truncate">{item.id || 'N/A'}</div>
+                                                    <div className="text-gray-400">Flight</div><div className="font-medium text-gray-700 dark:text-gray-300 truncate">{item.name || 'N/A'}</div>
+                                                    <div className="text-gray-400">Market</div><div className="font-medium text-gray-700 dark:text-gray-300 truncate">{formatMarketName(item.market)}</div>
+                                                    <div className="text-gray-400">Dates</div><div className="font-medium text-gray-700 dark:text-gray-300 truncate">{item.date || 'N/A'} — {item.endDate || 'TBD'}</div>
+                                                    <div className="text-gray-400">Owner</div><div className="font-medium text-gray-700 dark:text-gray-300 truncate">{item.owner || 'N/A'}</div>
+                                                </div>
+                                            </div>
+
+                                            <div className="border-b border-gray-100 dark:border-slate-700" />
+
+                                            {showInstallControls && (<>
+                                            {/* Section 2: Quantities & Media */}
+                                            <div>
+                                                <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">Quantities</div>
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    <div><label className="text-xs font-bold text-gray-500">Required Qty</label><input type="text" value={customQty} onChange={(e)=>setCustomQty(e.target.value)} className="w-full text-sm border rounded px-2 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200"/></div>
+                                                    {(selectedTemplate === 'complete' || resolvedMode === 'complete') && <div><label className="text-xs font-bold text-green-600">Installed Qty</label><input type="text" value={emailInstalledQty} onChange={(e)=>setEmailInstalledQty(e.target.value)} className="w-full text-sm border border-green-200 dark:border-green-500/30 rounded px-2 py-1 dark:bg-slate-700 dark:text-gray-200"/></div>}
+                                                </div>
+                                                <div className="mt-2"><label className="text-xs font-bold text-gray-500">Media Type</label><input type="text" value={customDesigns} onChange={(e)=>setCustomDesigns(e.target.value)} className="w-full text-sm border rounded px-2 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200"/></div>
+                                            </div>
+
+                                            <div className="border-b border-gray-100 dark:border-slate-700" />
+
+                                            {/* Section 3: Template-Specific Fields */}
+                                            {selectedTemplate === 'missing' && (<div>
+                                                <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">Missing Assets</div>
+                                                <div className="p-3 bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20 rounded"><div className="flex gap-4 mb-2 text-sm"><label className="dark:text-gray-300"><input type="radio" checked={missingType==='instructions'} onChange={()=>setMissingType('instructions')}/> Instructions</label><label className="dark:text-gray-300"><input type="radio" checked={missingType==='material'} onChange={()=>setMissingType('material')}/> Material</label><label className="dark:text-gray-300"><input type="radio" checked={missingType==='both'} onChange={()=>setMissingType('both')}/> Both</label></div><input type="text" value={deadlineDate} onChange={(e)=>setDeadlineDate(e.target.value)} className="w-full text-sm border rounded px-2 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200" placeholder="Deadline Date"/></div>
+                                            </div>)}
+
+                                            {(selectedTemplate === 'delay' || selectedTemplate === 'maintenance') && (<div>
+                                                <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">{selectedTemplate === 'delay' ? 'Delay Details' : 'Maintenance Details'}</div>
+                                                <div><label className="text-xs font-bold dark:text-gray-300">Reason/Action</label><input type="text" value={issueReason} onChange={(e)=>setIssueReason(e.target.value)} className="w-full text-sm border rounded px-2 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200" placeholder="Details..."/></div>
+                                                {selectedTemplate === 'delay' && <div className="mt-2"><label className="text-xs font-bold dark:text-gray-300">New Date</label><input type="text" value={newEta} onChange={(e)=>setNewEta(e.target.value)} className="w-full text-sm border rounded px-2 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200"/></div>}
+                                            </div>)}
+
+                                            {selectedTemplate === 'material_received' && (<div>
+                                                <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">Inventory Breakdown</div>
+                                                <div className="bg-gray-50 dark:bg-slate-900 border dark:border-slate-600 rounded p-3">
+                                                    <div className="flex justify-between items-center mb-1"><span className={`text-xs font-bold ${getInventoryStatus().isSufficient ? 'text-green-600' : 'text-red-500'}`}>Received: {getInventoryStatus().currentTotal} / {customQty || 0}</span></div>
+                                                    {(() => { const recon = getReconciliationStatus(); if (recon.status === 'none') return null; const colorMap = { matched: 'text-green-600', under: 'text-amber-600', over: 'text-red-600' }; const iconMap = { matched: '✓', under: '⚠', over: '🚫' }; const labelMap = { matched: 'Matched', under: 'Under-scheduled', over: 'Over-scheduled' }; return React.createElement('div', { className: `flex justify-between items-center mb-2 text-xs font-bold ${colorMap[recon.status]}` }, React.createElement('span', null, `${iconMap[recon.status]} Scheduled: ${recon.totalScheduled} / ${recon.charted} (${labelMap[recon.status]})`), recon.status === 'over' ? React.createElement('span', { className: 'bg-red-100 text-red-700 px-2 py-0.5 rounded text-xs' }, `+${recon.totalScheduled - recon.charted} over charted`) : null); })()}
+                                                    <div className="flex gap-2 mb-1 text-xs font-bold text-gray-400 uppercase tracking-wide"><span className="flex-1">Design Code</span><span className="w-16 text-center">Recv</span><span className="w-20 text-center">Sched</span><span className="w-12 text-center">+/−</span><span className="flex-1">Drive Link</span><span className="w-6"></span></div>
+                                                    <div className="space-y-2 mb-2">{materialBreakdown.map((row, idx) => { const recv = parseFloat(row.qty) || 0; const sched = parseFloat(row.scheduled) || 0; const rowOvr = recv - sched; return (<div key={idx} className="flex gap-2 items-center"><input placeholder="Code" value={row.code} onChange={e => updateRow(idx, 'code', e.target.value)} className="flex-1 text-sm border rounded px-2 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200" /><input placeholder="Recv" type="number" value={row.qty} onChange={e => updateRow(idx, 'qty', e.target.value)} className="w-16 text-sm border rounded px-2 py-1 text-center dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200" /><div className="w-20 flex items-center gap-0.5"><input placeholder="Sched" type="number" value={row.scheduled} onChange={e => updateScheduled(idx, e.target.value)} className={`w-14 text-sm border rounded px-1 py-1 text-center dark:bg-slate-700 dark:text-gray-200 ${row.scheduledLocked ? 'border-amber-400 bg-amber-50 dark:bg-amber-500/10 dark:border-amber-500/40' : 'dark:border-slate-600'}`} />{row.scheduledLocked && <button onClick={() => unlockScheduled(idx)} className="text-amber-500 hover:text-amber-700"><Icon name="Lock" size={12} /></button>}</div><span className={`w-12 text-xs font-bold text-center ${rowOvr > 0 ? 'text-green-600' : rowOvr < 0 ? 'text-red-500' : 'text-gray-400'}`}>{(row.code || row.qty) ? (rowOvr > 0 ? `+${rowOvr}` : rowOvr < 0 ? `${rowOvr}` : '—') : ''}</span><input placeholder="Drive Link" value={row.link} onChange={e => updateRow(idx, 'link', e.target.value)} className="flex-1 text-sm border border-purple-200 dark:border-purple-500/30 rounded px-2 py-1 dark:bg-slate-700 dark:text-gray-200" /><button onClick={() => removeRow(idx)} className="text-red-400 hover:text-red-600"><Icon name="X" size={16} /></button></div>);})}</div>
+                                                    <button onClick={addRow} className="text-xs text-blue-600 font-bold hover:underline">+ Add Row</button>
+                                                </div>
+                                            </div>)}
+
+                                            <div className="border-b border-gray-100 dark:border-slate-700" />
+
+                                            {/* Section 4: Links & Attachments */}
+                                            <div>
+                                                <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">Links & Attachments</div>
+                                                <div className="grid grid-cols-2 gap-2 mb-2"><div><label className="text-xs font-bold text-green-700">Photos Link</label><input type="text" value={customPhotosLink} onChange={(e)=>setCustomPhotosLink(e.target.value)} className="w-full text-sm border border-green-200 dark:border-green-500/30 rounded px-2 py-1 dark:bg-slate-700 dark:text-gray-200" placeholder="POP folder URL..."/></div><div><label className="text-xs font-bold text-blue-700">Receiver Link</label><input type="text" value={customReceiverLink} onChange={(e)=>setCustomReceiverLink(e.target.value)} className="w-full text-sm border border-blue-200 dark:border-blue-500/30 rounded px-2 py-1 dark:bg-slate-700 dark:text-gray-200" placeholder="Receiver PDF URL..."/></div></div>
+                                                <div className="flex items-center gap-2"><button onClick={() => pdfInputRef.current?.click()} disabled={pdfUploading} className={`px-3 py-1.5 text-xs font-medium rounded flex items-center gap-1.5 transition-colors ${pdfUploading ? 'bg-gray-100 dark:bg-slate-700 text-gray-400' : 'bg-orange-50 dark:bg-orange-500/15 text-orange-700 dark:text-orange-400 hover:bg-orange-100 border border-orange-200 dark:border-orange-500/30'}`}><Icon name="Upload" size={12} />{pdfUploading ? 'Processing...' : 'Upload Receiver PDF'}</button><input ref={pdfInputRef} type="file" accept=".pdf" multiple onChange={handleInlinePdfUpload} className="hidden" />{pdfFeedback && <span className="text-[11px] text-green-600 font-medium">{pdfFeedback}</span>}</div>
+                                                {linkedMaterials.length > 0 && (
+                                                    <div className="mt-2 border border-green-200 dark:border-green-500/30 rounded-lg overflow-hidden">
+                                                        <div className="flex items-center justify-between px-3 py-1.5 bg-green-100/80 dark:bg-green-500/15"><div className="flex items-center gap-1.5"><Icon name="Package" size={12} className="text-green-600" /><span className="text-[11px] font-bold text-green-800 dark:text-green-400">{linkedMaterials.length} Receiver{linkedMaterials.length !== 1 ? 's' : ''}</span><span className="text-[10px] text-green-600">({linkedMaterials.reduce((a, m) => a + (parseInt(m.quantity) || 0), 0)} units)</span></div><div className="flex items-center gap-2"><button onClick={() => pdfInputRef.current?.click()} disabled={pdfUploading} className="text-[10px] text-green-700 dark:text-green-400 hover:underline flex items-center gap-0.5"><Icon name="Upload" size={10} /> Add</button>{onOpenMaterialReceivers && <button onClick={(e) => { e.stopPropagation(); setCommsDrawerOpen(false); onClose(); onOpenMaterialReceivers(); }} className="text-[10px] text-green-700 dark:text-green-400 hover:underline">View All →</button>}</div></div>
+                                                        <table className="w-full text-[11px]"><thead><tr className="bg-green-50 dark:bg-green-500/5 text-gray-500"><th className="px-3 py-1 text-left font-medium">Date</th><th className="px-3 py-1 text-left font-medium">Design</th><th className="px-3 py-1 text-right font-medium">Qty</th><th className="px-3 py-1 text-left font-medium">Source</th><th className="px-3 py-1 w-6"></th></tr></thead><tbody>{linkedMaterials.map((m, i) => { const d = m.dateReceived || m.date_received || m.transactionDate || ''; const fmtD = d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'; const code = m.posterCode || m.designCode || m.description || '—'; const src = m.printer || m.client || '—'; return (<tr key={m.id || i} className="border-t border-green-100 dark:border-green-500/10"><td className="px-3 py-1 font-mono text-gray-600 dark:text-gray-400">{fmtD}</td><td className="px-3 py-1 font-medium text-gray-800 dark:text-gray-200">{code}</td><td className="px-3 py-1 text-right font-mono font-bold text-gray-800 dark:text-gray-200">{m.quantity || 0}</td><td className="px-3 py-1 text-gray-500 truncate max-w-[100px]" title={src}>{src}</td><td className="px-1 py-1">{onRemoveMaterial && <button onClick={() => { if (confirm('Remove this receiver?')) onRemoveMaterial(m.id); }} className="p-0.5 text-gray-300 hover:text-red-500 transition-colors"><Icon name="X" size={12} /></button>}</td></tr>);})}</tbody></table>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            </>)}
                                         </div>
-                                    );
-                                })}
-                            </div>
+
+                                        {/* ═══ RIGHT PANEL — Live Email Preview ═══ */}
+                                        <div className="flex flex-col max-h-[420px] bg-gray-50 dark:bg-slate-900">
+                                            {/* Preview Header */}
+                                            <div className="px-4 py-2.5 border-b border-gray-200 dark:border-slate-700 flex items-center gap-2 shrink-0">
+                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${modeColorMap[resolvedMode] || 'bg-gray-100 text-gray-700'}`}>{modeNameMap[resolvedMode] || resolvedMode}</span>
+                                                {selectedTemplate === 'auto' && <span className="text-[10px] text-gray-400 italic">auto-detected</span>}
+                                            </div>
+
+                                            {/* Subject Line */}
+                                            <div className="px-4 py-2 border-b border-gray-100 dark:border-slate-700/50 flex items-center gap-2 shrink-0 bg-white dark:bg-slate-800">
+                                                <div className="flex-1 min-w-0"><div className="text-[10px] text-gray-400 mb-0.5">Subject</div><div className="text-xs font-mono text-gray-700 dark:text-gray-300 truncate" title={subjectLine}>{subjectLine}</div></div>
+                                                <button onClick={() => { navigator.clipboard.writeText(subjectLine); setSubjectCopied(true); setTimeout(() => setSubjectCopied(false), 1500); }} className="text-[10px] text-blue-600 hover:text-blue-800 dark:text-blue-400 font-medium shrink-0">{subjectCopied ? 'Copied!' : 'Copy'}</button>
+                                            </div>
+
+                                            {/* Email Body */}
+                                            <div className="flex-1 overflow-y-auto p-4">
+                                                <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-gray-200 dark:border-slate-600 p-3">
+                                                    <div dangerouslySetInnerHTML={{ __html: emailDraft }} />
+                                                </div>
+                                            </div>
+
+                                            {/* Copy Footer */}
+                                            <div className="px-4 py-3 border-t border-gray-200 dark:border-slate-700 shrink-0 bg-white dark:bg-slate-800">
+                                                <button onClick={handleCopyToWebmail} className="w-full px-4 py-2.5 bg-blue-600 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 hover:bg-blue-700 transition-colors"><Icon name="Copy" size={14}/> {copyFeedback || "Copy Email to Clipboard"}</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                );
+                            })()}
                         </div>
-                    )}
+
+                    </div>
+
                 </div>
             </div>
         );
