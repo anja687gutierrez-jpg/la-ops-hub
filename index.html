@@ -10064,7 +10064,11 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                         delayedLookback.setDate(today.getDate() - 21);
                         const isWithinDelayedWindow = item.dateObj >= delayedLookback;
 
-                        if (!isExcludedDelay && !isCompletedStage && isPastGracePeriod && isWithinDelayedWindow) {
+                        // Contracted campaigns due this week bypass grace period — they should be further along
+                        const isContractedDueThisWeek = stageLower === 'contracted' &&
+                            item.dateObj >= thisMonday && item.dateObj <= thisSunday;
+
+                        if ((!isExcludedDelay && !isCompletedStage && isPastGracePeriod && isWithinDelayedWindow) || isContractedDueThisWeek) {
                             categories.delayedFlights.push(item);
                         }
 
