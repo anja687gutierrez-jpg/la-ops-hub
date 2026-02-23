@@ -187,6 +187,9 @@
             const STALE_ONLY_STAGES = ['contracted', 'proofs approved', 'out for approval'];
             const hasCharted = (item) => item.adjustedQty && item.adjustedQty > 0;
             const now = new Date(); now.setHours(0,0,0,0);
+            const diffToMonday = 1 - (now.getDay() || 7);
+            const thisMonday = new Date(now); thisMonday.setDate(now.getDate() + diffToMonday); thisMonday.setHours(0,0,0,0);
+            const thisSunday = new Date(thisMonday); thisSunday.setDate(thisMonday.getDate() + 6); thisSunday.setHours(23,59,59,999);
 
             // Delay/pastDue filter: stage exclusions + stale-only + must have charted
             const filterDelay = (arr) => filterArray(arr).filter(item => {
@@ -194,8 +197,10 @@
                 const stageLower = (item.stage || '').toLowerCase();
                 if (EXCLUDED_STAGES.includes(stageLower)) return false;
                 if (STALE_ONLY_STAGES.includes(stageLower)) {
+                    // Contracted campaigns due this week bypass the 30-day stale rule
                     const startDate = item.dateObj instanceof Date ? item.dateObj : (item.dateObj ? new Date(item.dateObj) : null);
                     if (!startDate) return false;
+                    if (stageLower === 'contracted' && startDate >= thisMonday && startDate <= thisSunday) return true;
                     return Math.floor((now - startDate) / (1000 * 60 * 60 * 24)) >= 30;
                 }
                 return true;

@@ -1942,6 +1942,11 @@
                     const startDate = item.dateObj instanceof Date ? item.dateObj : (item.dateObj ? new Date(item.dateObj) : null);
                     if (!startDate) return true;
                     const now = new Date(); now.setHours(0,0,0,0);
+                    // Contracted campaigns due this week bypass the 30-day stale rule
+                    const diffToMon = 1 - (now.getDay() || 7);
+                    const mon = new Date(now); mon.setDate(now.getDate() + diffToMon); mon.setHours(0,0,0,0);
+                    const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23,59,59,999);
+                    if (stageLower === 'contracted' && startDate >= mon && startDate <= sun) return false;
                     return Math.floor((now - startDate) / (1000 * 60 * 60 * 24)) < 30;
                 }
                 return false;
