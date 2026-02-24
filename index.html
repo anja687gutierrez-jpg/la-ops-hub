@@ -5435,8 +5435,7 @@
                                     <tr className="text-xs font-semibold text-gray-500 bg-gray-50 border-b border-gray-200 uppercase tracking-wider">
                                         <th className="px-4 py-3 w-8"></th>
                                         <th className="px-4 py-3">Stage</th>
-                                        <th className="px-4 py-3 text-center">Campaigns</th>
-                                        <th className="px-4 py-3 text-center">Faces</th>
+                                        <th className="px-4 py-3 text-center">Camps</th>
                                         <th className="px-4 py-3 text-center">Installed</th>
                                         <th className="px-4 py-3" style={{minWidth: '200px'}}>Distribution</th>
                                     </tr>
@@ -5469,12 +5468,9 @@
                                                     <span className="font-semibold text-gray-900">{row.count}</span>
                                                     <span className="text-gray-400 text-xs ml-1">({row.pct}%)</span>
                                                 </td>
-                                                <td className="px-4 py-3 text-center font-mono text-gray-600">{row.qty.toLocaleString()}</td>
                                                 <td className="px-4 py-3 text-center">
-                                                    <div className="flex items-center justify-center gap-1">
-                                                        <span className="font-mono text-gray-600">{row.installed.toLocaleString()}</span>
-                                                        <span className="text-[10px] text-gray-400">({installPct}%)</span>
-                                                    </div>
+                                                    <span className="font-mono text-gray-600">{row.installed.toLocaleString()} / {row.qty.toLocaleString()}</span>
+                                                    <span className="text-[10px] text-gray-400 ml-1">({installPct}%)</span>
                                                 </td>
                                                 <td className="px-4 py-3">
                                                     <div className="flex items-center gap-2">
@@ -5496,8 +5492,7 @@
                                         <td className="px-4 py-3"></td>
                                         <td className="px-4 py-3 text-gray-900">Total</td>
                                         <td className="px-4 py-3 text-center text-blue-600">{totalCampaigns}</td>
-                                        <td className="px-4 py-3 text-center text-blue-600 font-mono">{totalQty.toLocaleString()}</td>
-                                        <td className="px-4 py-3 text-center text-green-600 font-mono">{totalInstalled.toLocaleString()}</td>
+                                        <td className="px-4 py-3 text-center text-green-600 font-mono">{totalInstalled.toLocaleString()} / {totalQty.toLocaleString()}</td>
                                         <td className="px-4 py-3">
                                             <div className="flex items-center gap-2">
                                                 <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
