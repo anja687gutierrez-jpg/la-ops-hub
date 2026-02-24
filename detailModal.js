@@ -108,10 +108,10 @@
                             const firstEmptyIdx = prev.findIndex(r => !r.code && !r.qty);
                             if (firstEmptyIdx >= 0) {
                                 const updated = [...prev];
-                                updated[firstEmptyIdx] = { code, qty, scheduled: '', scheduledLocked: false, link: parsed.pdfSource || '' };
+                                updated[firstEmptyIdx] = { code, qty, scheduled: '', scheduledLocked: false, link: '' };
                                 return updated;
                             }
-                            return [...prev, { code, qty, scheduled: '', scheduledLocked: false, link: parsed.pdfSource || '' }];
+                            return [...prev, { code, qty, scheduled: '', scheduledLocked: false, link: '' }];
                         });
                     }
                 } catch (err) {
@@ -130,6 +130,7 @@
             setTimeout(() => setPdfFeedback(''), 5000);
             setPdfUploading(false);
             if (pdfInputRef.current) pdfInputRef.current.value = '';
+            if (!customReceiverLink) setReceiverLinkNudge(true);
         };
 
         const [editMode, setEditMode] = useState(false);
@@ -154,6 +155,7 @@
         const [customDesigns, setCustomDesigns] = useState('');
         const [customPhotosLink, setCustomPhotosLink] = useState('');
         const [customReceiverLink, setCustomReceiverLink] = useState('');
+        const [receiverLinkNudge, setReceiverLinkNudge] = useState(false);
         const [materialReceivedDate, setMaterialReceivedDate] = useState('');
 
         // Template logic
@@ -614,8 +616,9 @@
             const validRows = materialBreakdown.filter(row => row.code || row.qty);
             const totalScheduled = validRows.reduce((acc, r) => acc + (parseFloat(r.scheduled) || 0), 0);
             const breakdownRows = validRows.map(row => {
-                const codeDisplay = row.link
-                    ? `<a href="${row.link}" style="color: #6f42c1; font-weight: bold; text-decoration: underline;" target="_blank">${row.code || 'N/A'}</a>`
+                const effectiveLink = row.link || customReceiverLink || '';
+                const codeDisplay = effectiveLink
+                    ? `<a href="${effectiveLink}" style="color: #6f42c1; font-weight: bold; text-decoration: underline;" target="_blank">${row.code || 'N/A'}</a>`
                     : (row.code || 'N/A');
                 return `<tr><td style='padding:6px 10px; border-bottom:1px solid #eee;'>${codeDisplay}</td><td style='padding:6px 10px; border-bottom:1px solid #eee; text-align:right;'>${row.qty || 0}</td><td style='padding:6px 10px; border-bottom:1px solid #eee; text-align:right;'>${row.scheduled || 0}</td></tr>`;
             }).join('');
@@ -676,7 +679,7 @@
                     ${noOverageNote}
                     ${validRows.length > 0 ? `<p style='margin:15px 0 8px; font-weight:bold; font-size:13px; color:#333;'>📐 Inventory Breakdown</p>
                     <table style='width:100%; font-size:12px; border-collapse:collapse; margin:0 0 15px; background:#faf8ff;'>
-                        <tr style='background:#6f42c1; color:white;'><th style='padding:8px 10px; text-align:left;'>Design Code</th><th style='padding:8px 10px; text-align:right;'>Received</th><th style='padding:8px 10px; text-align:right;'>Scheduled</th></tr>
+                        <tr style='background:#6f42c1; color:white;'><th style='padding:8px 10px; text-align:left;'>Design Code</th><th style='padding:8px 10px; text-align:right;'>Received</th><th style='padding:8px 10px; text-align:right;'>Assigned WO</th></tr>
                         ${breakdownRows}
                         <tr style='background:#f3f0ff; font-weight:bold;'><td style='padding:8px 10px; border-top:2px solid #6f42c1;'>TOTAL</td><td style='padding:8px 10px; border-top:2px solid #6f42c1; text-align:right;'>${currentTotal}</td><td style='padding:8px 10px; border-top:2px solid #6f42c1; text-align:right;'>${totalScheduled} / ${customQty || 0}</td></tr>
                     </table>` : ''}
@@ -692,10 +695,7 @@
                         ${invoiceDisplay ? `<tr><td style='padding:8px 10px; color:#666; border-bottom:1px solid #eee;'>Invoice #</td><td style='padding:8px 10px; border-bottom:1px solid #eee;'>${invoiceDisplay}</td></tr>` : ''}
                         <tr><td style='padding:8px 10px; color:#666;'>Sales Owner</td><td style='padding:8px 10px;'>${item.owner || 'N/A'}</td></tr>
                     </table>
-                    <div style='margin:15px 0 0; display:flex; gap:10px;'>
-                        ${customPhotosLink ? `<a href="${customPhotosLink}" style="background:#6f42c1; color:white; padding:10px 20px; text-decoration:none; border-radius:4px; display:inline-block;">📸 View Photos</a>` : ''}
-                        ${customReceiverLink ? `<a href="${customReceiverLink}" style="color:#6f42c1; padding:10px 20px; text-decoration:none; border:1px solid #6f42c1; border-radius:4px; display:inline-block;">📄 Receiver PDF</a>` : ''}
-                    </div>
+                    ${customPhotosLink ? `<div style='margin:15px 0 0;'><a href="${customPhotosLink}" style="background:#6f42c1; color:white; padding:10px 20px; text-decoration:none; border-radius:4px; display:inline-block;">📸 View Photos</a></div>` : ''}
                 </div>
             </div>`;
         };
@@ -938,7 +938,7 @@
             const newScheduledTotal = materialBreakdown.reduce((acc, r) => (r.code || r.qty) ? acc + (parseFloat(r.scheduled) || 0) : acc, 0);
             const oldBreakdown = item.materialBreakdown || [];
             const oldScheduledTotal = oldBreakdown.reduce((acc, r) => (r.code || r.qty) ? acc + (parseFloat(r.scheduled) || 0) : acc, 0);
-            if (newScheduledTotal !== oldScheduledTotal) changes.push(`Scheduled: ${oldScheduledTotal} → ${newScheduledTotal}`);
+            if (newScheduledTotal !== oldScheduledTotal) changes.push(`Assigned WO: ${oldScheduledTotal} → ${newScheduledTotal}`);
             if ((materialReceivedDate || '') !== (item.materialReceivedDate || '')) changes.push(`Mat. Received: ${item.materialReceivedDate || 'none'} → ${materialReceivedDate || 'none'}`);
             if (removalQty !== (item.removalQty || 0)) changes.push(`Removal Qty: ${item.removalQty || 0} → ${removalQty}`);
             if (removedCount !== (item.removedCount || 0)) changes.push(`Removed: ${item.removedCount || 0} → ${removedCount}`);
@@ -1391,7 +1391,7 @@
                                             </span>
                                             {materialBreakdown.some(r => r.code || r.qty) && <button onClick={() => { if (confirm('Clear all breakdown rows?')) setMaterialBreakdown([{ code: '', qty: '', scheduled: '', scheduledLocked: false, link: '' }]); }} className="text-[9px] text-red-400 hover:text-red-600">Clear all</button>}
                                         </div>
-                                        {(() => { const recon = getReconciliationStatus(); if (recon.status === 'none') return null; const colorMap = { matched: 'text-green-600', under: 'text-amber-600', over: 'text-red-600' }; const labelMap = { matched: 'Matched', under: 'Under', over: 'Over' }; return React.createElement('div', { className: `mb-1 text-[10px] font-bold ${colorMap[recon.status]}` }, `${recon.status === 'matched' ? '\u2713' : recon.status === 'under' ? '\u26A0' : '\u26D4'} Sched: ${recon.totalScheduled} / ${recon.charted} (${labelMap[recon.status]})`); })()}
+                                        {(() => { const recon = getReconciliationStatus(); if (recon.status === 'none') return null; const colorMap = { matched: 'text-green-600', under: 'text-amber-600', over: 'text-red-600' }; const labelMap = { matched: 'Matched', under: 'Under', over: 'Over' }; return React.createElement('div', { className: `mb-1 text-[10px] font-bold ${colorMap[recon.status]}` }, `${recon.status === 'matched' ? '\u2713' : recon.status === 'under' ? '\u26A0' : '\u26D4'} WO: ${recon.totalScheduled} / ${recon.charted} (${labelMap[recon.status]})`); })()}
                                         <div className="space-y-2 mb-1.5">{materialBreakdown.map((row, idx) => { return React.createElement('div', { key: idx, className: 'bg-white dark:bg-slate-800 rounded border border-gray-200 dark:border-slate-600 p-1.5' },
                                             React.createElement('div', { className: 'flex items-center gap-1 mb-1' },
                                                 React.createElement('input', { placeholder: 'Design code', value: row.code, onChange: e => updateRow(idx, 'code', e.target.value), className: 'flex-1 min-w-0 text-[11px] font-medium border rounded px-1.5 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200' }),
@@ -1401,7 +1401,7 @@
                                                     React.createElement('div', { className: 'text-[9px] text-gray-400 mb-0.5' }, 'Recv'),
                                                     React.createElement('input', { type: 'number', value: row.qty, onChange: e => updateRow(idx, 'qty', e.target.value), className: 'w-full text-[11px] border rounded px-1.5 py-1 text-center dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200' })),
                                                 React.createElement('div', null,
-                                                    React.createElement('div', { className: 'text-[9px] text-gray-400 mb-0.5 flex items-center justify-between' }, 'Sched', row.scheduledLocked && React.createElement('button', { onClick: () => unlockScheduled(idx), className: 'text-amber-500 hover:text-amber-700' }, React.createElement(Icon, { name: 'Lock', size: 9 }))),
+                                                    React.createElement('div', { className: 'text-[9px] text-gray-400 mb-0.5 flex items-center justify-between' }, 'Assigned WO', row.scheduledLocked && React.createElement('button', { onClick: () => unlockScheduled(idx), className: 'text-amber-500 hover:text-amber-700' }, React.createElement(Icon, { name: 'Lock', size: 9 }))),
                                                     React.createElement('input', { type: 'number', value: row.scheduled, onChange: e => updateScheduled(idx, e.target.value), className: `w-full text-[11px] border rounded px-1.5 py-1 text-center dark:bg-slate-700 dark:text-gray-200 ${row.scheduledLocked ? 'border-amber-400 bg-amber-50 dark:bg-amber-500/10 dark:border-amber-500/40' : 'dark:border-slate-600'}` })))
                                         ); })}</div>
                                         <button onClick={addRow} className="text-[10px] text-blue-600 font-bold hover:underline">+ Add</button>
@@ -1580,7 +1580,7 @@
                                             {/* Section 4: Links & Attachments */}
                                             <div>
                                                 <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">Links & Attachments</div>
-                                                <div className="grid grid-cols-2 gap-2 mb-2"><div><label className="text-xs font-bold text-green-700">Photos Link</label><input type="text" value={customPhotosLink} onChange={(e)=>setCustomPhotosLink(e.target.value)} className="w-full text-sm border border-green-200 dark:border-green-500/30 rounded px-2 py-1 dark:bg-slate-700 dark:text-gray-200" placeholder="POP folder URL..."/></div><div><label className="text-xs font-bold text-blue-700">Receiver Link</label><input type="text" value={customReceiverLink} onChange={(e)=>setCustomReceiverLink(e.target.value)} className="w-full text-sm border border-blue-200 dark:border-blue-500/30 rounded px-2 py-1 dark:bg-slate-700 dark:text-gray-200" placeholder="Receiver PDF URL..."/></div></div>
+                                                <div className="grid grid-cols-2 gap-2 mb-2"><div><label className="text-xs font-bold text-green-700">Photos Link</label><input type="text" value={customPhotosLink} onChange={(e)=>setCustomPhotosLink(e.target.value)} className="w-full text-sm border border-green-200 dark:border-green-500/30 rounded px-2 py-1 dark:bg-slate-700 dark:text-gray-200" placeholder="POP folder URL..."/></div><div><label className="text-xs font-bold text-blue-700">Receiver Link</label><input type="text" value={customReceiverLink} onChange={(e)=>{ setCustomReceiverLink(e.target.value); if (e.target.value) setReceiverLinkNudge(false); }} className={`w-full text-sm border rounded px-2 py-1 dark:bg-slate-700 dark:text-gray-200 ${receiverLinkNudge ? 'border-amber-400 ring-2 ring-amber-300 animate-pulse' : 'border-blue-200 dark:border-blue-500/30'}`} placeholder={receiverLinkNudge ? 'Paste Google Drive share link' : 'Receiver PDF URL...'}/>{receiverLinkNudge && <span className="text-[10px] text-amber-600 mt-0.5 block">Paste Google Drive share link</span>}{customReceiverLink && !customReceiverLink.includes('drive.google.com') && !customReceiverLink.includes('docs.google.com') && <span className="text-[10px] text-amber-500 mt-0.5 block">Doesn't look like a Drive link</span>}</div></div>
                                                 <div className="flex items-center gap-2"><button onClick={() => pdfInputRef.current?.click()} disabled={pdfUploading} className={`px-3 py-1.5 text-xs font-medium rounded flex items-center gap-1.5 transition-colors ${pdfUploading ? 'bg-gray-100 dark:bg-slate-700 text-gray-400' : 'bg-orange-50 dark:bg-orange-500/15 text-orange-700 dark:text-orange-400 hover:bg-orange-100 border border-orange-200 dark:border-orange-500/30'}`}><Icon name="Upload" size={12} />{pdfUploading ? 'Processing...' : 'Upload Receiver PDF'}</button><input ref={pdfInputRef} type="file" accept=".pdf" multiple onChange={handleInlinePdfUpload} className="hidden" />{pdfFeedback && <span className="text-[11px] text-green-600 font-medium">{pdfFeedback}</span>}</div>
                                                 {linkedMaterials.length > 0 && (
                                                     <div className="mt-2 border border-green-200 dark:border-green-500/30 rounded-lg overflow-hidden">
@@ -1605,6 +1605,13 @@
                                                 <div className="flex-1 min-w-0"><div className="text-[10px] text-gray-400 mb-0.5">Subject</div><div className="text-xs font-mono text-gray-700 dark:text-gray-300 truncate" title={subjectLine}>{subjectLine}</div></div>
                                                 <button onClick={() => { navigator.clipboard.writeText(subjectLine); setSubjectCopied(true); setTimeout(() => setSubjectCopied(false), 1500); }} className="text-[10px] text-blue-600 hover:text-blue-800 dark:text-blue-400 font-medium shrink-0">{subjectCopied ? 'Copied!' : 'Copy'}</button>
                                             </div>
+
+                                            {/* Receiver Link Warning */}
+                                            {resolvedMode === 'material_received' && linkedMaterials.length > 0 && !customReceiverLink && (
+                                                <div className="mx-4 mt-2 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 text-amber-700 dark:text-amber-400 text-xs px-3 py-2 rounded">
+                                                    ⚠️ No Drive link for Receiver PDF — email will send without it
+                                                </div>
+                                            )}
 
                                             {/* Email Body */}
                                             <div className="flex-1 overflow-y-auto p-4">
