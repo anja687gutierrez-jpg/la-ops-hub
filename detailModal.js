@@ -1620,6 +1620,12 @@
                                         </div>
                                     ) : (
                                         <>
+                                            {trackingLoading.size > 0 && (
+                                                <div className="flex items-center gap-2 mb-3 px-2 py-1.5 bg-amber-50 dark:bg-amber-500/10 rounded-lg border border-amber-200 dark:border-amber-500/20">
+                                                    <span className="animate-spin text-amber-500"><Icon name="RefreshCw" size={12} /></span>
+                                                    <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">Checking tracking status...</span>
+                                                </div>
+                                            )}
                                             <div className="overflow-x-auto">
                                                 <table className="w-full text-xs">
                                                     <thead>
