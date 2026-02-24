@@ -233,9 +233,9 @@
             };
         }, [processedData, digestMarkets, digestProducts]);
 
-        // Initialize editable data when filtered data changes (data already filtered in useMemo above)
+        // Initialize editable data ONCE when modal opens — never overwrite after manual edits
         useEffect(() => {
-            if (filteredDigestData) {
+            if (filteredDigestData && editableData === null) {
                 setEditableData({
                     delayedFlights: [...(filteredDigestData.delayedFlights || [])],
                     inProgressFlights: [...(filteredDigestData.inProgressFlights || [])],
@@ -305,6 +305,7 @@
         useEffect(() => {
             if (!isOpen) {
                 setDeletedItems([]);
+                setEditableData(null);
             }
         }, [isOpen]);
 
@@ -327,6 +328,7 @@
                        section === 'recent' ? 'Installation Complete' :
                        section === 'removal' ? 'Expired' : 'Unknown',
                 progress: '50%',
+                adjustedQty: 1,
                 isManual: true
             });
             setShowAddModal(true);
@@ -352,7 +354,7 @@
             if (sectionKey) {
                 setEditableData(prev => ({
                     ...prev,
-                    [sectionKey]: [...prev[sectionKey], { ...newEntry }]
+                    [sectionKey]: [...(prev[sectionKey] || []), { ...newEntry }]
                 }));
             }
             setShowAddModal(false);

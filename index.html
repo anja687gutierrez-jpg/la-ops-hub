@@ -1975,9 +1975,9 @@
             const fontSize = compact ? '11px' : '12px';
             const headerSize = compact ? '11px' : '13px';
             const padding = compact ? '4px 6px' : '8px 10px';
-            const showMarket = !compact && showMarket;
-            const showOwner = !compact && showOwner;
-            const showFirstInstall = !compact && showFirstInstall;
+            const showMarket = !compact && settings.showMarketColumn;
+            const showOwner = !compact && settings.showOwnerColumn;
+            const showFirstInstall = !compact && settings.showFirstInstallColumn;
             
             // --- Helper: Create Table Row ---
             const createHtmlTable = (data, headers, columnWidths, rowMapper) => {
