@@ -188,7 +188,7 @@
         const [matExpanded, setMatExpanded] = useState(false);
         const [breakdownExpanded, setBreakdownExpanded] = useState(false);
         const [commsDrawerOpen, setCommsDrawerOpen] = useState(false);
-
+        const [emailDrawerOpen, setEmailDrawerOpen] = useState(false);
         const [historyExpanded, setHistoryExpanded] = useState(false);
         const [shipmentDrawerOpen, setShipmentDrawerOpen] = useState(false);
         const [shipments, setShipments] = useState([]);
@@ -1700,9 +1700,9 @@
                                 const modeNameMap = { schedule: 'Scheduled', material_received: 'Materials Landed', complete: 'Installed', missing: 'Missing Assets', delay: 'Delay Alert', maintenance: 'Maintenance', removal: 'Removal' };
                                 return (
                                 <div className="mt-1 border border-blue-200 dark:border-blue-500/30 rounded-lg bg-white dark:bg-slate-800 overflow-hidden">
-                                    <div className="grid grid-cols-2">
-                                        {/* ═══ LEFT PANEL — Data Inputs ═══ */}
-                                        <div className="p-4 border-r border-gray-200 dark:border-slate-600 overflow-y-auto max-h-[420px] space-y-4">
+                                    <div>
+                                        {/* ═══ Data Inputs ═══ */}
+                                        <div className="p-4 overflow-y-auto max-h-[420px] space-y-4">
 
                                             {/* Section 1: Template & Campaign Info */}
                                             <div>
@@ -1773,39 +1773,56 @@
                                             </>)}
                                         </div>
 
-                                        {/* ═══ RIGHT PANEL — Live Email Preview ═══ */}
-                                        <div className="flex flex-col max-h-[420px] bg-gray-50 dark:bg-slate-900">
-                                            {/* Preview Header */}
-                                            <div className="px-4 py-2.5 border-b border-gray-200 dark:border-slate-700 flex items-center gap-2 shrink-0">
-                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${modeColorMap[resolvedMode] || 'bg-gray-100 text-gray-700'}`}>{modeNameMap[resolvedMode] || resolvedMode}</span>
-                                                {selectedTemplate === 'auto' && <span className="text-[10px] text-gray-400 italic">auto-detected</span>}
-                                            </div>
-
-                                            {/* Subject Line */}
-                                            <div className="px-4 py-2 border-b border-gray-100 dark:border-slate-700/50 flex items-center gap-2 shrink-0 bg-white dark:bg-slate-800">
-                                                <div className="flex-1 min-w-0"><div className="text-[10px] text-gray-400 mb-0.5">Subject</div><div className="text-xs font-mono text-gray-700 dark:text-gray-300 truncate" title={subjectLine}>{subjectLine}</div></div>
-                                                <button onClick={() => { navigator.clipboard.writeText(subjectLine); setSubjectCopied(true); setTimeout(() => setSubjectCopied(false), 1500); }} className="text-[10px] text-blue-600 hover:text-blue-800 dark:text-blue-400 font-medium shrink-0">{subjectCopied ? 'Copied!' : 'Copy'}</button>
-                                            </div>
-
-                                            {/* Receiver Link Warning */}
-                                            {resolvedMode === 'material_received' && linkedMaterials.length > 0 && !customReceiverLink && (
-                                                <div className="mx-4 mt-2 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 text-amber-700 dark:text-amber-400 text-xs px-3 py-2 rounded">
-                                                    ⚠️ No Drive link for Receiver PDF — email will send without it
-                                                </div>
-                                            )}
-
-                                            {/* Email Body */}
-                                            <div className="flex-1 overflow-y-auto p-4">
-                                                <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-gray-200 dark:border-slate-600 p-3">
-                                                    <div dangerouslySetInnerHTML={{ __html: emailDraft }} />
-                                                </div>
-                                            </div>
-
-                                            {/* Copy Footer */}
-                                            <div className="px-4 py-3 border-t border-gray-200 dark:border-slate-700 shrink-0 bg-white dark:bg-slate-800">
-                                                <button onClick={handleCopyToWebmail} className="w-full px-4 py-2.5 bg-blue-600 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 hover:bg-blue-700 transition-colors"><Icon name="Copy" size={14}/> {copyFeedback || "Copy Email to Clipboard"}</button>
-                                            </div>
+                                    </div>
+                                </div>
+                                );
+                            })()}
+                        </div>
+                        {/* EMAIL TEMPLATE — inline collapsible drawer */}
+                        <div className="mb-2">
+                            <button onClick={() => setEmailDrawerOpen(!emailDrawerOpen)} className={`w-full flex items-center justify-between rounded-xl px-4 py-3 cursor-pointer transition-all border-2 shadow-sm hover:shadow-md ${emailDrawerOpen ? 'bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-500/15 dark:to-purple-500/15 border-indigo-300 dark:border-indigo-500/40 shadow-indigo-100 dark:shadow-indigo-500/10' : 'bg-gradient-to-r from-indigo-50 to-indigo-100/50 dark:from-indigo-500/10 dark:to-indigo-500/5 border-indigo-200 dark:border-indigo-500/25 hover:border-indigo-300 dark:hover:border-indigo-500/40 hover:from-indigo-100 hover:to-purple-50'}`}>
+                                <div className="flex items-center gap-2.5">
+                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${emailDrawerOpen ? 'bg-indigo-600 text-white' : 'bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400'}`}><Icon name="Mail" size={16} /></div>
+                                    <div className="text-left">
+                                        <div className={`text-xs font-bold ${emailDrawerOpen ? 'text-indigo-800 dark:text-indigo-300' : 'text-indigo-700 dark:text-indigo-400'}`}>Email Template</div>
+                                        <div className="text-[10px] text-indigo-500/70 dark:text-indigo-400/50">Preview & copy email</div>
+                                    </div>
+                                </div>
+                                <div className={`w-6 h-6 rounded-full flex items-center justify-center ${emailDrawerOpen ? 'bg-indigo-200 dark:bg-indigo-500/30' : 'bg-indigo-100 dark:bg-indigo-500/15'}`}><Icon name={emailDrawerOpen ? 'ChevronUp' : 'ChevronDown'} size={14} className="text-indigo-600 dark:text-indigo-400" /></div>
+                            </button>
+                            {emailDrawerOpen && (() => {
+                                const resolvedMode = getResolvedMode();
+                                const modeColorMap = { schedule: 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300', material_received: 'bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-300', complete: 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-300', missing: 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300', delay: 'bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300', maintenance: 'bg-teal-100 text-teal-700 dark:bg-teal-500/20 dark:text-teal-300', removal: 'bg-gray-100 text-gray-700 dark:bg-gray-500/20 dark:text-gray-300' };
+                                const modeNameMap = { schedule: 'Scheduled', material_received: 'Materials Landed', complete: 'Installed', missing: 'Missing Assets', delay: 'Delay Alert', maintenance: 'Maintenance', removal: 'Removal' };
+                                return (
+                                <div className="mt-1 border border-indigo-200 dark:border-indigo-500/30 rounded-lg bg-white dark:bg-slate-800 overflow-hidden">
+                                    <div className="p-4 space-y-3">
+                                        {/* Template badge + auto-detect indicator */}
+                                        <div className="flex items-center gap-2">
+                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${modeColorMap[resolvedMode] || 'bg-gray-100 text-gray-700'}`}>{modeNameMap[resolvedMode] || resolvedMode}</span>
+                                            {selectedTemplate === 'auto' && <span className="text-[10px] text-gray-400 italic">auto-detected</span>}
                                         </div>
+
+                                        {/* Subject Line */}
+                                        <div className="flex items-center gap-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2">
+                                            <div className="flex-1 min-w-0"><div className="text-[10px] text-gray-400 mb-0.5">Subject</div><div className="text-xs font-mono text-gray-700 dark:text-gray-300 truncate" title={subjectLine}>{subjectLine}</div></div>
+                                            <button onClick={() => { navigator.clipboard.writeText(subjectLine); setSubjectCopied(true); setTimeout(() => setSubjectCopied(false), 1500); }} className="text-[10px] text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 font-medium shrink-0">{subjectCopied ? 'Copied!' : 'Copy'}</button>
+                                        </div>
+
+                                        {/* Receiver Link Warning */}
+                                        {resolvedMode === 'material_received' && linkedMaterials.length > 0 && !customReceiverLink && (
+                                            <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 text-amber-700 dark:text-amber-400 text-xs px-3 py-2 rounded">
+                                                ⚠️ No Drive link for Receiver PDF — email will send without it
+                                            </div>
+                                        )}
+
+                                        {/* Email Body */}
+                                        <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-gray-200 dark:border-slate-600 p-3 max-h-[300px] overflow-y-auto">
+                                            <div dangerouslySetInnerHTML={{ __html: emailDraft }} />
+                                        </div>
+
+                                        {/* Copy Button */}
+                                        <button onClick={handleCopyToWebmail} className="w-full px-4 py-2.5 bg-indigo-600 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 hover:bg-indigo-700 transition-colors"><Icon name="Copy" size={14}/> {copyFeedback || "Copy Email to Clipboard"}</button>
                                     </div>
                                 </div>
                                 );
