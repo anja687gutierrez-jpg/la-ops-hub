@@ -81,7 +81,7 @@
                 upcoming: "Upcoming",
                 installed: "Installed",
                 recent: "Recent Completed Installs",
-                pipeline: "Pipeline Snapshot",
+                pipeline: "Monthly Pipeline Snapshot",
                 removal: "Removal Dates (Past 45 days)"
             }
         });

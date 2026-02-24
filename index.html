@@ -2242,8 +2242,20 @@
                 })(),
 
                 pipeline: (() => {
-                    const allCharted = (processedData.all || []).filter(hasCharted);
-                    if (allCharted.length === 0) return "<p style='font-style: italic; color: #666;'>No charted campaigns in pipeline.</p>";
+                    // Filter to current month only
+                    const pipeNow = new Date();
+                    const pipeMonthStart = new Date(pipeNow.getFullYear(), pipeNow.getMonth(), 1);
+                    const pipeMonthEnd = new Date(pipeNow.getFullYear(), pipeNow.getMonth() + 1, 0, 23, 59, 59, 999);
+                    const allCharted = (processedData.all || []).filter(item => {
+                        if (!hasCharted(item)) return false;
+                        const start = item.dateObj;
+                        const end = item.endDateObj;
+                        // Include if campaign overlaps the current month
+                        if (start && end) return start <= pipeMonthEnd && end >= pipeMonthStart;
+                        if (start) return start >= pipeMonthStart && start <= pipeMonthEnd;
+                        return false;
+                    });
+                    if (allCharted.length === 0) return "<p style='font-style: italic; color: #666;'>No charted campaigns in pipeline this month.</p>";
 
                     // Group by stage
                     const stageMap = {};
