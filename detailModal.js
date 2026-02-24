@@ -522,7 +522,8 @@
             if (JSON.stringify(currentBreakdown) !== JSON.stringify(itemBreakdown)) return true;
 
             // Check shipment changes
-            if (JSON.stringify(shipments) !== JSON.stringify(item.shipments || [])) return true;
+            const stripTracking = s => ({ id: s.id, trackingNumber: s.trackingNumber, provider: s.provider, status: s.status, shipDate: s.shipDate, deliveredDate: s.deliveredDate, notes: s.notes });
+            if (JSON.stringify(shipments.map(stripTracking)) !== JSON.stringify((item.shipments || []).map(stripTracking))) return true;
             if ((shipmentNotes || '') !== (item.shipmentNotes || '')) return true;
 
             return false;
@@ -1064,7 +1065,8 @@
             if ((removalPhotosLink || null) !== (item.removalPhotosLink || null)) saveData.removalPhotosLink = removalPhotosLink || null;
             if (hasReplacement !== (item.hasReplacement || false)) saveData.hasReplacement = hasReplacement;
             // Shipment tracking — only include if changed
-            if (JSON.stringify(shipments) !== JSON.stringify(item.shipments || [])) saveData.shipments = shipments;
+            const stripTrackingMeta = s => ({ id: s.id, trackingNumber: s.trackingNumber, provider: s.provider, status: s.status, shipDate: s.shipDate, deliveredDate: s.deliveredDate, notes: s.notes });
+            if (JSON.stringify(shipments.map(stripTrackingMeta)) !== JSON.stringify((item.shipments || []).map(stripTrackingMeta))) saveData.shipments = shipments;
             if ((shipmentNotes || '') !== (item.shipmentNotes || '')) saveData.shipmentNotes = shipmentNotes || null;
             // History — always include if there were changes
             if (newHistory.length > 0) saveData.history = newHistory;
