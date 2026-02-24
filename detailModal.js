@@ -838,22 +838,23 @@
             // 7. Material Ready (no materials yet) → schedule
             if (stageLower === 'material ready for install') return 'schedule';
 
-            // 8. Pre-install stages — check if overdue or missing assets
+            // 8. Contracted — always default to missing (chasing assets/PIs)
+            if (stageLower === 'contracted') return 'missing';
+
+            // 9. Other pre-install stages — check if overdue
             const startDate = item ? (item.date || '') : '';
             const isPastStart = startDate && new Date(startDate) < new Date();
-            const preInstallStages = ['contracted', 'proofs approved', 'working on it',
+            const preInstallStages = ['proofs approved', 'working on it',
                 'proofs out for approval', 'artwork received', 'rfp', 'initial proposal',
                 'client feedback', 'pending client approval', 'pending finance approval'];
 
             if (preInstallStages.includes(stageLower) && isPastStart) {
                 // Past start date + still pre-install = something is wrong
-                // No materials → missing assets; has materials → delay
                 if (linkedMaterials.length === 0) return 'missing';
                 return 'delay';
             }
 
-            // 9. Everything else (future start, holds, etc.) → no confident match
-            // User must pick a template manually
+            // 10. Everything else (future start, holds, etc.) → no confident match
             return 'none';
         };
 
