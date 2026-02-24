@@ -150,10 +150,6 @@
             const hasMarketFilters = digestMarkets.length > 0;
             const hasProductFilters = digestProducts.length > 0;
 
-            if (!hasMarketFilters && !hasProductFilters) {
-                return processedData;
-            }
-
             const matchesMarket = (item) => {
                 if (!hasMarketFilters) return true;
                 return digestMarkets.some(filter => {
@@ -182,7 +178,7 @@
                 return arr.filter(item => matchesMarket(item) && matchesProduct(item));
             };
 
-            // --- Digest-specific filters (applied synchronously in useMemo, not async useEffect) ---
+            // --- Digest-specific filters (ALWAYS applied, not just when market/product filters are active) ---
             const EXCLUDED_STAGES = ['installed', 'photos taken', 'pop completed', 'takedown complete', 'canceled', 'cancelled', 'pending hold', 'on hold', 'rfp', 'initial proposal'];
             const STALE_ONLY_STAGES = ['contracted', 'proofs approved', 'out for approval'];
             const hasCharted = (item) => item.adjustedQty && item.adjustedQty > 0;
