@@ -194,6 +194,7 @@
         const [shipmentNotes, setShipmentNotes] = useState('');
         const [trackingLoading, setTrackingLoading] = useState(new Set());
         const [trackingFlash, setTrackingFlash] = useState(new Set());
+        const [trackingStatusChanged, setTrackingStatusChanged] = useState(false);
 
         // Helper: Calculate inventory status
         const getInventoryStatus = () => {
@@ -421,6 +422,7 @@
                             if (data.deliveredDate) patch.deliveredDate = data.deliveredDate;
                             if (data.location) patch.lastLocation = data.location;
                             if (statusChanged) {
+                                setTrackingStatusChanged(true);
                                 setTrackingFlash(prev => new Set([...prev, s.id]));
                                 setTimeout(() => setTrackingFlash(prev => {
                                     const next = new Set(prev);
@@ -1078,6 +1080,7 @@
             setEditingInstallCount(false);
             setEditingRemoval(false);
             setEditMode(false);
+            setTrackingStatusChanged(false);
 
             alert('✅ All changes saved!');
         };
@@ -1128,13 +1131,18 @@
                                     <Icon name="MessageSquare" size={14} /> Comms Center
                                 </button>
                                 {hasUnsavedChanges && (
-                                    <button
-                                        onClick={handleUnifiedSave}
-                                        className="px-3 py-1.5 text-xs font-bold rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors flex items-center gap-1.5"
-                                        title="Save all changes"
-                                    >
-                                        <Icon name="Save" size={14} /> Save Changes
-                                    </button>
+                                    <div className="flex items-center gap-2">
+                                        {trackingStatusChanged && (
+                                            <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">Tracking status updated</span>
+                                        )}
+                                        <button
+                                            onClick={handleUnifiedSave}
+                                            className="px-3 py-1.5 text-xs font-bold rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors flex items-center gap-1.5 animate-pulse"
+                                            title="Save all changes"
+                                        >
+                                            <Icon name="Save" size={14} /> Save Changes
+                                        </button>
+                                    </div>
                                 )}
                                 <button onClick={handleClose} className="p-2 hover:bg-gray-200 dark:hover:bg-slate-700 rounded-lg transition-colors">
                                     <Icon name="X" size={20} />
