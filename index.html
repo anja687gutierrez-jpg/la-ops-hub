@@ -1928,29 +1928,8 @@
         // --- EMAIL DIGEST GENERATION LOGIC ---
         
         const generateDigestHtml = (processedData, weatherForecast, settings) => {
-            // Filter: exclude completed-stage campaigns from delay/pastDue in digest
-            const DIGEST_EXCLUDED_STAGES = ['installed', 'photos taken', 'pop completed', 'takedown complete', 'canceled', 'cancelled', 'pending hold', 'on hold', 'rfp', 'initial proposal'];
-            const DIGEST_STALE_ONLY_STAGES = ['contracted', 'proofs approved', 'out for approval'];
             // Global: exclude uncharted campaigns from all digest tables
             const hasCharted = (item) => item.adjustedQty && item.adjustedQty > 0;
-            const isDigestDelayExcluded = (item) => {
-                // Must have confirmed charted qty — applies to ALL stages
-                if (!item.adjustedQty || item.adjustedQty <= 0) return true;
-                const stageLower = (item.stage || '').toLowerCase();
-                if (DIGEST_EXCLUDED_STAGES.includes(stageLower)) return true;
-                if (DIGEST_STALE_ONLY_STAGES.includes(stageLower)) {
-                    const startDate = item.dateObj instanceof Date ? item.dateObj : (item.dateObj ? new Date(item.dateObj) : null);
-                    if (!startDate) return true;
-                    const now = new Date(); now.setHours(0,0,0,0);
-                    // Contracted campaigns due this week bypass the 30-day stale rule
-                    const diffToMon = 1 - (now.getDay() || 7);
-                    const mon = new Date(now); mon.setDate(now.getDate() + diffToMon); mon.setHours(0,0,0,0);
-                    const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23,59,59,999);
-                    if (stageLower === 'contracted' && startDate >= mon && startDate <= sun) return false;
-                    return Math.floor((now - startDate) / (1000 * 60 * 60 * 24)) < 30;
-                }
-                return false;
-            };
 
             // Dynamic date label based on title keywords (Daily/Weekly/Monthly)
             const now = new Date();
@@ -2123,7 +2102,7 @@
                     const allOverdue = [
                         ...(processedData.delayedFlights || []),
                         ...(processedData.pastDue || [])
-                    ].filter(i => !isDigestDelayExcluded(i)).sort((a, b) => (b.dateObj || 0) - (a.dateObj || 0));
+                    ].sort((a, b) => (b.dateObj || 0) - (a.dateObj || 0));
                     // Highlight rows from last 2 weeks
                     allOverdue.forEach(item => {
                         if (item.dateObj && item.dateObj >= twoWeeksAgo) item._rowHighlight = '#fff8e1';
@@ -2152,7 +2131,7 @@
                     h.push('Progress');
                     w.push('20%');
 
-                    return createHtmlTable(processedData.inProgressFlights.filter(hasCharted), h, w, item => {
+                    return createHtmlTable(processedData.inProgressFlights, h, w, item => {
                         const row = [formatCampaignCell(item.advertiser, item.name, item.productionProof, item.product || item.media)];
                         if (showMarket) row.push(formatMarket(item.market));
                         if (showOwner) row.push(item.owner);
@@ -2190,7 +2169,7 @@
                     h.push('Start', 'Mat. Rcvd');
                     w.push('8%', '6%');
 
-                    return createHtmlTable(processedData.upcoming.filter(hasCharted), h, w, item => {
+                    return createHtmlTable(processedData.upcoming, h, w, item => {
                         const row = [item.stage, formatCampaignCell(item.advertiser, item.name, item.productionProof, item.product || item.media)];
                         if (showMarket) row.push(formatMarket(item.market));
                         if (showOwner) row.push(item.owner);
@@ -2224,7 +2203,7 @@
                     };
 
                     // This week's installs (existing data)
-                    const thisWeekItems = processedData.fullyInstalledThisWeek.filter(hasCharted);
+                    const thisWeekItems = processedData.fullyInstalledThisWeek;
 
                     // Last week's installs — computed from processedData.all
                     const today = new Date();
@@ -2335,7 +2314,7 @@
 
                 removal: (() => {
                     // Sort most overdue first
-                    const sorted = [...(processedData.expiredFlights || [])].filter(hasCharted).sort((a, b) => {
+                    const sorted = [...(processedData.expiredFlights || [])].sort((a, b) => {
                         const dA = a.endDateObj ? (new Date() - a.endDateObj) : 0;
                         const dB = b.endDateObj ? (new Date() - b.endDateObj) : 0;
                         return dB - dA;
@@ -2362,19 +2341,18 @@
 
             const weatherHtml = getWeatherHtml();
 
-            // Calculate production counts for summary
-            const allCampaigns = processedData.all || [];
+            // Calculate production counts for summary — only incoming workload (In-Progress + Upcoming)
+            const workloadCampaigns = [...(processedData.inProgressFlights || []), ...(processedData.upcoming || [])];
             const productionBreakdown = {
-                inHouse: allCampaigns.filter(c => c.productionProof === 'in-house').length,
-                client: allCampaigns.filter(c => c.productionProof === 'client').length,
+                inHouse: workloadCampaigns.filter(c => c.productionProof === 'in-house').length,
+                client: workloadCampaigns.filter(c => c.productionProof === 'client').length,
             };
 
             // Build sections: Summary → Alert → Delayed → InProgress → Upcoming → Installed → Pipeline → Removal
             let sectionsHtml = '';
 
             // Unified delayed count (delayed + pastDue, matching the table)
-            // Exclude manually overridden completed-stage campaigns
-            const allOverdueCount = (processedData.delayedFlights || []).filter(i => !isDigestDelayExcluded(i)).length + (processedData.pastDue || []).filter(i => !isDigestDelayExcluded(i)).length;
+            const allOverdueCount = (processedData.delayedFlights || []).length + (processedData.pastDue || []).length;
 
             // 1. Summary KPIs + In-House vs Client count
             if (settings.sections.summary) {
@@ -2386,9 +2364,9 @@
                 <h2>THIS WEEK AT A GLANCE</h2>
                 <div class="summary-grid">
                     <div class="summary-item"><div class="count" style="color: ${allOverdueCount > 0 ? '#d32f2f' : '#4caf50'};">${allOverdueCount}</div><div class="label">DELAYED</div></div>
-                    <div class="summary-item"><div class="count normal">${processedData.inProgressFlights.filter(hasCharted).length}</div><div class="label">IN-PROGRESS</div></div>
-                    <div class="summary-item"><div class="count normal">${processedData.upcoming.filter(hasCharted).length}</div><div class="label">UPCOMING</div></div>
-                    <div class="summary-item"><div class="count" style="color: #4caf50;">${processedData.fullyInstalledThisWeek.filter(hasCharted).length}</div><div class="label">INSTALLED</div></div>
+                    <div class="summary-item"><div class="count normal">${processedData.inProgressFlights.length}</div><div class="label">IN-PROGRESS</div></div>
+                    <div class="summary-item"><div class="count normal">${processedData.upcoming.length}</div><div class="label">UPCOMING</div></div>
+                    <div class="summary-item"><div class="count" style="color: #4caf50;">${processedData.fullyInstalledThisWeek.length}</div><div class="label">INSTALLED</div></div>
                 </div>
                 ${prodLine}
                 </td></tr>`;
@@ -2451,7 +2429,6 @@
             .badge { display: inline-block; padding: 1px 5px; border-radius: 3px; font-size: 9px; font-weight: 500; background: #f0f0f8; color: #6366a0; vertical-align: middle; margin-left: 4px; white-space: nowrap; }
             .alert-banner { padding: 10px 20px; background: #fef8f8; color: #b45050; font-size: 12px; font-weight: 500; border-bottom: 1px solid #e0e0e8; }
             .footer { padding: 18px 20px; text-align: center; font-size: 12px; background-color: #f0f4f8; }
-            .footer a { background-color: #2979ff; color: #ffffff; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block; font-size: 13px; }
             </style></head><body>
             <table class="container" align="center" cellpadding="0" cellspacing="0">
                 <tr>
@@ -2472,8 +2449,7 @@
                 </tr>
                 ${sectionsHtml}
                 <tr><td class="footer">
-                    <a href="#">View Full Dashboard</a>
-                    <p style="margin-top: 15px; font-size: 11px; color: #999;">
+                    <p style="margin: 0; font-size: 11px; color: #999;">
                         Report generated: ${new Date().toLocaleString('en-US', { 
                             weekday: 'short', 
                             month: 'short', 
@@ -10187,6 +10163,7 @@ Keep TL;DR extremely brief. Only expand on problem areas in detailed section. Us
                                     // Merge Quantities
                                     entry.quantity += (item.quantity || 0);
                                     entry.totalInstalled += (item.totalInstalled || 0);
+                                    entry.adjustedQty = (entry.adjustedQty || 0) + (item.adjustedQty || 0);
                                     
                                     // Indicate mixed media if strictly different
                                     if (entry.media !== item.media && !entry.media.includes('Mixed')) {

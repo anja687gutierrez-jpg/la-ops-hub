@@ -81,7 +81,7 @@
                 upcoming: "Upcoming",
                 installed: "Installed",
                 recent: "Recent Completed Installs",
-                pipeline: "Pipeline Snapshot (This Week)",
+                pipeline: "Pipeline Snapshot",
                 removal: "Removal Dates (Past 45 days)"
             }
         });
@@ -237,13 +237,12 @@
         useEffect(() => {
             if (filteredDigestData && editableData === null) {
                 setEditableData({
-                    delayedFlights: [...(filteredDigestData.delayedFlights || [])],
+                    delayedFlights: [...(filteredDigestData.delayedFlights || []), ...(filteredDigestData.pastDue || [])],
                     inProgressFlights: [...(filteredDigestData.inProgressFlights || [])],
                     upcoming: [...(filteredDigestData.upcoming || [])],
                     fullyInstalledThisWeek: [...(filteredDigestData.fullyInstalledThisWeek || [])],
                     recentInstalls: [...(filteredDigestData.recentInstalls || [])],
                     expiredFlights: [...(filteredDigestData.expiredFlights || [])],
-                    pastDue: [...(filteredDigestData.pastDue || [])],
                     pipelineSummary: [...(filteredDigestData.pipelineSummary || [])]
                 });
             }
@@ -364,13 +363,12 @@
         const resetEdits = () => {
             if (filteredDigestData) {
                 setEditableData({
-                    delayedFlights: [...(filteredDigestData.delayedFlights || [])],
+                    delayedFlights: [...(filteredDigestData.delayedFlights || []), ...(filteredDigestData.pastDue || [])],
                     inProgressFlights: [...(filteredDigestData.inProgressFlights || [])],
                     upcoming: [...(filteredDigestData.upcoming || [])],
                     fullyInstalledThisWeek: [...(filteredDigestData.fullyInstalledThisWeek || [])],
                     recentInstalls: [...(filteredDigestData.recentInstalls || [])],
                     expiredFlights: [...(filteredDigestData.expiredFlights || [])],
-                    pastDue: [...(filteredDigestData.pastDue || [])],
                     pipelineSummary: [...(filteredDigestData.pipelineSummary || [])]
                 });
             }
@@ -380,7 +378,7 @@
         const hasManualEdits = useMemo(() => {
             if (!editableData || !filteredDigestData) return false;
             return (
-                editableData.delayedFlights?.length !== filteredDigestData.delayedFlights?.length ||
+                editableData.delayedFlights?.length !== ((filteredDigestData.delayedFlights?.length || 0) + (filteredDigestData.pastDue?.length || 0)) ||
                 editableData.inProgressFlights?.length !== filteredDigestData.inProgressFlights?.length ||
                 editableData.upcoming?.length !== filteredDigestData.upcoming?.length ||
                 editableData.fullyInstalledThisWeek?.length !== filteredDigestData.fullyInstalledThisWeek?.length ||
@@ -401,12 +399,12 @@
             return {
                 ...filteredDigestData,
                 delayedFlights: editableData.delayedFlights,
+                pastDue: [],
                 inProgressFlights: editableData.inProgressFlights,
                 upcoming: editableData.upcoming,
                 fullyInstalledThisWeek: editableData.fullyInstalledThisWeek,
                 recentInstalls: editableData.recentInstalls,
                 expiredFlights: editableData.expiredFlights,
-                pastDue: editableData.pastDue,
                 pipelineSummary: editableData.pipelineSummary
             };
         }, [editableData, filteredDigestData]);
@@ -1047,6 +1045,33 @@
                             >
                                 <Icon name={copied ? "CheckCircle" : "Copy"} size={18} />
                                 {copied ? 'Copied to Clipboard!' : '1. Copy Table'}
+                            </button>
+                            <button
+                                onClick={() => {
+                                    const { jsPDF } = window.jspdf;
+                                    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+                                    const container = document.createElement('div');
+                                    container.innerHTML = htmlContent;
+                                    container.style.width = '560px';
+                                    doc.html(container, {
+                                        callback: (pdf) => {
+                                            const filterParts = [];
+                                            if (digestMarkets.length > 0) filterParts.push(digestMarkets.map(m => m.split(',')[0]).join('-'));
+                                            const dateSuffix = new Date().toISOString().slice(0, 10);
+                                            const filename = filterParts.length > 0
+                                                ? `STAP-Digest-${filterParts.join('-')}-${dateSuffix}.pdf`
+                                                : `STAP-Digest-${dateSuffix}.pdf`;
+                                            pdf.save(filename);
+                                        },
+                                        x: 10, y: 10,
+                                        width: 190,
+                                        windowWidth: 560
+                                    });
+                                }}
+                                className="px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 bg-gray-100 text-gray-700 hover:bg-gray-200"
+                            >
+                                <Icon name="Download" size={18} />
+                                Download PDF
                             </button>
                             <button
                                 onClick={handleOpenMailClient}
