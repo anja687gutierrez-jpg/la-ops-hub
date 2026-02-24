@@ -7771,7 +7771,8 @@
                 'adjustedQty', 'materialBreakdown', 'photosLink', 'receiverLink',
                 'mediaType', 'materialReceivedDate', 'removalQty', 'removedCount', 'removalStatus',
                 'removalAssignee', 'removalPhotosLink', 'hasReplacement',
-                'productionProof', 'history', 'notes'
+                'productionProof', 'history', 'notes',
+                'shipments', 'shipmentNotes', 'totalQty'
             ]);
 
             // Helper: apply all meta override fields onto an item object
@@ -7796,6 +7797,9 @@
                 if (metaOvr.receiverLink) item.receiverLink = metaOvr.receiverLink;
                 if (metaOvr.photosLink) item.photosLink = metaOvr.photosLink;
                 if (metaOvr.mediaType) item.mediaType = metaOvr.mediaType;
+                if (metaOvr.shipments) item.shipments = metaOvr.shipments;
+                if (metaOvr.shipmentNotes) item.shipmentNotes = metaOvr.shipmentNotes;
+                if (metaOvr.totalQty) item.totalQty = metaOvr.totalQty;
             };
 
             // One-time migration: Split legacy stap_manual_overrides into temp + meta buckets
@@ -8650,6 +8654,9 @@
                     if (additionalUpdates.hasReplacement !== undefined) updated.hasReplacement = additionalUpdates.hasReplacement;
                     // Change history
                     if (additionalUpdates.history) updated.history = additionalUpdates.history;
+                    // Shipment tracking
+                    if (additionalUpdates.shipments !== undefined) updated.shipments = additionalUpdates.shipments;
+                    if (additionalUpdates.shipmentNotes !== undefined) updated.shipmentNotes = additionalUpdates.shipmentNotes;
                     return updated;
                 });
             };

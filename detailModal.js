@@ -1619,7 +1619,7 @@
                                     {shipments.length === 0 ? (
                                         <div className="text-center py-4">
                                             <div className="text-xs text-gray-400 dark:text-gray-500 mb-2">No shipments yet</div>
-                                            <button onClick={() => setShipments([{ id: Date.now(), trackingNumber: '', provider: 'UPS', status: 'Pending', shipDate: '', deliveredDate: '', notes: '' }])} className="text-xs text-amber-600 dark:text-amber-400 hover:underline font-medium">+ Add Shipment</button>
+                                            <button onClick={() => setShipments([{ id: Date.now(), trackingNumber: '', provider: 'UPS', status: 'Pending', shipDate: new Date().toISOString().split('T')[0], deliveredDate: '', notes: '' }])} className="text-xs text-amber-600 dark:text-amber-400 hover:underline font-medium">+ Add Shipment</button>
                                         </div>
                                     ) : (
                                         <>
@@ -1649,7 +1649,7 @@
                                                     </tbody>
                                                 </table>
                                             </div>
-                                            <button onClick={() => setShipments([...shipments, { id: Date.now(), trackingNumber: '', provider: 'UPS', status: 'Pending', shipDate: '', deliveredDate: '', notes: '' }])} className="mt-2 text-xs text-amber-600 dark:text-amber-400 hover:underline font-medium">+ Add Shipment</button>
+                                            <button onClick={() => setShipments([...shipments, { id: Date.now(), trackingNumber: '', provider: 'UPS', status: 'Pending', shipDate: new Date().toISOString().split('T')[0], deliveredDate: '', notes: '' }])} className="mt-2 text-xs text-amber-600 dark:text-amber-400 hover:underline font-medium">+ Add Shipment</button>
                                         </>
                                     )}
                                     <div className="mt-3 pt-3 border-t border-gray-100 dark:border-slate-700">
