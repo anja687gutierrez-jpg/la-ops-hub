@@ -5301,6 +5301,7 @@
             const totalCampaigns = totals?.totalCampaigns || data.reduce((acc, curr) => acc + curr.count, 0);
             const totalQty = totals?.totalQty || data.reduce((acc, curr) => acc + (curr.qty || 0), 0);
             const totalInstalled = data.reduce((acc, curr) => acc + (curr.installed || 0), 0);
+            const totalPending = Math.max(0, totalQty - totalInstalled);
 
             // Find bottlenecks (stages with higher than average count)
             const avgCount = totalCampaigns / (data.length || 1);
@@ -5331,42 +5332,42 @@
                         <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-4 text-white shadow-lg">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-blue-100 text-sm font-medium">Total Campaigns</p>
+                                    <p className="text-blue-100 text-sm font-medium">Campaigns</p>
                                     <p className="text-3xl font-bold">{totalCampaigns}</p>
                                 </div>
                                 <Icon name="Briefcase" size={32} className="text-blue-200" />
                             </div>
-                            <p className="text-blue-100 text-xs mt-2">This month</p>
+                            <p className="text-blue-100 text-xs mt-2">{data.length} active stages</p>
                         </div>
                         <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-4 text-white shadow-lg">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-green-100 text-sm font-medium">Total Faces</p>
-                                    <p className="text-3xl font-bold">{totalQty.toLocaleString()}</p>
+                                    <p className="text-green-100 text-sm font-medium">Installed</p>
+                                    <p className="text-3xl font-bold">{totalInstalled.toLocaleString()} <span className="text-lg font-normal text-green-200">/ {totalQty.toLocaleString()}</span></p>
                                 </div>
-                                <Icon name="LayoutGrid" size={32} className="text-green-200" />
+                                <Icon name="CheckCircle" size={32} className="text-green-200" />
                             </div>
-                            <p className="text-green-100 text-xs mt-2">Booked quantity</p>
-                        </div>
-                        <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-4 text-white shadow-lg">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-purple-100 text-sm font-medium">Installed</p>
-                                    <p className="text-3xl font-bold">{totalInstalled.toLocaleString()}</p>
-                                </div>
-                                <Icon name="CheckCircle" size={32} className="text-purple-200" />
-                            </div>
-                            <p className="text-purple-100 text-xs mt-2">{totalQty > 0 ? Math.round((totalInstalled / totalQty) * 100) : 0}% complete</p>
+                            <p className="text-green-100 text-xs mt-2">{totalQty > 0 ? Math.round((totalInstalled / totalQty) * 100) : 0}% complete</p>
                         </div>
                         <div className="bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl p-4 text-white shadow-lg">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-amber-100 text-sm font-medium">Active Stages</p>
-                                    <p className="text-3xl font-bold">{data.length}</p>
+                                    <p className="text-amber-100 text-sm font-medium">Pending</p>
+                                    <p className="text-3xl font-bold">{totalPending.toLocaleString()}</p>
                                 </div>
-                                <Icon name="Layers" size={32} className="text-amber-200" />
+                                <Icon name="Clock" size={32} className="text-amber-200" />
                             </div>
-                            <p className="text-amber-100 text-xs mt-2">{bottlenecks.length > 0 ? `${bottlenecks.length} bottleneck${bottlenecks.length > 1 ? 's' : ''}` : 'Flow healthy'}</p>
+                            <p className="text-amber-100 text-xs mt-2">{totalQty > 0 ? Math.round((totalPending / totalQty) * 100) : 0}% remaining</p>
+                        </div>
+                        <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-4 text-white shadow-lg">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-purple-100 text-sm font-medium">Bottlenecks</p>
+                                    <p className="text-3xl font-bold">{bottlenecks.length}</p>
+                                </div>
+                                <Icon name="AlertTriangle" size={32} className="text-purple-200" />
+                            </div>
+                            <p className="text-purple-100 text-xs mt-2">{bottlenecks.length > 0 ? bottlenecks.map(b => b.stage).join(', ') : 'Flow healthy'}</p>
                         </div>
                     </div>
 
