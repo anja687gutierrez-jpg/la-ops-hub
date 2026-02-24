@@ -262,7 +262,15 @@
         const removeRow = (index) => {
             let newRows = materialBreakdown.filter((_, i) => i !== index);
             if (!newRows.length) newRows = [{ code: '', qty: '', scheduled: '', scheduledLocked: false, link: '' }];
-            setMaterialBreakdown(autoDistributeScheduled(newRows, customQty));
+            const distributed = autoDistributeScheduled(newRows, customQty);
+            setMaterialBreakdown(distributed);
+            try {
+                const overrides = JSON.parse(localStorage.getItem('stap_meta_overrides') || '{}');
+                if (overrides[campaignId]) {
+                    overrides[campaignId].materialBreakdown = distributed.filter(r => r.code || r.qty);
+                    localStorage.setItem('stap_meta_overrides', JSON.stringify(overrides));
+                }
+            } catch(e) {}
         };
         const updateRow = (index, field, value) => {
             const newRows = [...materialBreakdown];
