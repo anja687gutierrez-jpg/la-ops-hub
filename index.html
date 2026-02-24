@@ -2302,13 +2302,13 @@
 
                     // Build table
                     let html = `<table class="data-table" style="font-size: ${fontSize};">`;
-                    html += `<tr><th style="font-size: ${headerSize}; padding: ${padding};" width="36%">Stage</th><th style="font-size: ${headerSize}; padding: ${padding};" width="14%">Camps</th><th style="font-size: ${headerSize}; padding: ${padding};" width="16%">Faces</th><th style="font-size: ${headerSize}; padding: ${padding};" width="17%">Instl</th><th style="font-size: ${headerSize}; padding: ${padding};" width="17%">Pend</th></tr>`;
+                    html += `<tr><th style="font-size: ${headerSize}; padding: ${padding};" width="40%">Stage</th><th style="font-size: ${headerSize}; padding: ${padding};" width="20%">Camps</th><th style="font-size: ${headerSize}; padding: ${padding};" width="40%">Installed</th></tr>`;
                     stages.forEach(s => {
                         const isBottleneck = bottlenecks.some(b => b.startsWith(s.stage));
                         const flag = isBottleneck ? ' <span style="color:#e65100;">&#9888;</span>' : '';
-                        html += `<tr><td style="padding: ${padding};">${s.stage}${flag}</td><td style="padding: ${padding};"><strong>${s.campaigns}</strong></td><td style="padding: ${padding};"><strong>${s.faces.toLocaleString()}</strong></td><td style="padding: ${padding};">${s.installed.toLocaleString()}</td><td style="padding: ${padding};">${s.pendingFaces.toLocaleString()}</td></tr>`;
+                        html += `<tr><td style="padding: ${padding};">${s.stage}${flag}</td><td style="padding: ${padding};"><strong>${s.campaigns}</strong></td><td style="padding: ${padding};">${s.installed.toLocaleString()} / ${s.faces.toLocaleString()}</td></tr>`;
                     });
-                    html += `<tr style="border-top: 2px solid #ccc; font-weight: 600;"><td style="padding: ${padding};">TOTAL</td><td style="padding: ${padding};">${totals.campaigns}</td><td style="padding: ${padding};">${totals.faces.toLocaleString()}</td><td style="padding: ${padding};">${totals.installed.toLocaleString()}</td><td style="padding: ${padding};">${totals.pendingFaces.toLocaleString()}</td></tr>`;
+                    html += `<tr style="border-top: 2px solid #ccc; font-weight: 600;"><td style="padding: ${padding};">TOTAL</td><td style="padding: ${padding};">${totals.campaigns}</td><td style="padding: ${padding};">${totals.installed.toLocaleString()} / ${totals.faces.toLocaleString()}</td></tr>`;
                     html += '</table>';
 
                     // Progress bar
