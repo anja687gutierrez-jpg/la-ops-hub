@@ -2300,31 +2300,15 @@
                         else if (s.campaigns > avgCount * 1.5) bottlenecks.push(`${s.stage}: ${s.campaigns} campaigns congested`);
                     });
 
-                    const fmtPend = (pending, total) => pending > 0 ? `${pending} of ${total}` : '0';
-
-                    // Build two sub-tables
-                    let html = '';
-
-                    // Sub-table 1: Campaigns by Stage
-                    html += `<div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #555; margin-bottom: 4px;">Campaigns by Stage</div>`;
-                    html += `<table class="data-table" style="font-size: ${fontSize};">`;
-                    html += `<tr><th style="font-size: ${headerSize}; padding: ${padding};" width="50%">Stage</th><th style="font-size: ${headerSize}; padding: ${padding};" width="25%">Camps</th><th style="font-size: ${headerSize}; padding: ${padding};" width="25%">Pending</th></tr>`;
+                    // Build table
+                    let html = `<table class="data-table" style="font-size: ${fontSize};">`;
+                    html += `<tr><th style="font-size: ${headerSize}; padding: ${padding};" width="36%">Stage</th><th style="font-size: ${headerSize}; padding: ${padding};" width="14%">Camps</th><th style="font-size: ${headerSize}; padding: ${padding};" width="16%">Faces</th><th style="font-size: ${headerSize}; padding: ${padding};" width="17%">Instl</th><th style="font-size: ${headerSize}; padding: ${padding};" width="17%">Pend</th></tr>`;
                     stages.forEach(s => {
                         const isBottleneck = bottlenecks.some(b => b.startsWith(s.stage));
                         const flag = isBottleneck ? ' <span style="color:#e65100;">&#9888;</span>' : '';
-                        html += `<tr><td style="padding: ${padding};">${s.stage}${flag}</td><td style="padding: ${padding};"><strong>${s.campaigns}</strong></td><td style="padding: ${padding};">${fmtPend(s.pendingCamps, s.campaigns)}</td></tr>`;
+                        html += `<tr><td style="padding: ${padding};">${s.stage}${flag}</td><td style="padding: ${padding};"><strong>${s.campaigns}</strong></td><td style="padding: ${padding};"><strong>${s.faces.toLocaleString()}</strong></td><td style="padding: ${padding};">${s.installed.toLocaleString()}</td><td style="padding: ${padding};">${s.pendingFaces.toLocaleString()}</td></tr>`;
                     });
-                    html += `<tr style="border-top: 2px solid #ccc; font-weight: 600;"><td style="padding: ${padding};">TOTAL</td><td style="padding: ${padding};">${totals.campaigns}</td><td style="padding: ${padding};">${fmtPend(totals.pendingCamps, totals.campaigns)}</td></tr>`;
-                    html += '</table>';
-
-                    // Sub-table 2: Face Totals
-                    html += `<div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #555; margin: 8px 0 4px;">Face Totals</div>`;
-                    html += `<table class="data-table" style="font-size: ${fontSize};">`;
-                    html += `<tr><th style="font-size: ${headerSize}; padding: ${padding};" width="40%">Stage</th><th style="font-size: ${headerSize}; padding: ${padding};" width="20%">Faces</th><th style="font-size: ${headerSize}; padding: ${padding};" width="20%">Instl</th><th style="font-size: ${headerSize}; padding: ${padding};" width="20%">Pend</th></tr>`;
-                    stages.forEach(s => {
-                        html += `<tr><td style="padding: ${padding};">${s.stage}</td><td style="padding: ${padding};"><strong>${s.faces.toLocaleString()}</strong></td><td style="padding: ${padding};">${s.installed.toLocaleString()}</td><td style="padding: ${padding};">${s.pendingFaces.toLocaleString()}</td></tr>`;
-                    });
-                    html += `<tr style="border-top: 2px solid #ccc; font-weight: 600;"><td style="padding: ${padding};">TOTAL</td><td style="padding: ${padding};">${totals.faces.toLocaleString()}</td><td style="padding: ${padding};">${totals.installed.toLocaleString()}</td><td style="padding: ${padding};">${totals.pendingFaces.toLocaleString()}</td></tr>`;
+                    html += `<tr style="border-top: 2px solid #ccc; font-weight: 600;"><td style="padding: ${padding};">TOTAL</td><td style="padding: ${padding};">${totals.campaigns}</td><td style="padding: ${padding};">${totals.faces.toLocaleString()}</td><td style="padding: ${padding};">${totals.installed.toLocaleString()}</td><td style="padding: ${padding};">${totals.pendingFaces.toLocaleString()}</td></tr>`;
                     html += '</table>';
 
                     // Progress bar
