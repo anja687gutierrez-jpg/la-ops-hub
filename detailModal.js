@@ -29,6 +29,14 @@
         getStatusColor = window.STAP_getStatusColor || (() => 'bg-gray-100 text-gray-700');
     };
 
+    // Carrier tracking URL mapping for clickable tracking links
+    const TRACKING_URLS = {
+        'UPS': (num) => `https://www.ups.com/track?tracknum=${num}`,
+        'FedEx': (num) => `https://www.fedex.com/fedextrack/?trknbr=${num}`,
+        'USPS': (num) => `https://tools.usps.com/go/TrackConfirmAction?tLabels=${num}`,
+        'DHL': (num) => `https://www.dhl.com/us-en/home/tracking/tracking-parcel.html?submit=1&tracking-id=${num}`,
+    };
+
     const DetailModal = ({ item, onClose, onSave, onLogEmail, materialReceiverData = [], proofData = [], onOpenCreativeHub, onOpenMaterialReceivers, onAddMaterial, onRemoveMaterial }) => {
         // Initialize dependencies on first render
         useEffect(() => { initDependencies(); }, []);
@@ -184,6 +192,8 @@
         const [shipmentDrawerOpen, setShipmentDrawerOpen] = useState(false);
         const [shipments, setShipments] = useState([]);
         const [shipmentNotes, setShipmentNotes] = useState('');
+        const [trackingLoading, setTrackingLoading] = useState(new Set());
+        const [trackingFlash, setTrackingFlash] = useState(new Set());
 
         // Helper: Calculate inventory status
         const getInventoryStatus = () => {
@@ -383,6 +393,57 @@
                 setShipmentDrawerOpen(false);
             }
         }, [item]);
+
+        // Auto-fetch tracking status when shipment drawer opens
+        useEffect(() => {
+            if (!shipmentDrawerOpen || shipments.length === 0) return;
+            const supportedCarriers = ['ups', 'fedex', 'usps', 'dhl'];
+            const fetchable = shipments.filter(s =>
+                s.trackingNumber && supportedCarriers.includes(s.provider.toLowerCase())
+            );
+            if (fetchable.length === 0) return;
+
+            // Mark all fetchable as loading
+            setTrackingLoading(new Set(fetchable.map(s => s.id)));
+
+            fetchable.forEach(shipment => {
+                fetch(`/api/track?carrier=${encodeURIComponent(shipment.provider.toLowerCase())}&number=${encodeURIComponent(shipment.trackingNumber)}`)
+                    .then(res => {
+                        if (res.status === 501 || !res.ok) return null; // not configured or error — skip
+                        return res.json();
+                    })
+                    .then(data => {
+                        if (!data || data.error) return;
+                        setShipments(prev => prev.map(s => {
+                            if (s.id !== shipment.id) return s;
+                            const statusChanged = s.status !== data.status;
+                            const patch = {
+                                status: data.status,
+                                lastTracked: new Date().toISOString(),
+                            };
+                            if (data.deliveredDate) patch.deliveredDate = data.deliveredDate;
+                            if (data.location) patch.lastLocation = data.location;
+                            if (statusChanged) {
+                                setTrackingFlash(prev => new Set([...prev, s.id]));
+                                setTimeout(() => setTrackingFlash(prev => {
+                                    const next = new Set(prev);
+                                    next.delete(s.id);
+                                    return next;
+                                }), 1500);
+                            }
+                            return { ...s, ...patch };
+                        }));
+                    })
+                    .catch(() => {}) // network error — skip silently
+                    .finally(() => {
+                        setTrackingLoading(prev => {
+                            const next = new Set(prev);
+                            next.delete(shipment.id);
+                            return next;
+                        });
+                    });
+            });
+        }, [shipmentDrawerOpen]);
 
         // Sync email template values with INSTALL PROGRESS values
         useEffect(() => {
@@ -1558,7 +1619,7 @@
                                     {shipments.length === 0 ? (
                                         <div className="text-center py-4">
                                             <div className="text-xs text-gray-400 dark:text-gray-500 mb-2">No shipments yet</div>
-                                            <button onClick={() => setShipments([{ id: Date.now(), trackingNumber: '', provider: 'UPS', status: 'Pending', shipDate: '', notes: '' }])} className="text-xs text-amber-600 dark:text-amber-400 hover:underline font-medium">+ Add Shipment</button>
+                                            <button onClick={() => setShipments([{ id: Date.now(), trackingNumber: '', provider: 'UPS', status: 'Pending', shipDate: '', deliveredDate: '', notes: '' }])} className="text-xs text-amber-600 dark:text-amber-400 hover:underline font-medium">+ Add Shipment</button>
                                         </div>
                                     ) : (
                                         <>
@@ -1570,23 +1631,25 @@
                                                             <th className="text-left pb-2 pr-2">Provider</th>
                                                             <th className="text-left pb-2 pr-2">Status</th>
                                                             <th className="text-left pb-2 pr-2">Ship Date</th>
+                                                            <th className="text-left pb-2 pr-2">Delivered</th>
                                                             <th className="text-left pb-2 w-8"></th>
                                                         </tr>
                                                     </thead>
                                                     <tbody>
                                                         {shipments.map((shipment, idx) => (
-                                                            <tr key={shipment.id} className="border-b border-gray-50 dark:border-slate-700/50">
-                                                                <td className="py-1.5 pr-2"><input type="text" value={shipment.trackingNumber} onChange={(e) => { const updated = [...shipments]; updated[idx] = { ...updated[idx], trackingNumber: e.target.value }; setShipments(updated); }} placeholder="Tracking #" className="w-full text-xs border rounded px-2 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200" /></td>
+                                                            <tr key={shipment.id} className={`border-b border-gray-50 dark:border-slate-700/50 transition-colors duration-700 ${trackingFlash.has(shipment.id) ? 'bg-green-50 dark:bg-green-500/10' : ''}`}>
+                                                                <td className="py-1.5 pr-2"><div className="flex items-center gap-1"><input type="text" value={shipment.trackingNumber} onChange={(e) => { const updated = [...shipments]; updated[idx] = { ...updated[idx], trackingNumber: e.target.value }; setShipments(updated); }} placeholder="Tracking #" className="w-full text-xs border rounded px-2 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200" />{trackingLoading.has(shipment.id) ? (<span className="flex-shrink-0 animate-spin text-amber-500" title="Fetching status..."><Icon name="RefreshCw" size={13} /></span>) : shipment.trackingNumber && TRACKING_URLS[shipment.provider] && (<button onClick={() => window.open(TRACKING_URLS[shipment.provider](shipment.trackingNumber), '_blank')} className="flex-shrink-0 text-amber-500 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300 transition-colors" title={`Track on ${shipment.provider}`}><Icon name="ExternalLink" size={13} /></button>)}</div></td>
                                                                 <td className="py-1.5 pr-2"><select value={shipment.provider} onChange={(e) => { const updated = [...shipments]; updated[idx] = { ...updated[idx], provider: e.target.value }; setShipments(updated); }} className="text-xs border rounded px-1.5 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200"><option>UPS</option><option>FedEx</option><option>USPS</option><option>DHL</option><option>Other</option></select></td>
-                                                                <td className="py-1.5 pr-2"><select value={shipment.status} onChange={(e) => { const updated = [...shipments]; updated[idx] = { ...updated[idx], status: e.target.value }; setShipments(updated); }} className="text-xs border rounded px-1.5 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200"><option>Pending</option><option>Shipped</option><option>In Transit</option><option>Delivered</option></select></td>
+                                                                <td className="py-1.5 pr-2"><div><select value={shipment.status} onChange={(e) => { const updated = [...shipments]; const newStatus = e.target.value; const patch = { status: newStatus }; if (newStatus === 'Delivered' && !updated[idx].deliveredDate) { patch.deliveredDate = new Date().toISOString().split('T')[0]; } if (newStatus !== 'Delivered') { patch.deliveredDate = ''; } updated[idx] = { ...updated[idx], ...patch }; setShipments(updated); }} className="text-xs border rounded px-1.5 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200"><option>Pending</option><option>Shipped</option><option>In Transit</option><option>Delivered</option></select>{shipment.lastTracked && (<div className="text-[9px] text-gray-400 dark:text-gray-500 mt-0.5">{(() => { const mins = Math.round((Date.now() - new Date(shipment.lastTracked).getTime()) / 60000); return mins < 1 ? 'Updated just now' : mins < 60 ? `Updated ${mins}m ago` : `Updated ${Math.round(mins/60)}h ago`; })()}</div>)}</div></td>
                                                                 <td className="py-1.5 pr-2"><input type="date" value={shipment.shipDate} onChange={(e) => { const updated = [...shipments]; updated[idx] = { ...updated[idx], shipDate: e.target.value }; setShipments(updated); }} className="text-xs border rounded px-1.5 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200" /></td>
+                                                                <td className="py-1.5 pr-2">{shipment.status === 'Delivered' ? (<input type="date" value={shipment.deliveredDate || ''} onChange={(e) => { const updated = [...shipments]; updated[idx] = { ...updated[idx], deliveredDate: e.target.value }; setShipments(updated); }} className="text-xs border rounded px-1.5 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200" />) : (<span className="text-xs text-gray-300 dark:text-gray-600">—</span>)}</td>
                                                                 <td className="py-1.5"><button onClick={() => { const updated = shipments.filter((_, i) => i !== idx); setShipments(updated); }} className="text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors" title="Remove shipment"><Icon name="X" size={14} /></button></td>
                                                             </tr>
                                                         ))}
                                                     </tbody>
                                                 </table>
                                             </div>
-                                            <button onClick={() => setShipments([...shipments, { id: Date.now(), trackingNumber: '', provider: 'UPS', status: 'Pending', shipDate: '', notes: '' }])} className="mt-2 text-xs text-amber-600 dark:text-amber-400 hover:underline font-medium">+ Add Shipment</button>
+                                            <button onClick={() => setShipments([...shipments, { id: Date.now(), trackingNumber: '', provider: 'UPS', status: 'Pending', shipDate: '', deliveredDate: '', notes: '' }])} className="mt-2 text-xs text-amber-600 dark:text-amber-400 hover:underline font-medium">+ Add Shipment</button>
                                         </>
                                     )}
                                     <div className="mt-3 pt-3 border-t border-gray-100 dark:border-slate-700">
