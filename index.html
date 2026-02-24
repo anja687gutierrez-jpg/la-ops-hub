@@ -2207,7 +2207,7 @@
                     h.push('Start', '1st Install', 'Units');
                     w.push('8%', '8%', '12%');
 
-                    return createHtmlTable(processedData.fullyInstalledThisWeek.filter(hasCharted), h, w, item => {
+                    const rowMapper = item => {
                         const row = [formatCampaignCell(item.advertiser, item.name, item.productionProof, item.product || item.media)];
                         if (showMarket) row.push(formatMarket(item.market));
                         if (showOwner) row.push(item.owner);
@@ -2221,31 +2221,115 @@
 
                         row.push(formatDate(item.date), formatDate(item.firstInstall), unitsHtml);
                         return row;
+                    };
+
+                    // This week's installs (existing data)
+                    const thisWeekItems = processedData.fullyInstalledThisWeek.filter(hasCharted);
+
+                    // Last week's installs — computed from processedData.all
+                    const today = new Date();
+                    const thisWeekStart = new Date(today);
+                    thisWeekStart.setDate(today.getDate() - today.getDay());
+                    thisWeekStart.setHours(0, 0, 0, 0);
+                    const lastWeekStart = new Date(thisWeekStart);
+                    lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+
+                    const lastWeekItems = (processedData.all || []).filter(item => {
+                        const stageLower = (item.stage || '').toLowerCase();
+                        if (stageLower !== 'installed') return false;
+                        const advName = (item.rawName || item.name || '').toLowerCase();
+                        if (advName.includes('warner bros. | perms | stap')) return false;
+                        if (!hasCharted(item)) return false;
+                        const checkDate = item.completionDate || item.dateObj;
+                        return checkDate >= lastWeekStart && checkDate < thisWeekStart;
                     });
+
+                    let html = '';
+
+                    // Show sub-headers only when last week has items
+                    if (lastWeekItems.length > 0) {
+                        html += `<h4 style="margin: 12px 0 4px 0; font-size: 13px; color: #333; font-weight: 600;">This Week</h4>`;
+                        html += thisWeekItems.length > 0
+                            ? createHtmlTable(thisWeekItems, h, w, rowMapper)
+                            : `<p style="font-style: italic; color: #999; margin: 4px 0 12px 0;">None yet this week.</p>`;
+                        html += `<h4 style="margin: 16px 0 4px 0; font-size: 13px; color: #666; font-weight: 600;">Last Week</h4>`;
+                        html += createHtmlTable(lastWeekItems, h, w, rowMapper);
+                    } else {
+                        // No last-week items — render this week only, no sub-header needed
+                        html += createHtmlTable(thisWeekItems, h, w, rowMapper);
+                    }
+
+                    return html;
                 })(),
 
                 pipeline: (() => {
-                    const countUnique = (arr) => {
-                        if (!arr || arr.length === 0) return 0;
-                        return new Set(arr.map(item => item.id)).size;
-                    };
-                    const sumFaces = (arr) => {
-                        if (!arr || arr.length === 0) return 0;
-                        return arr.reduce((sum, item) => sum + (item.adjustedQty || item.totalQty || item.quantity || 0), 0);
-                    };
+                    const allCharted = (processedData.all || []).filter(hasCharted);
+                    if (allCharted.length === 0) return "<p style='font-style: italic; color: #666;'>No charted campaigns in pipeline.</p>";
 
-                    const stats = [
-                        { label: 'Anticipated This Week', count: countUnique((processedData.thisWeek || processedData.upcoming).filter(hasCharted)), faces: sumFaces((processedData.thisWeek || processedData.upcoming).filter(hasCharted)) },
-                        { label: 'In-Progress', count: countUnique(processedData.inProgressFlights.filter(hasCharted)), faces: sumFaces(processedData.inProgressFlights.filter(hasCharted)) },
-                        { label: 'On Hold', count: countUnique((processedData.onHoldCampaigns || []).filter(hasCharted)), faces: sumFaces((processedData.onHoldCampaigns || []).filter(hasCharted)) },
-                        { label: 'Removals Due', count: countUnique(processedData.expiredFlights.filter(hasCharted)), faces: sumFaces(processedData.expiredFlights.filter(hasCharted)) },
-                    ].filter(s => s.count > 0);
-
-                    let html = `<table class="data-table" style="font-size: ${fontSize};"><tr><th style="font-size: ${headerSize}; padding: ${padding};" width="55%">Category</th><th style="font-size: ${headerSize}; padding: ${padding};" width="22%">Campaigns</th><th style="font-size: ${headerSize}; padding: ${padding};" width="23%">Faces</th></tr>`;
-                    stats.forEach(s => {
-                        html += `<tr><td style="padding: ${padding};">${s.label}</td><td style="padding: ${padding};"><strong>${s.count}</strong></td><td style="padding: ${padding};"><strong>${s.faces.toLocaleString()}</strong></td></tr>`;
+                    // Group by stage
+                    const stageMap = {};
+                    allCharted.forEach(item => {
+                        const stage = item.stage || 'Unknown';
+                        if (!stageMap[stage]) stageMap[stage] = { campaigns: 0, faces: 0, installed: 0, pending: 0 };
+                        stageMap[stage].campaigns++;
+                        const qty = item.adjustedQty || item.totalQty || item.quantity || 0;
+                        const inst = item.totalInstalled || item.installed || 0;
+                        stageMap[stage].faces += qty;
+                        stageMap[stage].installed += inst;
+                        stageMap[stage].pending += Math.max(0, qty - inst);
                     });
+
+                    // Sort by pipeline order
+                    const PIPE_ORDER = ['RFP', 'Initial Proposal', 'Contracted', 'Proofs Approved', 'Material Ready for Install', 'Material Ready For Install', 'Installed', 'Photos Taken', 'POP Completed', 'Takedown Complete', 'Pending Hold', 'On Hold'];
+                    const stages = Object.entries(stageMap)
+                        .map(([stage, d]) => ({ stage, ...d }))
+                        .sort((a, b) => {
+                            const ai = PIPE_ORDER.findIndex(s => s.toLowerCase() === a.stage.toLowerCase());
+                            const bi = PIPE_ORDER.findIndex(s => s.toLowerCase() === b.stage.toLowerCase());
+                            return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+                        });
+
+                    // Totals
+                    const totals = stages.reduce((acc, s) => ({
+                        campaigns: acc.campaigns + s.campaigns, faces: acc.faces + s.faces,
+                        installed: acc.installed + s.installed, pending: acc.pending + s.pending
+                    }), { campaigns: 0, faces: 0, installed: 0, pending: 0 });
+                    const pctComplete = totals.faces > 0 ? Math.round((totals.installed / totals.faces) * 100) : 0;
+
+                    // Bottleneck detection
+                    const avgCount = totals.campaigns / (stages.length || 1);
+                    const bottlenecks = [];
+                    stages.forEach(s => {
+                        const sl = s.stage.toLowerCase();
+                        if (sl.includes('hold')) bottlenecks.push(`${s.stage}: ${s.faces.toLocaleString()} faces blocked`);
+                        else if (sl.includes('material ready') && s.installed === 0 && s.faces > 0) bottlenecks.push(`${s.stage}: ${s.faces.toLocaleString()} faces, 0 movement`);
+                        else if (s.campaigns > avgCount * 1.5) bottlenecks.push(`${s.stage}: ${s.campaigns} campaigns congested`);
+                    });
+
+                    // Build table
+                    let html = `<table class="data-table" style="font-size: ${fontSize};">`;
+                    html += `<tr><th style="font-size: ${headerSize}; padding: ${padding};" width="36%">Stage</th><th style="font-size: ${headerSize}; padding: ${padding};" width="14%">Camps</th><th style="font-size: ${headerSize}; padding: ${padding};" width="16%">Faces</th><th style="font-size: ${headerSize}; padding: ${padding};" width="17%">Instl</th><th style="font-size: ${headerSize}; padding: ${padding};" width="17%">Pend</th></tr>`;
+                    stages.forEach(s => {
+                        const isBottleneck = bottlenecks.some(b => b.startsWith(s.stage));
+                        const flag = isBottleneck ? ' <span style="color:#e65100;">&#9888;</span>' : '';
+                        html += `<tr><td style="padding: ${padding};">${s.stage}${flag}</td><td style="padding: ${padding};"><strong>${s.campaigns}</strong></td><td style="padding: ${padding};"><strong>${s.faces.toLocaleString()}</strong></td><td style="padding: ${padding};">${s.installed.toLocaleString()}</td><td style="padding: ${padding};">${s.pending.toLocaleString()}</td></tr>`;
+                    });
+
+                    // Totals row
+                    html += `<tr style="border-top: 2px solid #ccc; font-weight: 600;"><td style="padding: ${padding};">TOTAL</td><td style="padding: ${padding};">${totals.campaigns}</td><td style="padding: ${padding};">${totals.faces.toLocaleString()}</td><td style="padding: ${padding};">${totals.installed.toLocaleString()}</td><td style="padding: ${padding};">${totals.pending.toLocaleString()}</td></tr>`;
                     html += '</table>';
+
+                    // Progress bar
+                    const barColor = pctComplete >= 75 ? '#4caf50' : pctComplete >= 50 ? '#ff9800' : '#f44336';
+                    html += `<div style="margin-top: 8px; background: #e0e0e0; border-radius: 4px; height: 8px; overflow: hidden;"><div style="width: ${pctComplete}%; background: ${barColor}; height: 100%; border-radius: 4px;"></div></div>`;
+                    html += `<p style="margin: 4px 0 0; font-size: 11px; color: #666; text-align: center;">${pctComplete}% installed (${totals.installed.toLocaleString()} of ${totals.faces.toLocaleString()} faces)</p>`;
+
+                    // Bottleneck alerts
+                    if (bottlenecks.length > 0) {
+                        html += `<div style="margin-top: 8px; padding: 6px 10px; background: #fff8e1; border-left: 3px solid #ff9800; border-radius: 0 4px 4px 0; font-size: 11px;">`;
+                        bottlenecks.forEach(b => { html += `<div style="color: #e65100;">&#9888; ${b}</div>`; });
+                        html += '</div>';
+                    }
                     return html;
                 })(),
 

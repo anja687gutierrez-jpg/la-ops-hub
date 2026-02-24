@@ -79,7 +79,7 @@
                 delayed: "Delayed or Overdue Flights",
                 inProgress: "In-Progress Flights",
                 upcoming: "Upcoming",
-                installed: "Installed this Week",
+                installed: "Installed",
                 recent: "Recent Completed Installs",
                 pipeline: "Pipeline Snapshot (This Week)",
                 removal: "Removal Dates (Past 45 days)"
