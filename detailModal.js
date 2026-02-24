@@ -397,17 +397,14 @@
         // Auto-fetch tracking status when shipment drawer opens
         useEffect(() => {
             if (!shipmentDrawerOpen || shipments.length === 0) return;
-            const supportedCarriers = ['ups', 'fedex', 'usps', 'dhl'];
-            const fetchable = shipments.filter(s =>
-                s.trackingNumber && supportedCarriers.includes(s.provider.toLowerCase())
-            );
+            const fetchable = shipments.filter(s => s.trackingNumber);
             if (fetchable.length === 0) return;
 
             // Mark all fetchable as loading
             setTrackingLoading(new Set(fetchable.map(s => s.id)));
 
             fetchable.forEach(shipment => {
-                fetch(`/api/track?carrier=${encodeURIComponent(shipment.provider.toLowerCase())}&number=${encodeURIComponent(shipment.trackingNumber)}`)
+                fetch(`/api/track?number=${encodeURIComponent(shipment.trackingNumber)}`)
                     .then(res => {
                         if (res.status === 501 || !res.ok) return null; // not configured or error — skip
                         return res.json();
