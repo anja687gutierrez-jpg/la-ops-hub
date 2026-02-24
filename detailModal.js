@@ -181,6 +181,9 @@
         const [breakdownExpanded, setBreakdownExpanded] = useState(false);
         const [commsDrawerOpen, setCommsDrawerOpen] = useState(false);
         const [historyExpanded, setHistoryExpanded] = useState(false);
+        const [shipmentDrawerOpen, setShipmentDrawerOpen] = useState(false);
+        const [shipments, setShipments] = useState([]);
+        const [shipmentNotes, setShipmentNotes] = useState('');
 
         // Helper: Calculate inventory status
         const getInventoryStatus = () => {
@@ -373,6 +376,11 @@
                 }
                 setHasReplacement(item.hasReplacement || false);
                 setEditingRemoval(false);
+
+                // Shipment tracking
+                setShipments(item.shipments || []);
+                setShipmentNotes(item.shipmentNotes || '');
+                setShipmentDrawerOpen(false);
             }
         }, [item]);
 
@@ -455,8 +463,12 @@
             const itemBreakdown = (item.materialBreakdown || []).filter(r => r.code || r.qty);
             if (JSON.stringify(currentBreakdown) !== JSON.stringify(itemBreakdown)) return true;
 
+            // Check shipment changes
+            if (JSON.stringify(shipments) !== JSON.stringify(item.shipments || [])) return true;
+            if ((shipmentNotes || '') !== (item.shipmentNotes || '')) return true;
+
             return false;
-        }, [item, newStage, adjustedQty, newInstalledCount, removalQty, removedCount, removalStatus, removalAssignee, removalPhotosLink, hasReplacement, materialBreakdown, materialReceivedDate]);
+        }, [item, newStage, adjustedQty, newInstalledCount, removalQty, removedCount, removalStatus, removalAssignee, removalPhotosLink, hasReplacement, materialBreakdown, materialReceivedDate, shipments, shipmentNotes]);
 
         // Helper functions for templates
         const formatMediaType = (media) => {
@@ -952,6 +964,8 @@
             if (removedCount !== (item.removedCount || 0)) changes.push(`Removed: ${item.removedCount || 0} → ${removedCount}`);
             if (effectiveRemovalStatusValue !== (item.removalStatus || 'scheduled')) changes.push(`Removal Status: ${item.removalStatus || 'scheduled'} → ${effectiveRemovalStatusValue}`);
             if (removalAssignee !== (item.removalAssignee || '')) changes.push(`Assignee: ${item.removalAssignee || 'none'} → ${removalAssignee || 'none'}`);
+            const oldShipCount = (item.shipments || []).length;
+            if (shipments.length !== oldShipCount) changes.push(`Shipments: ${oldShipCount} → ${shipments.length}`);
 
             // Build history entry if there were changes
             const existingHistory = item.history || [];
@@ -991,6 +1005,9 @@
             if ((removalAssignee || null) !== (item.removalAssignee || null)) saveData.removalAssignee = removalAssignee || null;
             if ((removalPhotosLink || null) !== (item.removalPhotosLink || null)) saveData.removalPhotosLink = removalPhotosLink || null;
             if (hasReplacement !== (item.hasReplacement || false)) saveData.hasReplacement = hasReplacement;
+            // Shipment tracking — only include if changed
+            if (JSON.stringify(shipments) !== JSON.stringify(item.shipments || [])) saveData.shipments = shipments;
+            if ((shipmentNotes || '') !== (item.shipmentNotes || '')) saveData.shipmentNotes = shipmentNotes || null;
             // History — always include if there were changes
             if (newHistory.length > 0) saveData.history = newHistory;
 
@@ -1512,6 +1529,73 @@
                                 )}
                             </div>
                         )}
+                        {/* SHIPMENT DETAILS — inline collapsible drawer */}
+                        <div className="mb-2">
+                            <button onClick={() => setShipmentDrawerOpen(!shipmentDrawerOpen)} className={`w-full flex items-center justify-between rounded-xl px-4 py-3 cursor-pointer transition-all border-2 shadow-sm hover:shadow-md ${shipmentDrawerOpen ? 'bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-500/15 dark:to-orange-500/15 border-amber-300 dark:border-amber-500/40 shadow-amber-100 dark:shadow-amber-500/10' : 'bg-gradient-to-r from-amber-50 to-amber-100/50 dark:from-amber-500/10 dark:to-amber-500/5 border-amber-200 dark:border-amber-500/25 hover:border-amber-300 dark:hover:border-amber-500/40 hover:from-amber-100 hover:to-orange-50'}`}>
+                                <div className="flex items-center gap-2.5">
+                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${shipmentDrawerOpen ? 'bg-amber-600 text-white' : 'bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400'}`}><Icon name="Truck" size={16} /></div>
+                                    <div className="text-left">
+                                        <div className={`text-xs font-bold ${shipmentDrawerOpen ? 'text-amber-800 dark:text-amber-300' : 'text-amber-700 dark:text-amber-400'}`}>Shipment Details</div>
+                                        <div className="text-[10px] text-amber-500/70 dark:text-amber-400/50">{shipments.length > 0 ? `${shipments.length} shipment${shipments.length !== 1 ? 's' : ''}` : 'No shipments tracked'}</div>
+                                    </div>
+                                    {shipments.length > 0 && (() => {
+                                        const statuses = shipments.map(s => s.status);
+                                        const allDelivered = statuses.every(s => s === 'Delivered');
+                                        const anyPending = statuses.some(s => s === 'Pending');
+                                        const anyInTransit = statuses.some(s => s === 'In Transit' || s === 'Shipped');
+                                        let badgeText, badgeClass;
+                                        if (allDelivered) { badgeText = 'All Delivered'; badgeClass = 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-300'; }
+                                        else if (anyPending) { badgeText = 'Pending'; badgeClass = 'bg-gray-100 text-gray-600 dark:bg-gray-500/20 dark:text-gray-300'; }
+                                        else if (anyInTransit) { badgeText = 'In Transit'; badgeClass = 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'; }
+                                        else { badgeText = 'Pending'; badgeClass = 'bg-gray-100 text-gray-600 dark:bg-gray-500/20 dark:text-gray-300'; }
+                                        return <span className={`ml-2 text-[10px] font-medium px-2 py-0.5 rounded-full ${badgeClass}`}>{badgeText}</span>;
+                                    })()}
+                                </div>
+                                <div className={`w-6 h-6 rounded-full flex items-center justify-center ${shipmentDrawerOpen ? 'bg-amber-200 dark:bg-amber-500/30' : 'bg-amber-100 dark:bg-amber-500/15'}`}><Icon name={shipmentDrawerOpen ? 'ChevronUp' : 'ChevronDown'} size={14} className="text-amber-600 dark:text-amber-400" /></div>
+                            </button>
+                            {shipmentDrawerOpen && (
+                                <div className="mt-1 border border-amber-200 dark:border-amber-500/30 rounded-lg bg-white dark:bg-slate-800 overflow-hidden p-4">
+                                    {shipments.length === 0 ? (
+                                        <div className="text-center py-4">
+                                            <div className="text-xs text-gray-400 dark:text-gray-500 mb-2">No shipments yet</div>
+                                            <button onClick={() => setShipments([{ id: Date.now(), trackingNumber: '', provider: 'UPS', status: 'Pending', shipDate: '', notes: '' }])} className="text-xs text-amber-600 dark:text-amber-400 hover:underline font-medium">+ Add Shipment</button>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full text-xs">
+                                                    <thead>
+                                                        <tr className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-slate-700">
+                                                            <th className="text-left pb-2 pr-2">Tracking #</th>
+                                                            <th className="text-left pb-2 pr-2">Provider</th>
+                                                            <th className="text-left pb-2 pr-2">Status</th>
+                                                            <th className="text-left pb-2 pr-2">Ship Date</th>
+                                                            <th className="text-left pb-2 w-8"></th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {shipments.map((shipment, idx) => (
+                                                            <tr key={shipment.id} className="border-b border-gray-50 dark:border-slate-700/50">
+                                                                <td className="py-1.5 pr-2"><input type="text" value={shipment.trackingNumber} onChange={(e) => { const updated = [...shipments]; updated[idx] = { ...updated[idx], trackingNumber: e.target.value }; setShipments(updated); }} placeholder="Tracking #" className="w-full text-xs border rounded px-2 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200" /></td>
+                                                                <td className="py-1.5 pr-2"><select value={shipment.provider} onChange={(e) => { const updated = [...shipments]; updated[idx] = { ...updated[idx], provider: e.target.value }; setShipments(updated); }} className="text-xs border rounded px-1.5 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200"><option>UPS</option><option>FedEx</option><option>USPS</option><option>DHL</option><option>Other</option></select></td>
+                                                                <td className="py-1.5 pr-2"><select value={shipment.status} onChange={(e) => { const updated = [...shipments]; updated[idx] = { ...updated[idx], status: e.target.value }; setShipments(updated); }} className="text-xs border rounded px-1.5 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200"><option>Pending</option><option>Shipped</option><option>In Transit</option><option>Delivered</option></select></td>
+                                                                <td className="py-1.5 pr-2"><input type="date" value={shipment.shipDate} onChange={(e) => { const updated = [...shipments]; updated[idx] = { ...updated[idx], shipDate: e.target.value }; setShipments(updated); }} className="text-xs border rounded px-1.5 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200" /></td>
+                                                                <td className="py-1.5"><button onClick={() => { const updated = shipments.filter((_, i) => i !== idx); setShipments(updated); }} className="text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors" title="Remove shipment"><Icon name="X" size={14} /></button></td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            <button onClick={() => setShipments([...shipments, { id: Date.now(), trackingNumber: '', provider: 'UPS', status: 'Pending', shipDate: '', notes: '' }])} className="mt-2 text-xs text-amber-600 dark:text-amber-400 hover:underline font-medium">+ Add Shipment</button>
+                                        </>
+                                    )}
+                                    <div className="mt-3 pt-3 border-t border-gray-100 dark:border-slate-700">
+                                        <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-1 block">Notes</label>
+                                        <textarea value={shipmentNotes} onChange={(e) => setShipmentNotes(e.target.value)} placeholder="e.g. Split shipment — 2 pallets" rows={2} className="w-full text-xs border rounded px-2 py-1.5 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200 resize-none" />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                         {/* COMMS CENTER — inline collapsible drawer */}
                         <div className="mb-2">
                             <button onClick={() => setCommsDrawerOpen(!commsDrawerOpen)} className={`w-full flex items-center justify-between rounded-xl px-4 py-3 cursor-pointer transition-all border-2 shadow-sm hover:shadow-md ${commsDrawerOpen ? 'bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-500/15 dark:to-indigo-500/15 border-blue-300 dark:border-blue-500/40 shadow-blue-100 dark:shadow-blue-500/10' : 'bg-gradient-to-r from-blue-50 to-blue-100/50 dark:from-blue-500/10 dark:to-blue-500/5 border-blue-200 dark:border-blue-500/25 hover:border-blue-300 dark:hover:border-blue-500/40 hover:from-blue-100 hover:to-indigo-50'}`}>

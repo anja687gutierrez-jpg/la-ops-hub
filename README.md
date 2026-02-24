@@ -9,7 +9,7 @@ Smart operations dashboard with campaign tracking, sidebar Canvas/React dual ren
 | **Stack** | HTML, CSS, JavaScript (CDN — no build system) |
 | **Hosting** | Cloudflare Pages |
 | **Firebase Project** | `ops-portal-19b32` (sandbox/testing) |
-| **GitHub** | `anja687gutierrez-jpg/ops-hub-portal` |
+| **GitHub** | `anja687gutierrez-jpg/la-ops-hub` |
 | **Local Port** | 8001 |
 | **Code Location** | This folder (Google Drive) |
 
@@ -22,4 +22,4 @@ python3 -m http.server 8001
 
 ## Deploy
 
-Manual upload to Cloudflare Pages dashboard.
+Auto-deploy via GitHub (`la-ops-hub` → Cloudflare Pages). Push to `main` triggers deploy.
