@@ -2261,13 +2261,15 @@
                     const stageMap = {};
                     allCharted.forEach(item => {
                         const stage = item.stage || 'Unknown';
-                        if (!stageMap[stage]) stageMap[stage] = { campaigns: 0, faces: 0, installed: 0, pendingCamps: 0 };
+                        if (!stageMap[stage]) stageMap[stage] = { campaigns: 0, faces: 0, installed: 0, pendingCamps: 0, pendingFaces: 0 };
                         stageMap[stage].campaigns++;
                         const qty = item.adjustedQty || item.totalQty || item.quantity || 0;
                         const inst = item.totalInstalled || item.installed || 0;
+                        const pend = Math.max(0, qty - inst);
                         stageMap[stage].faces += qty;
                         stageMap[stage].installed += inst;
-                        if (Math.max(0, qty - inst) > 0) stageMap[stage].pendingCamps++;
+                        stageMap[stage].pendingFaces += pend;
+                        if (pend > 0) stageMap[stage].pendingCamps++;
                     });
 
                     // Sort by pipeline order
@@ -2283,8 +2285,9 @@
                     // Totals
                     const totals = stages.reduce((acc, s) => ({
                         campaigns: acc.campaigns + s.campaigns, faces: acc.faces + s.faces,
-                        installed: acc.installed + s.installed, pendingCamps: acc.pendingCamps + s.pendingCamps
-                    }), { campaigns: 0, faces: 0, installed: 0, pendingCamps: 0 });
+                        installed: acc.installed + s.installed, pendingCamps: acc.pendingCamps + s.pendingCamps,
+                        pendingFaces: acc.pendingFaces + s.pendingFaces
+                    }), { campaigns: 0, faces: 0, installed: 0, pendingCamps: 0, pendingFaces: 0 });
                     const pctComplete = totals.faces > 0 ? Math.round((totals.installed / totals.faces) * 100) : 0;
 
                     // Bottleneck detection
@@ -2299,17 +2302,29 @@
 
                     const fmtPend = (pending, total) => pending > 0 ? `${pending} of ${total}` : '0';
 
-                    // Build table
-                    let html = `<table class="data-table" style="font-size: ${fontSize};">`;
-                    html += `<tr><th style="font-size: ${headerSize}; padding: ${padding};" width="36%">Stage</th><th style="font-size: ${headerSize}; padding: ${padding};" width="14%">Camps</th><th style="font-size: ${headerSize}; padding: ${padding};" width="16%">Faces</th><th style="font-size: ${headerSize}; padding: ${padding};" width="17%">Instl</th><th style="font-size: ${headerSize}; padding: ${padding};" width="17%">Pend</th></tr>`;
+                    // Build two sub-tables
+                    let html = '';
+
+                    // Sub-table 1: Campaigns by Stage
+                    html += `<div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #555; margin-bottom: 4px;">Campaigns by Stage</div>`;
+                    html += `<table class="data-table" style="font-size: ${fontSize};">`;
+                    html += `<tr><th style="font-size: ${headerSize}; padding: ${padding};" width="50%">Stage</th><th style="font-size: ${headerSize}; padding: ${padding};" width="25%">Camps</th><th style="font-size: ${headerSize}; padding: ${padding};" width="25%">Pending</th></tr>`;
                     stages.forEach(s => {
                         const isBottleneck = bottlenecks.some(b => b.startsWith(s.stage));
                         const flag = isBottleneck ? ' <span style="color:#e65100;">&#9888;</span>' : '';
-                        html += `<tr><td style="padding: ${padding};">${s.stage}${flag}</td><td style="padding: ${padding};"><strong>${s.campaigns}</strong></td><td style="padding: ${padding};"><strong>${s.faces.toLocaleString()}</strong></td><td style="padding: ${padding};">${s.installed.toLocaleString()}</td><td style="padding: ${padding};">${fmtPend(s.pendingCamps, s.campaigns)}</td></tr>`;
+                        html += `<tr><td style="padding: ${padding};">${s.stage}${flag}</td><td style="padding: ${padding};"><strong>${s.campaigns}</strong></td><td style="padding: ${padding};">${fmtPend(s.pendingCamps, s.campaigns)}</td></tr>`;
                     });
+                    html += `<tr style="border-top: 2px solid #ccc; font-weight: 600;"><td style="padding: ${padding};">TOTAL</td><td style="padding: ${padding};">${totals.campaigns}</td><td style="padding: ${padding};">${fmtPend(totals.pendingCamps, totals.campaigns)}</td></tr>`;
+                    html += '</table>';
 
-                    // Totals row
-                    html += `<tr style="border-top: 2px solid #ccc; font-weight: 600;"><td style="padding: ${padding};">TOTAL</td><td style="padding: ${padding};">${totals.campaigns}</td><td style="padding: ${padding};">${totals.faces.toLocaleString()}</td><td style="padding: ${padding};">${totals.installed.toLocaleString()}</td><td style="padding: ${padding};">${fmtPend(totals.pendingCamps, totals.campaigns)}</td></tr>`;
+                    // Sub-table 2: Face Totals
+                    html += `<div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #555; margin: 8px 0 4px;">Face Totals</div>`;
+                    html += `<table class="data-table" style="font-size: ${fontSize};">`;
+                    html += `<tr><th style="font-size: ${headerSize}; padding: ${padding};" width="40%">Stage</th><th style="font-size: ${headerSize}; padding: ${padding};" width="20%">Faces</th><th style="font-size: ${headerSize}; padding: ${padding};" width="20%">Instl</th><th style="font-size: ${headerSize}; padding: ${padding};" width="20%">Pend</th></tr>`;
+                    stages.forEach(s => {
+                        html += `<tr><td style="padding: ${padding};">${s.stage}</td><td style="padding: ${padding};"><strong>${s.faces.toLocaleString()}</strong></td><td style="padding: ${padding};">${s.installed.toLocaleString()}</td><td style="padding: ${padding};">${s.pendingFaces.toLocaleString()}</td></tr>`;
+                    });
+                    html += `<tr style="border-top: 2px solid #ccc; font-weight: 600;"><td style="padding: ${padding};">TOTAL</td><td style="padding: ${padding};">${totals.faces.toLocaleString()}</td><td style="padding: ${padding};">${totals.installed.toLocaleString()}</td><td style="padding: ${padding};">${totals.pendingFaces.toLocaleString()}</td></tr>`;
                     html += '</table>';
 
                     // Progress bar
