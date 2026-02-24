@@ -189,6 +189,7 @@
         const [breakdownExpanded, setBreakdownExpanded] = useState(false);
         const [commsDrawerOpen, setCommsDrawerOpen] = useState(false);
         const [emailDrawerOpen, setEmailDrawerOpen] = useState(false);
+        const [emailFullView, setEmailFullView] = useState(false);
         const [historyExpanded, setHistoryExpanded] = useState(false);
         const [shipmentDrawerOpen, setShipmentDrawerOpen] = useState(false);
         const [shipments, setShipments] = useState([]);
@@ -814,21 +815,46 @@
             const installed = newInstalledCount || 0;
             const required = parseInt(customQty) || 0;
             const currentStage = newStage || (item ? item.stage : '') || '';
+            const stageLower = currentStage.toLowerCase();
 
             // 1. Fully installed → complete (numbers-based, not stage)
             if (required > 0 && installed >= required) return 'complete';
 
-            // 2. Materials received (linked receiver PDFs exist) → material_received
+            // 2. Post-install completion stages → complete
+            if (stageLower === 'photos taken' || stageLower === 'pop completed') return 'complete';
+
+            // 3. Removal stage → removal
+            if (stageLower === 'takedown complete') return 'removal';
+
+            // 4. Installed but still has pending → schedule (partial install)
+            if (stageLower === 'installed' && installed > 0 && (required === 0 || installed < required)) return 'schedule';
+
+            // 5. Material Ready + materials linked → material_received
+            if (stageLower === 'material ready for install' && linkedMaterials.length > 0) return 'material_received';
+
+            // 6. Materials linked at any stage → material_received
             if (linkedMaterials.length > 0) return 'material_received';
 
-            // 3. Removal due → removal
-            if (currentStage === "Takedown Complete" || currentStage.includes("Expired") || currentStage.includes("Completed")) return 'removal';
+            // 7. Material Ready (no materials yet) → schedule
+            if (stageLower === 'material ready for install') return 'schedule';
 
-            // 4. Pending something → missing assets
-            if (currentStage.includes("Pending")) return 'missing';
+            // 8. Pre-install stages — check if overdue or missing assets
+            const startDate = item ? (item.date || '') : '';
+            const isPastStart = startDate && new Date(startDate) < new Date();
+            const preInstallStages = ['contracted', 'proofs approved', 'working on it',
+                'proofs out for approval', 'artwork received', 'rfp', 'initial proposal',
+                'client feedback', 'pending client approval', 'pending finance approval'];
 
-            // 5. Default → schedule
-            return 'schedule';
+            if (preInstallStages.includes(stageLower) && isPastStart) {
+                // Past start date + still pre-install = something is wrong
+                // No materials → missing assets; has materials → delay
+                if (linkedMaterials.length === 0) return 'missing';
+                return 'delay';
+            }
+
+            // 9. Everything else (future start, holds, etc.) → no confident match
+            // User must pick a template manually
+            return 'none';
         };
 
         // Template router effect — uses live edited stage (newStage) for auto-detection
@@ -836,16 +862,20 @@
             if (!item) return;
             const mode = getResolvedMode();
 
-            // Generate subject line
-            setSubjectLine(generateSubjectLine(mode));
-
-            if (mode === 'material_received') setEmailDraft(generateMaterialReceivedTemplate());
-            else if (mode === 'schedule') setEmailDraft(generateScheduleTemplate());
-            else if (mode === 'complete') setEmailDraft(generateCompletionTemplate());
-            else if (mode === 'missing') setEmailDraft(generateMissingAssetsTemplate());
-            else if (mode === 'delay') setEmailDraft(generateDelayTemplate());
-            else if (mode === 'maintenance') setEmailDraft(generateMaintenanceTemplate());
-            else if (mode === 'removal') setEmailDraft(generateRemovalTemplate());
+            // Generate subject line and email body
+            if (mode === 'none') {
+                setSubjectLine('');
+                setEmailDraft('');
+            } else {
+                setSubjectLine(generateSubjectLine(mode));
+                if (mode === 'material_received') setEmailDraft(generateMaterialReceivedTemplate());
+                else if (mode === 'schedule') setEmailDraft(generateScheduleTemplate());
+                else if (mode === 'complete') setEmailDraft(generateCompletionTemplate());
+                else if (mode === 'missing') setEmailDraft(generateMissingAssetsTemplate());
+                else if (mode === 'delay') setEmailDraft(generateDelayTemplate());
+                else if (mode === 'maintenance') setEmailDraft(generateMaintenanceTemplate());
+                else if (mode === 'removal') setEmailDraft(generateRemovalTemplate());
+            }
         }, [customQty, emailInstalledQty, newInstalledCount, selectedTemplate, item, newStage, materialBreakdown, customDesigns, customPhotosLink, customReceiverLink, issueReason, newEta, missingType, deadlineDate, linkedMaterials]);
 
         const handleCopyToWebmail = async () => {
@@ -1590,101 +1620,6 @@
                             </div></div>
                         )}
 
-                        {/* ACTIVITY LOG — expandable */}
-                        {item.history && item.history.length > 0 && (
-                            <div className="mb-2">
-                                <button onClick={() => setHistoryExpanded(!historyExpanded)} className="w-full flex items-center justify-between bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors">
-                                    <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400"><Icon name="History" size={12} /><span className="font-medium">Activity Log</span><span className="text-gray-400">({item.history.length} change{item.history.length !== 1 ? 's' : ''})</span></div>
-                                    <Icon name={historyExpanded ? 'ChevronUp' : 'ChevronDown'} size={14} className="text-gray-400" />
-                                </button>
-                                {historyExpanded && (
-                                    <div className="mt-1 border border-gray-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 max-h-48 overflow-y-auto px-4 py-3">
-                                        <div className="relative border-l-2 border-gray-200 dark:border-slate-600 ml-1 space-y-3">
-                                            {[...item.history].reverse().map((entry, idx) => {
-                                                const date = new Date(entry.timestamp);
-                                                const timeStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ', ' + date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-                                                return (<div key={idx} className="pl-4 relative"><div className="absolute -left-[5px] top-1 w-2 h-2 rounded-full bg-gray-300 dark:bg-slate-500" /><div className="text-[10px] text-gray-400 dark:text-gray-500 mb-0.5">{timeStr}</div><div className="flex flex-wrap gap-1">{entry.changes.map((c, ci) => <span key={ci} className="inline-block bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300 text-[10px] rounded px-1.5 py-0.5">{c}</span>)}</div></div>);
-                                            })}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                        {/* SHIPMENT DETAILS — inline collapsible drawer */}
-                        <div className="mb-2">
-                            <button onClick={() => setShipmentDrawerOpen(!shipmentDrawerOpen)} className={`w-full flex items-center justify-between rounded-xl px-4 py-3 cursor-pointer transition-all border-2 shadow-sm hover:shadow-md ${shipmentDrawerOpen ? 'bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-500/15 dark:to-orange-500/15 border-amber-300 dark:border-amber-500/40 shadow-amber-100 dark:shadow-amber-500/10' : 'bg-gradient-to-r from-amber-50 to-amber-100/50 dark:from-amber-500/10 dark:to-amber-500/5 border-amber-200 dark:border-amber-500/25 hover:border-amber-300 dark:hover:border-amber-500/40 hover:from-amber-100 hover:to-orange-50'}`}>
-                                <div className="flex items-center gap-2.5">
-                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${shipmentDrawerOpen ? 'bg-amber-600 text-white' : 'bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400'}`}><Icon name="Truck" size={16} /></div>
-                                    <div className="text-left">
-                                        <div className={`text-xs font-bold ${shipmentDrawerOpen ? 'text-amber-800 dark:text-amber-300' : 'text-amber-700 dark:text-amber-400'}`}>Shipment Details</div>
-                                        <div className="text-[10px] text-amber-500/70 dark:text-amber-400/50">{shipments.length > 0 ? `${shipments.length} shipment${shipments.length !== 1 ? 's' : ''}` : 'No shipments tracked'}</div>
-                                    </div>
-                                    {shipments.length > 0 && (() => {
-                                        const statuses = shipments.map(s => s.status);
-                                        const allDelivered = statuses.every(s => s === 'Delivered');
-                                        const anyPending = statuses.some(s => s === 'Pending');
-                                        const anyInTransit = statuses.some(s => s === 'In Transit' || s === 'Shipped');
-                                        let badgeText, badgeClass;
-                                        if (allDelivered) { badgeText = 'All Delivered'; badgeClass = 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-300'; }
-                                        else if (anyPending) { badgeText = 'Pending'; badgeClass = 'bg-gray-100 text-gray-600 dark:bg-gray-500/20 dark:text-gray-300'; }
-                                        else if (anyInTransit) { badgeText = 'In Transit'; badgeClass = 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'; }
-                                        else { badgeText = 'Pending'; badgeClass = 'bg-gray-100 text-gray-600 dark:bg-gray-500/20 dark:text-gray-300'; }
-                                        return <span className={`ml-2 text-[10px] font-medium px-2 py-0.5 rounded-full ${badgeClass}`}>{badgeText}</span>;
-                                    })()}
-                                </div>
-                                <div className={`w-6 h-6 rounded-full flex items-center justify-center ${shipmentDrawerOpen ? 'bg-amber-200 dark:bg-amber-500/30' : 'bg-amber-100 dark:bg-amber-500/15'}`}><Icon name={shipmentDrawerOpen ? 'ChevronUp' : 'ChevronDown'} size={14} className="text-amber-600 dark:text-amber-400" /></div>
-                            </button>
-                            {shipmentDrawerOpen && (
-                                <div className="mt-1 border border-amber-200 dark:border-amber-500/30 rounded-lg bg-white dark:bg-slate-800 overflow-hidden p-4">
-                                    {shipments.length === 0 ? (
-                                        <div className="text-center py-4">
-                                            <div className="text-xs text-gray-400 dark:text-gray-500 mb-2">No shipments yet</div>
-                                            <button onClick={() => setShipments([{ id: Date.now(), trackingNumber: '', provider: 'UPS', status: 'Pending', shipDate: new Date().toISOString().split('T')[0], deliveredDate: '', notes: '' }])} className="text-xs text-amber-600 dark:text-amber-400 hover:underline font-medium">+ Add Shipment</button>
-                                        </div>
-                                    ) : (
-                                        <>
-                                            {trackingLoading.size > 0 && (
-                                                <div className="flex items-center gap-2 mb-3 px-2 py-1.5 bg-amber-50 dark:bg-amber-500/10 rounded-lg border border-amber-200 dark:border-amber-500/20">
-                                                    <span className="animate-spin text-amber-500"><Icon name="RefreshCw" size={12} /></span>
-                                                    <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">Checking tracking status...</span>
-                                                </div>
-                                            )}
-                                            <div className="overflow-x-auto">
-                                                <table className="w-full text-xs">
-                                                    <thead>
-                                                        <tr className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-slate-700">
-                                                            <th className="text-left pb-2 pr-2">Tracking #</th>
-                                                            <th className="text-left pb-2 pr-2">Provider</th>
-                                                            <th className="text-left pb-2 pr-2">Status</th>
-                                                            <th className="text-left pb-2 pr-2">Ship Date</th>
-                                                            <th className="text-left pb-2 pr-2">Delivered</th>
-                                                            <th className="text-left pb-2 w-8"></th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {shipments.map((shipment, idx) => (
-                                                            <tr key={shipment.id} className={`border-b border-gray-50 dark:border-slate-700/50 transition-colors duration-700 ${trackingFlash.has(shipment.id) ? 'bg-green-50 dark:bg-green-500/10' : ''}`}>
-                                                                <td className="py-1.5 pr-2"><div className="flex items-center gap-1"><input type="text" value={shipment.trackingNumber} onChange={(e) => { const updated = [...shipments]; updated[idx] = { ...updated[idx], trackingNumber: e.target.value }; setShipments(updated); }} placeholder="Tracking #" className="w-full text-xs border rounded px-2 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200" />{trackingLoading.has(shipment.id) ? (<span className="flex-shrink-0 animate-spin text-amber-500" title="Fetching status..."><Icon name="RefreshCw" size={13} /></span>) : shipment.trackingNumber && TRACKING_URLS[shipment.provider] && (<button onClick={() => window.open(TRACKING_URLS[shipment.provider](shipment.trackingNumber), '_blank')} className="flex-shrink-0 text-amber-500 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300 transition-colors" title={`Track on ${shipment.provider}`}><Icon name="ExternalLink" size={13} /></button>)}</div></td>
-                                                                <td className="py-1.5 pr-2"><select value={shipment.provider} onChange={(e) => { const updated = [...shipments]; updated[idx] = { ...updated[idx], provider: e.target.value }; setShipments(updated); }} className="text-xs border rounded px-1.5 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200"><option>UPS</option><option>FedEx</option><option>USPS</option><option>DHL</option><option>Other</option></select></td>
-                                                                <td className="py-1.5 pr-2"><div><select value={shipment.status} onChange={(e) => { const updated = [...shipments]; const newStatus = e.target.value; const patch = { status: newStatus }; if (newStatus === 'Delivered' && !updated[idx].deliveredDate) { patch.deliveredDate = new Date().toISOString().split('T')[0]; } if (newStatus !== 'Delivered') { patch.deliveredDate = ''; } updated[idx] = { ...updated[idx], ...patch }; setShipments(updated); }} className="text-xs border rounded px-1.5 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200"><option>Pending</option><option>Shipped</option><option>In Transit</option><option>Delivered</option></select>{shipment.lastTracked && (<div className="text-[9px] text-gray-400 dark:text-gray-500 mt-0.5">{(() => { const mins = Math.round((Date.now() - new Date(shipment.lastTracked).getTime()) / 60000); return mins < 1 ? 'Updated just now' : mins < 60 ? `Updated ${mins}m ago` : `Updated ${Math.round(mins/60)}h ago`; })()}</div>)}</div></td>
-                                                                <td className="py-1.5 pr-2"><input type="date" value={shipment.shipDate} onChange={(e) => { const updated = [...shipments]; updated[idx] = { ...updated[idx], shipDate: e.target.value }; setShipments(updated); }} className="text-xs border rounded px-1.5 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200" /></td>
-                                                                <td className="py-1.5 pr-2">{shipment.status === 'Delivered' ? (<input type="date" value={shipment.deliveredDate || ''} onChange={(e) => { const updated = [...shipments]; updated[idx] = { ...updated[idx], deliveredDate: e.target.value }; setShipments(updated); }} className="text-xs border rounded px-1.5 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200" />) : (<span className="text-xs text-gray-300 dark:text-gray-600">—</span>)}</td>
-                                                                <td className="py-1.5"><button onClick={() => { const updated = shipments.filter((_, i) => i !== idx); setShipments(updated); }} className="text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors" title="Remove shipment"><Icon name="X" size={14} /></button></td>
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                            <button onClick={() => setShipments([...shipments, { id: Date.now(), trackingNumber: '', provider: 'UPS', status: 'Pending', shipDate: new Date().toISOString().split('T')[0], deliveredDate: '', notes: '' }])} className="mt-2 text-xs text-amber-600 dark:text-amber-400 hover:underline font-medium">+ Add Shipment</button>
-                                        </>
-                                    )}
-                                    <div className="mt-3 pt-3 border-t border-gray-100 dark:border-slate-700">
-                                        <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-1 block">Notes</label>
-                                        <textarea value={shipmentNotes} onChange={(e) => setShipmentNotes(e.target.value)} placeholder="e.g. Split shipment — 2 pallets" rows={2} className="w-full text-xs border rounded px-2 py-1.5 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200 resize-none" />
-                                    </div>
-                                </div>
-                            )}
-                        </div>
                         {/* COMMS CENTER — inline collapsible drawer */}
                         <div className="mb-2">
                             <button onClick={() => setCommsDrawerOpen(!commsDrawerOpen)} className={`w-full flex items-center justify-between rounded-xl px-4 py-3 cursor-pointer transition-all border-2 shadow-sm hover:shadow-md ${commsDrawerOpen ? 'bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-500/15 dark:to-indigo-500/15 border-blue-300 dark:border-blue-500/40 shadow-blue-100 dark:shadow-blue-500/10' : 'bg-gradient-to-r from-blue-50 to-blue-100/50 dark:from-blue-500/10 dark:to-blue-500/5 border-blue-200 dark:border-blue-500/25 hover:border-blue-300 dark:hover:border-blue-500/40 hover:from-blue-100 hover:to-indigo-50'}`}>
@@ -1778,7 +1713,82 @@
                                 );
                             })()}
                         </div>
-                        {/* EMAIL TEMPLATE — inline collapsible drawer */}
+                        {/* SHIPMENT DETAILS — inline collapsible drawer */}
+                        <div className="mb-2">
+                            <button onClick={() => setShipmentDrawerOpen(!shipmentDrawerOpen)} className={`w-full flex items-center justify-between rounded-xl px-4 py-3 cursor-pointer transition-all border-2 shadow-sm hover:shadow-md ${shipmentDrawerOpen ? 'bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-500/15 dark:to-orange-500/15 border-amber-300 dark:border-amber-500/40 shadow-amber-100 dark:shadow-amber-500/10' : 'bg-gradient-to-r from-amber-50 to-amber-100/50 dark:from-amber-500/10 dark:to-amber-500/5 border-amber-200 dark:border-amber-500/25 hover:border-amber-300 dark:hover:border-amber-500/40 hover:from-amber-100 hover:to-orange-50'}`}>
+                                <div className="flex items-center gap-2.5">
+                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${shipmentDrawerOpen ? 'bg-amber-600 text-white' : 'bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400'}`}><Icon name="Truck" size={16} /></div>
+                                    <div className="text-left">
+                                        <div className={`text-xs font-bold ${shipmentDrawerOpen ? 'text-amber-800 dark:text-amber-300' : 'text-amber-700 dark:text-amber-400'}`}>Shipment Details</div>
+                                        <div className="text-[10px] text-amber-500/70 dark:text-amber-400/50">{shipments.length > 0 ? `${shipments.length} shipment${shipments.length !== 1 ? 's' : ''}` : 'No shipments tracked'}</div>
+                                    </div>
+                                    {shipments.length > 0 && (() => {
+                                        const statuses = shipments.map(s => s.status);
+                                        const allDelivered = statuses.every(s => s === 'Delivered');
+                                        const anyPending = statuses.some(s => s === 'Pending');
+                                        const anyInTransit = statuses.some(s => s === 'In Transit' || s === 'Shipped');
+                                        let badgeText, badgeClass;
+                                        if (allDelivered) { badgeText = 'All Delivered'; badgeClass = 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-300'; }
+                                        else if (anyPending) { badgeText = 'Pending'; badgeClass = 'bg-gray-100 text-gray-600 dark:bg-gray-500/20 dark:text-gray-300'; }
+                                        else if (anyInTransit) { badgeText = 'In Transit'; badgeClass = 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'; }
+                                        else { badgeText = 'Pending'; badgeClass = 'bg-gray-100 text-gray-600 dark:bg-gray-500/20 dark:text-gray-300'; }
+                                        return <span className={`ml-2 text-[10px] font-medium px-2 py-0.5 rounded-full ${badgeClass}`}>{badgeText}</span>;
+                                    })()}
+                                </div>
+                                <div className={`w-6 h-6 rounded-full flex items-center justify-center ${shipmentDrawerOpen ? 'bg-amber-200 dark:bg-amber-500/30' : 'bg-amber-100 dark:bg-amber-500/15'}`}><Icon name={shipmentDrawerOpen ? 'ChevronUp' : 'ChevronDown'} size={14} className="text-amber-600 dark:text-amber-400" /></div>
+                            </button>
+                            {shipmentDrawerOpen && (
+                                <div className="mt-1 border border-amber-200 dark:border-amber-500/30 rounded-lg bg-white dark:bg-slate-800 overflow-hidden p-4">
+                                    {shipments.length === 0 ? (
+                                        <div className="text-center py-4">
+                                            <div className="text-xs text-gray-400 dark:text-gray-500 mb-2">No shipments yet</div>
+                                            <button onClick={() => setShipments([{ id: Date.now(), trackingNumber: '', provider: 'UPS', status: 'Pending', shipDate: new Date().toISOString().split('T')[0], deliveredDate: '', notes: '' }])} className="text-xs text-amber-600 dark:text-amber-400 hover:underline font-medium">+ Add Shipment</button>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            {trackingLoading.size > 0 && (
+                                                <div className="flex items-center gap-2 mb-3 px-2 py-1.5 bg-amber-50 dark:bg-amber-500/10 rounded-lg border border-amber-200 dark:border-amber-500/20">
+                                                    <span className="animate-spin text-amber-500"><Icon name="RefreshCw" size={12} /></span>
+                                                    <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">Checking tracking status...</span>
+                                                </div>
+                                            )}
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full text-xs">
+                                                    <thead>
+                                                        <tr className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-slate-700">
+                                                            <th className="text-left pb-2 pr-2">Tracking #</th>
+                                                            <th className="text-left pb-2 pr-2">Provider</th>
+                                                            <th className="text-left pb-2 pr-2">Status</th>
+                                                            <th className="text-left pb-2 pr-2">Ship Date</th>
+                                                            <th className="text-left pb-2 pr-2">Delivered</th>
+                                                            <th className="text-left pb-2 w-8"></th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {shipments.map((shipment, idx) => (
+                                                            <tr key={shipment.id} className={`border-b border-gray-50 dark:border-slate-700/50 transition-colors duration-700 ${trackingFlash.has(shipment.id) ? 'bg-green-50 dark:bg-green-500/10' : ''}`}>
+                                                                <td className="py-1.5 pr-2"><div className="flex items-center gap-1"><input type="text" value={shipment.trackingNumber} onChange={(e) => { const updated = [...shipments]; updated[idx] = { ...updated[idx], trackingNumber: e.target.value }; setShipments(updated); }} placeholder="Tracking #" className="w-full text-xs border rounded px-2 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200" />{trackingLoading.has(shipment.id) ? (<span className="flex-shrink-0 animate-spin text-amber-500" title="Fetching status..."><Icon name="RefreshCw" size={13} /></span>) : shipment.trackingNumber && TRACKING_URLS[shipment.provider] && (<button onClick={() => window.open(TRACKING_URLS[shipment.provider](shipment.trackingNumber), '_blank')} className="flex-shrink-0 text-amber-500 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300 transition-colors" title={`Track on ${shipment.provider}`}><Icon name="ExternalLink" size={13} /></button>)}</div></td>
+                                                                <td className="py-1.5 pr-2"><select value={shipment.provider} onChange={(e) => { const updated = [...shipments]; updated[idx] = { ...updated[idx], provider: e.target.value }; setShipments(updated); }} className="text-xs border rounded px-1.5 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200"><option>UPS</option><option>FedEx</option><option>USPS</option><option>DHL</option><option>Other</option></select></td>
+                                                                <td className="py-1.5 pr-2"><div><select value={shipment.status} onChange={(e) => { const updated = [...shipments]; const newStatus = e.target.value; const patch = { status: newStatus }; if (newStatus === 'Delivered' && !updated[idx].deliveredDate) { patch.deliveredDate = new Date().toISOString().split('T')[0]; } if (newStatus !== 'Delivered') { patch.deliveredDate = ''; } updated[idx] = { ...updated[idx], ...patch }; setShipments(updated); }} className="text-xs border rounded px-1.5 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200"><option>Pending</option><option>Shipped</option><option>In Transit</option><option>Delivered</option></select>{shipment.lastTracked && (<div className="text-[9px] text-gray-400 dark:text-gray-500 mt-0.5">{(() => { const mins = Math.round((Date.now() - new Date(shipment.lastTracked).getTime()) / 60000); return mins < 1 ? 'Updated just now' : mins < 60 ? `Updated ${mins}m ago` : `Updated ${Math.round(mins/60)}h ago`; })()}</div>)}</div></td>
+                                                                <td className="py-1.5 pr-2"><input type="date" value={shipment.shipDate} onChange={(e) => { const updated = [...shipments]; updated[idx] = { ...updated[idx], shipDate: e.target.value }; setShipments(updated); }} className="text-xs border rounded px-1.5 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200" /></td>
+                                                                <td className="py-1.5 pr-2">{shipment.status === 'Delivered' ? (<input type="date" value={shipment.deliveredDate || ''} onChange={(e) => { const updated = [...shipments]; updated[idx] = { ...updated[idx], deliveredDate: e.target.value }; setShipments(updated); }} className="text-xs border rounded px-1.5 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200" />) : (<span className="text-xs text-gray-300 dark:text-gray-600">—</span>)}</td>
+                                                                <td className="py-1.5"><button onClick={() => { const updated = shipments.filter((_, i) => i !== idx); setShipments(updated); }} className="text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors" title="Remove shipment"><Icon name="X" size={14} /></button></td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            <button onClick={() => setShipments([...shipments, { id: Date.now(), trackingNumber: '', provider: 'UPS', status: 'Pending', shipDate: new Date().toISOString().split('T')[0], deliveredDate: '', notes: '' }])} className="mt-2 text-xs text-amber-600 dark:text-amber-400 hover:underline font-medium">+ Add Shipment</button>
+                                        </>
+                                    )}
+                                    <div className="mt-3 pt-3 border-t border-gray-100 dark:border-slate-700">
+                                        <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-1 block">Notes</label>
+                                        <textarea value={shipmentNotes} onChange={(e) => setShipmentNotes(e.target.value)} placeholder="e.g. Split shipment — 2 pallets" rows={2} className="w-full text-xs border rounded px-2 py-1.5 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200 resize-none" />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        {/* EMAIL TEMPLATE — trigger button (opens full-window overlay) */}
                         <div className="mb-2">
                             <button onClick={() => setEmailDrawerOpen(!emailDrawerOpen)} className={`w-full flex items-center justify-between rounded-xl px-4 py-3 cursor-pointer transition-all border-2 shadow-sm hover:shadow-md ${emailDrawerOpen ? 'bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-500/15 dark:to-purple-500/15 border-indigo-300 dark:border-indigo-500/40 shadow-indigo-100 dark:shadow-indigo-500/10' : 'bg-gradient-to-r from-indigo-50 to-indigo-100/50 dark:from-indigo-500/10 dark:to-indigo-500/5 border-indigo-200 dark:border-indigo-500/25 hover:border-indigo-300 dark:hover:border-indigo-500/40 hover:from-indigo-100 hover:to-purple-50'}`}>
                                 <div className="flex items-center gap-2.5">
@@ -1792,42 +1802,133 @@
                             </button>
                             {emailDrawerOpen && (() => {
                                 const resolvedMode = getResolvedMode();
-                                const modeColorMap = { schedule: 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300', material_received: 'bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-300', complete: 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-300', missing: 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300', delay: 'bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300', maintenance: 'bg-teal-100 text-teal-700 dark:bg-teal-500/20 dark:text-teal-300', removal: 'bg-gray-100 text-gray-700 dark:bg-gray-500/20 dark:text-gray-300' };
-                                const modeNameMap = { schedule: 'Scheduled', material_received: 'Materials Landed', complete: 'Installed', missing: 'Missing Assets', delay: 'Delay Alert', maintenance: 'Maintenance', removal: 'Removal' };
+                                const modeColorMap = { schedule: 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300', material_received: 'bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-300', complete: 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-300', missing: 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300', delay: 'bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300', maintenance: 'bg-teal-100 text-teal-700 dark:bg-teal-500/20 dark:text-teal-300', removal: 'bg-gray-100 text-gray-700 dark:bg-gray-500/20 dark:text-gray-300', none: 'bg-gray-100 text-gray-500 dark:bg-gray-500/20 dark:text-gray-400' };
+                                const modeNameMap = { schedule: 'Scheduled', material_received: 'Materials Landed', complete: 'Installed', missing: 'Missing Assets', delay: 'Delay Alert', maintenance: 'Maintenance', removal: 'Removal', none: 'No Match' };
                                 return (
                                 <div className="mt-1 border border-indigo-200 dark:border-indigo-500/30 rounded-lg bg-white dark:bg-slate-800 overflow-hidden">
                                     <div className="p-4 space-y-3">
-                                        {/* Template badge + auto-detect indicator */}
-                                        <div className="flex items-center gap-2">
-                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${modeColorMap[resolvedMode] || 'bg-gray-100 text-gray-700'}`}>{modeNameMap[resolvedMode] || resolvedMode}</span>
-                                            {selectedTemplate === 'auto' && <span className="text-[10px] text-gray-400 italic">auto-detected</span>}
-                                        </div>
-
-                                        {/* Subject Line */}
-                                        <div className="flex items-center gap-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2">
-                                            <div className="flex-1 min-w-0"><div className="text-[10px] text-gray-400 mb-0.5">Subject</div><div className="text-xs font-mono text-gray-700 dark:text-gray-300 truncate" title={subjectLine}>{subjectLine}</div></div>
-                                            <button onClick={() => { navigator.clipboard.writeText(subjectLine); setSubjectCopied(true); setTimeout(() => setSubjectCopied(false), 1500); }} className="text-[10px] text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 font-medium shrink-0">{subjectCopied ? 'Copied!' : 'Copy'}</button>
-                                        </div>
-
-                                        {/* Receiver Link Warning */}
-                                        {resolvedMode === 'material_received' && linkedMaterials.length > 0 && !customReceiverLink && (
-                                            <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 text-amber-700 dark:text-amber-400 text-xs px-3 py-2 rounded">
-                                                ⚠️ No Drive link for Receiver PDF — email will send without it
+                                        {/* Template selector — confirm or override */}
+                                        <div className="flex items-center justify-between gap-2">
+                                            <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                                                <Icon name="Bot" size={12} className="text-gray-400 shrink-0" />
+                                                <select value={selectedTemplate} onChange={(e) => setSelectedTemplate(e.target.value)} className={`text-[11px] font-medium border rounded-md px-2 py-1 bg-white dark:bg-slate-700 dark:text-gray-200 cursor-pointer ${resolvedMode === 'none' ? 'border-amber-300 dark:border-amber-500/40' : 'border-gray-200 dark:border-slate-600'}`}>
+                                                    <option value="auto">Auto-Detect</option><option value="schedule">Scheduled</option><option value="material_received">Materials Landed</option><option value="complete">Installed</option><option value="missing">Missing Assets</option><option value="delay">Delay Alert</option><option value="maintenance">Maintenance</option><option value="removal">Removal</option>
+                                                </select>
                                             </div>
-                                        )}
-
-                                        {/* Email Body */}
-                                        <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-gray-200 dark:border-slate-600 p-3 max-h-[300px] overflow-y-auto">
-                                            <div dangerouslySetInnerHTML={{ __html: emailDraft }} />
+                                            <div className="flex items-center gap-1.5 shrink-0">
+                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${modeColorMap[resolvedMode]}`}>{modeNameMap[resolvedMode]}</span>
+                                                {selectedTemplate === 'auto' && resolvedMode !== 'none' && <span className="text-[10px] text-gray-400 italic">auto</span>}
+                                            </div>
                                         </div>
 
-                                        {/* Copy Button */}
-                                        <button onClick={handleCopyToWebmail} className="w-full px-4 py-2.5 bg-indigo-600 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 hover:bg-indigo-700 transition-colors"><Icon name="Copy" size={14}/> {copyFeedback || "Copy Email to Clipboard"}</button>
+                                        {resolvedMode === 'none' ? (
+                                            /* No template match — prompt to pick */
+                                            <div className="text-center py-6">
+                                                <div className="w-10 h-10 rounded-full bg-gray-100 dark:bg-slate-700 flex items-center justify-center mx-auto mb-3"><Icon name="HelpCircle" size={20} className="text-gray-400" /></div>
+                                                <div className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">No template matches this stage</div>
+                                                <div className="text-[10px] text-gray-400 dark:text-gray-500">Select a template above to generate an email</div>
+                                            </div>
+                                        ) : (<>
+                                            {/* Subject Line */}
+                                            <div className="flex items-center gap-2 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2">
+                                                <div className="flex-1 min-w-0"><div className="text-[10px] text-gray-400 mb-0.5">Subject</div><div className="text-xs font-mono text-gray-700 dark:text-gray-300 truncate" title={subjectLine}>{subjectLine}</div></div>
+                                                <button onClick={() => { navigator.clipboard.writeText(subjectLine); setSubjectCopied(true); setTimeout(() => setSubjectCopied(false), 1500); }} className="text-[10px] text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 font-medium shrink-0">{subjectCopied ? 'Copied!' : 'Copy'}</button>
+                                            </div>
+
+                                            {/* Receiver Link Warning */}
+                                            {resolvedMode === 'material_received' && linkedMaterials.length > 0 && !customReceiverLink && (
+                                                <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 text-amber-700 dark:text-amber-400 text-xs px-3 py-2 rounded">
+                                                    ⚠️ No Drive link for Receiver PDF — email will send without it
+                                                </div>
+                                            )}
+
+                                            {/* Email Body */}
+                                            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-gray-200 dark:border-slate-600 p-3 max-h-[300px] overflow-y-auto">
+                                                <div dangerouslySetInnerHTML={{ __html: emailDraft }} />
+                                            </div>
+
+                                            {/* Copy Button + Expand */}
+                                            <div className="flex items-center gap-2">
+                                                <button onClick={handleCopyToWebmail} className="flex-1 px-4 py-2.5 bg-indigo-600 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 hover:bg-indigo-700 transition-colors"><Icon name="Copy" size={14}/> {copyFeedback || "Copy Email to Clipboard"}</button>
+                                                <button onClick={() => setEmailFullView(true)} className="px-3 py-2.5 text-[10px] text-indigo-600 dark:text-indigo-400 font-medium hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-lg border border-indigo-200 dark:border-indigo-500/30 flex items-center gap-1 transition-colors whitespace-nowrap"><Icon name="Maximize2" size={12} /> Expand</button>
+                                            </div>
+                                        </>)}
                                     </div>
                                 </div>
                                 );
                             })()}
                         </div>
+                        {/* EMAIL TEMPLATE — full-window overlay (triggered by Expand button) */}
+                        {emailFullView && (() => {
+                            const resolvedMode = getResolvedMode();
+                            const modeColorMap = { schedule: 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300', material_received: 'bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-300', complete: 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-300', missing: 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300', delay: 'bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300', maintenance: 'bg-teal-100 text-teal-700 dark:bg-teal-500/20 dark:text-teal-300', removal: 'bg-gray-100 text-gray-700 dark:bg-gray-500/20 dark:text-gray-300', none: 'bg-gray-100 text-gray-500 dark:bg-gray-500/20 dark:text-gray-400' };
+                            const modeNameMap = { schedule: 'Scheduled', material_received: 'Materials Landed', complete: 'Installed', missing: 'Missing Assets', delay: 'Delay Alert', maintenance: 'Maintenance', removal: 'Removal', none: 'No Match' };
+                            return (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={(e) => { if (e.target === e.currentTarget) setEmailFullView(false); }}>
+                                <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+                                <div className="relative w-full max-w-2xl mx-4 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-indigo-200 dark:border-indigo-500/30 overflow-hidden">
+                                    {/* Header */}
+                                    <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-slate-700 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-500/10 dark:to-purple-500/10">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center"><Icon name="Mail" size={16} /></div>
+                                            <div>
+                                                <div className="text-sm font-bold text-indigo-800 dark:text-indigo-300">Email Template</div>
+                                                <div className="text-[10px] text-indigo-500/70 dark:text-indigo-400/50">Preview & copy to clipboard</div>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <select value={selectedTemplate} onChange={(e) => setSelectedTemplate(e.target.value)} className="text-[11px] font-medium border border-indigo-200 dark:border-indigo-500/30 rounded-md px-2 py-1 bg-white dark:bg-slate-700 dark:text-gray-200 cursor-pointer">
+                                                <option value="auto">Auto-Detect</option><option value="schedule">Scheduled</option><option value="material_received">Materials Landed</option><option value="complete">Installed</option><option value="missing">Missing Assets</option><option value="delay">Delay Alert</option><option value="maintenance">Maintenance</option><option value="removal">Removal</option>
+                                            </select>
+                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${modeColorMap[resolvedMode] || 'bg-gray-100 text-gray-700'}`}>{modeNameMap[resolvedMode] || resolvedMode}</span>
+                                            {selectedTemplate === 'auto' && <span className="text-[10px] text-gray-400 italic">auto</span>}
+                                            <button onClick={() => setEmailFullView(false)} className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition-colors ml-1"><Icon name="X" size={18} className="text-indigo-600 dark:text-indigo-400" /></button>
+                                        </div>
+                                    </div>
+                                    {/* Body */}
+                                    <div className="p-6 space-y-4">
+                                        {/* Subject Line */}
+                                        <div className="flex items-center gap-2 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-600 rounded-lg px-4 py-3">
+                                            <div className="flex-1 min-w-0"><div className="text-[10px] text-gray-400 mb-0.5">Subject</div><div className="text-sm font-mono text-gray-700 dark:text-gray-300 truncate" title={subjectLine}>{subjectLine}</div></div>
+                                            <button onClick={() => { navigator.clipboard.writeText(subjectLine); setSubjectCopied(true); setTimeout(() => setSubjectCopied(false), 1500); }} className="text-xs text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 font-medium shrink-0 px-2 py-1 rounded hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-colors">{subjectCopied ? 'Copied!' : 'Copy'}</button>
+                                        </div>
+                                        {/* Receiver Link Warning */}
+                                        {resolvedMode === 'material_received' && linkedMaterials.length > 0 && !customReceiverLink && (
+                                            <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 text-amber-700 dark:text-amber-400 text-xs px-4 py-2.5 rounded-lg flex items-center gap-2">
+                                                <Icon name="AlertTriangle" size={14} /> No Drive link for Receiver PDF — email will send without it
+                                            </div>
+                                        )}
+                                        {/* Email Body */}
+                                        <div className="max-w-xl mx-auto bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-gray-200 dark:border-slate-600 p-4 max-h-[400px] overflow-y-auto">
+                                            <div dangerouslySetInnerHTML={{ __html: emailDraft }} />
+                                        </div>
+                                        {/* Copy Button */}
+                                        <button onClick={handleCopyToWebmail} className="w-full px-4 py-3 bg-indigo-600 text-white text-sm font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 dark:shadow-indigo-500/20"><Icon name="Copy" size={16}/> {copyFeedback || "Copy Email to Clipboard"}</button>
+                                    </div>
+                                </div>
+                            </div>
+                            );
+                        })()}
+                        {/* ACTIVITY LOG — expandable */}
+                        {item.history && item.history.length > 0 && (
+                            <div className="mb-2">
+                                <button onClick={() => setHistoryExpanded(!historyExpanded)} className="w-full flex items-center justify-between bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors">
+                                    <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400"><Icon name="History" size={12} /><span className="font-medium">Activity Log</span><span className="text-gray-400">({item.history.length} change{item.history.length !== 1 ? 's' : ''})</span></div>
+                                    <Icon name={historyExpanded ? 'ChevronUp' : 'ChevronDown'} size={14} className="text-gray-400" />
+                                </button>
+                                {historyExpanded && (
+                                    <div className="mt-1 border border-gray-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 max-h-48 overflow-y-auto px-4 py-3">
+                                        <div className="relative border-l-2 border-gray-200 dark:border-slate-600 ml-1 space-y-3">
+                                            {[...item.history].reverse().map((entry, idx) => {
+                                                const date = new Date(entry.timestamp);
+                                                const timeStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ', ' + date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+                                                return (<div key={idx} className="pl-4 relative"><div className="absolute -left-[5px] top-1 w-2 h-2 rounded-full bg-gray-300 dark:bg-slate-500" /><div className="text-[10px] text-gray-400 dark:text-gray-500 mb-0.5">{timeStr}</div><div className="flex flex-wrap gap-1">{entry.changes.map((c, ci) => <span key={ci} className="inline-block bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300 text-[10px] rounded px-1.5 py-0.5">{c}</span>)}</div></div>);
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                     </div>
 
