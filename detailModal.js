@@ -188,7 +188,7 @@
         const [matExpanded, setMatExpanded] = useState(false);
         const [breakdownExpanded, setBreakdownExpanded] = useState(false);
         const [commsDrawerOpen, setCommsDrawerOpen] = useState(false);
-        const [emailDrawerOpen, setEmailDrawerOpen] = useState(false);
+
         const [historyExpanded, setHistoryExpanded] = useState(false);
         const [shipmentDrawerOpen, setShipmentDrawerOpen] = useState(false);
         const [shipments, setShipments] = useState([]);
@@ -1806,95 +1806,6 @@
                                                 <button onClick={handleCopyToWebmail} className="w-full px-4 py-2.5 bg-blue-600 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 hover:bg-blue-700 transition-colors"><Icon name="Copy" size={14}/> {copyFeedback || "Copy Email to Clipboard"}</button>
                                             </div>
                                         </div>
-                                    </div>
-                                </div>
-                                );
-                            })()}
-                        </div>
-                        {/* EMAIL TEMPLATE — inline collapsible drawer */}
-                        <div className="mb-2">
-                            <button onClick={() => setEmailDrawerOpen(!emailDrawerOpen)} className={`w-full flex items-center justify-between rounded-xl px-4 py-3 cursor-pointer transition-all border-2 shadow-sm hover:shadow-md ${emailDrawerOpen ? 'bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-500/15 dark:to-purple-500/15 border-indigo-300 dark:border-indigo-500/40 shadow-indigo-100 dark:shadow-indigo-500/10' : 'bg-gradient-to-r from-indigo-50 to-indigo-100/50 dark:from-indigo-500/10 dark:to-indigo-500/5 border-indigo-200 dark:border-indigo-500/25 hover:border-indigo-300 dark:hover:border-indigo-500/40 hover:from-indigo-100 hover:to-purple-50'}`}>
-                                <div className="flex items-center gap-2.5">
-                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${emailDrawerOpen ? 'bg-indigo-600 text-white' : 'bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400'}`}><Icon name="Mail" size={16} /></div>
-                                    <div className="text-left">
-                                        <div className={`text-xs font-bold ${emailDrawerOpen ? 'text-indigo-800 dark:text-indigo-300' : 'text-indigo-700 dark:text-indigo-400'}`}>Email Template</div>
-                                        <div className="text-[10px] text-indigo-500/70 dark:text-indigo-400/50">Email templates & campaign comms</div>
-                                    </div>
-                                </div>
-                                <div className={`w-6 h-6 rounded-full flex items-center justify-center ${emailDrawerOpen ? 'bg-indigo-200 dark:bg-indigo-500/30' : 'bg-indigo-100 dark:bg-indigo-500/15'}`}><Icon name={emailDrawerOpen ? 'ChevronUp' : 'ChevronDown'} size={14} className="text-indigo-600 dark:text-indigo-400" /></div>
-                            </button>
-                            {emailDrawerOpen && (() => {
-                                const resolvedMode = getResolvedMode();
-                                const modeColorMap = { schedule: 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300', material_received: 'bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-300', complete: 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-300', missing: 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300', delay: 'bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300', maintenance: 'bg-teal-100 text-teal-700 dark:bg-teal-500/20 dark:text-teal-300', removal: 'bg-gray-100 text-gray-700 dark:bg-gray-500/20 dark:text-gray-300' };
-                                const modeNameMap = { schedule: 'Scheduled', material_received: 'Materials Landed', complete: 'Installed', missing: 'Missing Assets', delay: 'Delay Alert', maintenance: 'Maintenance', removal: 'Removal' };
-                                return (
-                                <div className="mt-1 border border-indigo-200 dark:border-indigo-500/30 rounded-lg bg-white dark:bg-slate-800 overflow-hidden">
-                                    <div className="p-4 space-y-4">
-
-                                        {/* Template Selector + Auto-detect badge */}
-                                        <div>
-                                            <div className="flex justify-between items-center mb-3">
-                                                <h4 className="text-xs font-bold flex items-center gap-1.5 text-gray-600 dark:text-gray-300"><Icon name="Bot" size={14} /> Template</h4>
-                                                <div className="flex items-center gap-2">
-                                                    <select value={selectedTemplate} onChange={(e) => setSelectedTemplate(e.target.value)} className="text-xs border rounded px-2 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200">
-                                                        <option value="auto">Auto-Detect</option><option value="schedule">Scheduled</option><option value="material_received">Materials Landed</option><option value="complete">Installed</option><option value="missing">Missing Assets</option><option value="delay">Delay Alert</option><option value="maintenance">Maintenance</option><option value="removal">Removal</option>
-                                                    </select>
-                                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${modeColorMap[resolvedMode] || 'bg-gray-100 text-gray-700'}`}>{modeNameMap[resolvedMode] || resolvedMode}</span>
-                                                    {selectedTemplate === 'auto' && <span className="text-[10px] text-gray-400 italic">auto-detected</span>}
-                                                </div>
-                                            </div>
-
-                                            {/* Campaign Info Grid (read-only) */}
-                                            <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] bg-gray-50 dark:bg-slate-900 rounded p-2">
-                                                <div className="text-gray-400">Advertiser</div><div className="font-medium text-gray-700 dark:text-gray-300 truncate">{item.advertiser || 'N/A'}</div>
-                                                <div className="text-gray-400">Campaign</div><div className="font-medium text-gray-700 dark:text-gray-300 truncate">{item.id || 'N/A'}</div>
-                                                <div className="text-gray-400">Flight</div><div className="font-medium text-gray-700 dark:text-gray-300 truncate">{item.name || 'N/A'}</div>
-                                                <div className="text-gray-400">Market</div><div className="font-medium text-gray-700 dark:text-gray-300 truncate">{formatMarketName(item.market)}</div>
-                                                <div className="text-gray-400">Dates</div><div className="font-medium text-gray-700 dark:text-gray-300 truncate">{item.date || 'N/A'} — {item.endDate || 'TBD'}</div>
-                                                <div className="text-gray-400">Owner</div><div className="font-medium text-gray-700 dark:text-gray-300 truncate">{item.owner || 'N/A'}</div>
-                                            </div>
-                                        </div>
-
-                                        <div className="border-b border-gray-100 dark:border-slate-700" />
-
-                                        {/* Template-Specific Conditional Fields */}
-                                        {selectedTemplate === 'missing' && (<div>
-                                            <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">Missing Assets</div>
-                                            <div className="p-3 bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20 rounded"><div className="flex gap-4 mb-2 text-sm"><label className="dark:text-gray-300"><input type="radio" checked={missingType==='instructions'} onChange={()=>setMissingType('instructions')}/> Instructions</label><label className="dark:text-gray-300"><input type="radio" checked={missingType==='material'} onChange={()=>setMissingType('material')}/> Material</label><label className="dark:text-gray-300"><input type="radio" checked={missingType==='both'} onChange={()=>setMissingType('both')}/> Both</label></div><input type="text" value={deadlineDate} onChange={(e)=>setDeadlineDate(e.target.value)} className="w-full text-sm border rounded px-2 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200" placeholder="Deadline Date"/></div>
-                                        </div>)}
-
-                                        {(selectedTemplate === 'delay' || selectedTemplate === 'maintenance') && (<div>
-                                            <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">{selectedTemplate === 'delay' ? 'Delay Details' : 'Maintenance Details'}</div>
-                                            <div><label className="text-xs font-bold dark:text-gray-300">Reason/Action</label><input type="text" value={issueReason} onChange={(e)=>setIssueReason(e.target.value)} className="w-full text-sm border rounded px-2 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200" placeholder="Details..."/></div>
-                                            {selectedTemplate === 'delay' && <div className="mt-2"><label className="text-xs font-bold dark:text-gray-300">New Date</label><input type="text" value={newEta} onChange={(e)=>setNewEta(e.target.value)} className="w-full text-sm border rounded px-2 py-1 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-200"/></div>}
-                                        </div>)}
-
-                                        <div className="border-b border-gray-100 dark:border-slate-700" />
-
-                                        {/* Email Preview */}
-                                        <div>
-                                            {/* Subject Line */}
-                                            <div className="flex items-center gap-2 mb-3 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2">
-                                                <div className="flex-1 min-w-0"><div className="text-[10px] text-gray-400 mb-0.5">Subject</div><div className="text-xs font-mono text-gray-700 dark:text-gray-300 truncate" title={subjectLine}>{subjectLine}</div></div>
-                                                <button onClick={() => { navigator.clipboard.writeText(subjectLine); setSubjectCopied(true); setTimeout(() => setSubjectCopied(false), 1500); }} className="text-[10px] text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 font-medium shrink-0">{subjectCopied ? 'Copied!' : 'Copy'}</button>
-                                            </div>
-
-                                            {/* Receiver Link Warning */}
-                                            {resolvedMode === 'material_received' && linkedMaterials.length > 0 && !customReceiverLink && (
-                                                <div className="mb-3 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 text-amber-700 dark:text-amber-400 text-xs px-3 py-2 rounded">
-                                                    ⚠️ No Drive link for Receiver PDF — email will send without it
-                                                </div>
-                                            )}
-
-                                            {/* Email Body */}
-                                            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-gray-200 dark:border-slate-600 p-3 max-h-[300px] overflow-y-auto">
-                                                <div dangerouslySetInnerHTML={{ __html: emailDraft }} />
-                                            </div>
-                                        </div>
-
-                                        {/* Copy Button */}
-                                        <button onClick={handleCopyToWebmail} className="w-full px-4 py-2.5 bg-indigo-600 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 hover:bg-indigo-700 transition-colors"><Icon name="Copy" size={14}/> {copyFeedback || "Copy Email to Clipboard"}</button>
-
                                     </div>
                                 </div>
                                 );
