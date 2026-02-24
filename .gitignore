@@ -20,3 +20,10 @@ groq.txt
 
 # Backup files
 *.backup
+
+# Google Drive artifacts
+*.gsheet
+*.gdoc
+*.gslides
+Test Data/
+Research/
