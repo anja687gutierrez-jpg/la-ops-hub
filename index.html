@@ -2662,24 +2662,24 @@
             const qty = item.hasQtyAdjustment ? item.adjustedQty : (item.totalQty || item.quantity || 0);
             const installed = item.totalInstalled || item.installed || 0;
 
-            // Helper: calculate days since first install (for SLA velocity tracking)
-            const calcInstallDuration = () => {
-                if (!item.firstInstallDate) return null;
+            // Helper: calculate days since campaign start date (for install window tracking)
+            const calcDaysPastStart = () => {
+                if (!item.dateObj && !item.date) return null;
                 const today = new Date();
                 today.setHours(0,0,0,0);
-                const firstDate = new Date(item.firstInstallDate);
-                firstDate.setHours(0,0,0,0);
-                return Math.floor((today - firstDate) / 86400000);
+                const startDate = item.dateObj ? new Date(item.dateObj) : new Date(item.date);
+                startDate.setHours(0,0,0,0);
+                return Math.floor((today - startDate) / 86400000);
             };
 
             // Completed stages with no pending work
             const completedStages = ['photos taken', 'pop completed', 'takedown complete'];
             if (completedStages.includes(stageLower) || (stageLower === 'installed' && pending === 0 && qty > 0)) {
-                // Calculate install duration for completed campaigns (firstInstall → completion or now)
+                // Calculate install duration for completed campaigns (start date → completion or now)
                 let installDuration = null;
-                if (item.firstInstallDate) {
+                if (item.dateObj || item.date) {
                     const endPoint = item.completionDate ? new Date(item.completionDate) : new Date();
-                    const startPoint = new Date(item.firstInstallDate);
+                    const startPoint = item.dateObj ? new Date(item.dateObj) : new Date(item.date);
                     endPoint.setHours(0,0,0,0);
                     startPoint.setHours(0,0,0,0);
                     installDuration = Math.floor((endPoint - startPoint) / 86400000);
@@ -2687,12 +2687,13 @@
                 return { needsReview: false, installTier: 'complete', urgentMaterial: false, installDuration };
             }
 
-            // OVERDUE: Install running >7 days with pending work remaining (SLA breach)
-            // Priority over date-proximity tiers — active SLA violation is most urgent
-            if (item.firstInstallDate && pending > 0) {
-                const daysSinceFirstInstall = calcInstallDuration();
-                if (daysSinceFirstInstall !== null && daysSinceFirstInstall > 7) {
-                    return { needsReview: true, installTier: 'overdue', urgentMaterial: false, installDuration: daysSinceFirstInstall };
+            // OVERDUE: >5 days past campaign start with pending work remaining
+            // Priority over date-proximity tiers — active overdue is most urgent
+            // Skip future campaigns (daysPastStart < 0)
+            if ((item.dateObj || item.date) && pending > 0) {
+                const daysPastStart = calcDaysPastStart();
+                if (daysPastStart !== null && daysPastStart > 5) {
+                    return { needsReview: true, installTier: 'overdue', urgentMaterial: false, installDuration: daysPastStart };
                 }
             }
 
@@ -2702,7 +2703,7 @@
                 today.setHours(0,0,0,0);
                 const daysOut = item.dateObj ? Math.ceil((item.dateObj - today) / 86400000) : 0;
                 const urgent = daysOut <= 7;
-                return { needsReview: false, installTier: 'inProgress', urgentMaterial: urgent, installDuration: calcInstallDuration() };
+                return { needsReview: false, installTier: 'inProgress', urgentMaterial: urgent, installDuration: calcDaysPastStart() };
             }
 
             // Installed but still has pending work — classify by date proximity
@@ -2712,20 +2713,20 @@
 
                 // No date = treat as urgent (review)
                 if (!item.dateObj) {
-                    return { needsReview: true, installTier: 'review', urgentMaterial: false, installDuration: calcInstallDuration() };
+                    return { needsReview: true, installTier: 'review', urgentMaterial: false, installDuration: calcDaysPastStart() };
                 }
 
                 const daysOut = Math.ceil((item.dateObj - today) / 86400000);
 
                 if (daysOut <= 7) {
                     // Within 7 days (or past) — needs review (amber)
-                    return { needsReview: true, installTier: 'review', urgentMaterial: false, installDuration: calcInstallDuration() };
+                    return { needsReview: true, installTier: 'review', urgentMaterial: false, installDuration: calcDaysPastStart() };
                 } else if (daysOut <= 14) {
                     // 7-14 days out — scheduled (blue)
-                    return { needsReview: false, installTier: 'scheduled', urgentMaterial: false, installDuration: calcInstallDuration() };
+                    return { needsReview: false, installTier: 'scheduled', urgentMaterial: false, installDuration: calcDaysPastStart() };
                 } else {
                     // 14+ days out — planned (gray)
-                    return { needsReview: false, installTier: 'planned', urgentMaterial: false, installDuration: calcInstallDuration() };
+                    return { needsReview: false, installTier: 'planned', urgentMaterial: false, installDuration: calcDaysPastStart() };
                 }
             }
 

@@ -195,6 +195,7 @@
         const [shipments, setShipments] = useState([]);
         const [shipmentNotes, setShipmentNotes] = useState('');
         const [trackingLoading, setTrackingLoading] = useState(new Set());
+        const [trackingError, setTrackingError] = useState(null);
         const [trackingFlash, setTrackingFlash] = useState(new Set());
         const [trackingStatusChanged, setTrackingStatusChanged] = useState(false);
 
@@ -404,6 +405,7 @@
             if (fetchable.length === 0) return;
 
             // Mark all fetchable as loading
+            setTrackingError(null);
             setTrackingLoading(new Set(fetchable.map(s => s.id)));
 
             fetchable.forEach(shipment => {
@@ -435,7 +437,7 @@
                             return { ...s, ...patch };
                         }));
                     })
-                    .catch(() => {}) // network error — skip silently
+                    .catch(() => { setTrackingError('Tracking lookup failed — check connection'); })
                     .finally(() => {
                         setTrackingLoading(prev => {
                             const next = new Set(prev);
@@ -1334,18 +1336,17 @@
                         {/* ATTENTION ALERT BANNER */}
                         {(() => {
                             const alerts = [];
-                            if (item.firstInstall) {
-                                const firstDate = item.firstInstallDate || new Date(item.firstInstall);
+                            if (item.date) {
+                                const startDate = new Date(item.date); startDate.setHours(0,0,0,0);
+                                const nowN = new Date(); nowN.setHours(0,0,0,0);
+                                const daysPastStart = Math.floor((nowN - startDate) / 86400000);
                                 const parsedTarget = parseInt(adjustedQty);
                                 const tQty = !isNaN(parsedTarget) ? parsedTarget : (item.adjustedQty != null ? item.adjustedQty : originalQty || 0);
                                 const inst = newInstalledCount || 0;
                                 const pend = Math.max(0, tQty - inst);
                                 const isComp = pend === 0 && inst > 0;
-                                if (firstDate) {
-                                    const startN = new Date(firstDate); startN.setHours(0,0,0,0);
-                                    const nowN = new Date(); nowN.setHours(0,0,0,0);
-                                    const dur = Math.floor((nowN - startN) / 86400000);
-                                    if (dur > 7 && !isComp) alerts.push({ level: 'red', text: `Install SLA exceeded (${dur} days, target 7)` });
+                                if (daysPastStart > 0 && daysPastStart > 5 && !isComp) {
+                                    alerts.push({ level: 'red', text: `Install overdue — ${daysPastStart}d since start (5d window)` });
                                 }
                             }
                             const matReqCheck = parseInt(customQty) || (item.adjustedQty != null ? item.adjustedQty : (originalQty || 0));
@@ -1427,26 +1428,38 @@
                                 const borderColor = pct >= 100 ? 'border-l-green-500' : pct >= 50 ? 'border-l-amber-500' : 'border-l-red-400';
                                 let slaBadge = null;
                                 let slaOverdue = false;
-                                if (item.firstInstall) {
-                                    const firstDate = item.firstInstallDate || new Date(item.firstInstall);
-                                    const endDate = item.completionDate || (item.completion ? new Date(item.completion) : null);
+                                if (item.date) {
+                                    const startDate = new Date(item.date); startDate.setHours(0,0,0,0);
+                                    const nowN = new Date(); nowN.setHours(0,0,0,0);
+                                    const daysPastStart = Math.floor((nowN - startDate) / 86400000);
                                     const isComplete = pending === 0 && installed > 0;
-                                    const refDate = isComplete && endDate ? endDate : new Date();
-                                    const startNorm = new Date(firstDate); startNorm.setHours(0,0,0,0);
-                                    const endNorm = new Date(refDate); endNorm.setHours(0,0,0,0);
-                                    const duration = Math.floor((endNorm - startNorm) / 86400000);
-                                    const isOverdue = duration > 7 && !isComplete;
-                                    const wasOverdue = duration > 7 && isComplete;
-                                    slaOverdue = isOverdue;
-                                    slaBadge = isComplete
-                                        ? (wasOverdue ? { bg: 'bg-amber-100 text-amber-700', label: `${duration}d` } : { bg: 'bg-green-100 text-green-700', label: `${duration}d` })
-                                        : (isOverdue ? { bg: 'bg-red-100 text-red-700', label: `${duration}d` } : { bg: 'bg-gray-100 text-gray-600', label: `${duration}d` });
+                                    if (daysPastStart < 0) {
+                                        // Future campaign — neutral "starts in Xd"
+                                        slaBadge = { bg: 'bg-gray-100 text-gray-600', label: `starts in ${Math.abs(daysPastStart)}d`, tooltip: 'Days until campaign start date' };
+                                    } else if (isComplete) {
+                                        // Completed — show days from start to completion
+                                        const endDate = item.completionDate || (item.completion ? new Date(item.completion) : null);
+                                        const endNorm = endDate ? new Date(endDate) : new Date();
+                                        endNorm.setHours(0,0,0,0);
+                                        const totalDays = Math.floor((endNorm - startDate) / 86400000);
+                                        const wasOverdue = totalDays > 5;
+                                        slaBadge = wasOverdue
+                                            ? { bg: 'bg-amber-100 text-amber-700', label: `${totalDays}d`, tooltip: `Completed in ${totalDays} days (target: 5 days from start)` }
+                                            : { bg: 'bg-green-100 text-green-700', label: `${totalDays}d`, tooltip: `Completed in ${totalDays} days (target: 5 days from start)` };
+                                    } else if (daysPastStart > 5) {
+                                        // Past start, over 5d, not complete — overdue
+                                        slaOverdue = true;
+                                        slaBadge = { bg: 'bg-red-100 text-red-700', label: `${daysPastStart}d`, tooltip: `${daysPastStart} days since start — target is 5 days to complete all installs` };
+                                    } else {
+                                        // Past start, within 5d — neutral
+                                        slaBadge = { bg: 'bg-gray-100 text-gray-600', label: `${daysPastStart}d`, tooltip: `${daysPastStart} days since start — target is 5 days to complete all installs` };
+                                    }
                                 }
                                 return (
                             <div className={`bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 border-l-[3px] ${borderColor} p-4 ${slaOverdue ? 'ring-1 ring-red-200 dark:ring-red-500/30' : ''}`}>
                                 <div className="flex items-center justify-between mb-3">
                                     <h4 className="text-[11px] font-bold tracking-wider text-gray-400 uppercase">Install Progress</h4>
-                                    {slaBadge && <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold ${slaBadge.bg}`}><Icon name="Clock" size={9} className="mr-0.5" />{slaBadge.label}</span>}
+                                    {slaBadge && <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold ${slaBadge.bg}`} title={slaBadge.tooltip}><Icon name="Clock" size={9} className="mr-0.5" />{slaBadge.label}</span>}
                                 </div>
                                 <div className="flex items-baseline gap-2 mb-2">
                                     <span className={`text-3xl font-bold tabular-nums ${pct >= 100 ? 'text-green-600' : pct >= 50 ? 'text-amber-600' : 'text-red-500'}`}>{pct}%</span>
@@ -1626,7 +1639,7 @@
                             <button onClick={() => setCommsDrawerOpen(!commsDrawerOpen)} className={`w-full flex items-center justify-between rounded-xl px-4 py-3 cursor-pointer transition-all border-2 shadow-sm hover:shadow-md ${commsDrawerOpen ? 'bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-500/15 dark:to-indigo-500/15 border-blue-300 dark:border-blue-500/40 shadow-blue-100 dark:shadow-blue-500/10' : 'bg-gradient-to-r from-blue-50 to-blue-100/50 dark:from-blue-500/10 dark:to-blue-500/5 border-blue-200 dark:border-blue-500/25 hover:border-blue-300 dark:hover:border-blue-500/40 hover:from-blue-100 hover:to-indigo-50'}`}>
                                 <div className="flex items-center gap-2.5">
                                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${commsDrawerOpen ? 'bg-blue-600 text-white' : 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400'}`}><Icon name="MessageSquare" size={16} /></div>
-                                    <div className="text-left"><div className={`text-xs font-bold ${commsDrawerOpen ? 'text-blue-800 dark:text-blue-300' : 'text-blue-700 dark:text-blue-400'}`}>Comms Center</div><div className="text-[10px] text-blue-500/70 dark:text-blue-400/50">Email templates, materials, PDF upload</div></div>
+                                    <div className="text-left"><div className={`text-xs font-bold ${commsDrawerOpen ? 'text-blue-800 dark:text-blue-300' : 'text-blue-700 dark:text-blue-400'}`}>Comms Center</div><div className="text-[10px] text-blue-500/70 dark:text-blue-400/50">Configure email, materials, PDF upload</div></div>
                                 </div>
                                 <div className={`w-6 h-6 rounded-full flex items-center justify-center ${commsDrawerOpen ? 'bg-blue-200 dark:bg-blue-500/30' : 'bg-blue-100 dark:bg-blue-500/15'}`}><Icon name={commsDrawerOpen ? 'ChevronUp' : 'ChevronDown'} size={14} className="text-blue-600 dark:text-blue-400" /></div>
                             </button>
@@ -1751,6 +1764,12 @@
                                                     <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">Checking tracking status...</span>
                                                 </div>
                                             )}
+                                            {trackingError && trackingLoading.size === 0 && (
+                                                <div className="flex items-center gap-2 mb-3 px-2 py-1.5 bg-red-50 dark:bg-red-500/10 rounded-lg border border-red-200 dark:border-red-500/20">
+                                                    <Icon name="AlertTriangle" size={12} className="text-red-500 shrink-0" />
+                                                    <span className="text-[11px] text-red-600 dark:text-red-400 font-medium">{trackingError}</span>
+                                                </div>
+                                            )}
                                             <div className="overflow-x-auto">
                                                 <table className="w-full text-xs">
                                                     <thead>
@@ -1794,7 +1813,7 @@
                                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${emailDrawerOpen ? 'bg-indigo-600 text-white' : 'bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400'}`}><Icon name="Mail" size={16} /></div>
                                     <div className="text-left">
                                         <div className={`text-xs font-bold ${emailDrawerOpen ? 'text-indigo-800 dark:text-indigo-300' : 'text-indigo-700 dark:text-indigo-400'}`}>Email Template</div>
-                                        <div className="text-[10px] text-indigo-500/70 dark:text-indigo-400/50">Preview & copy email</div>
+                                        <div className="text-[10px] text-indigo-500/70 dark:text-indigo-400/50">Preview, copy, or expand generated email</div>
                                     </div>
                                 </div>
                                 <div className={`w-6 h-6 rounded-full flex items-center justify-center ${emailDrawerOpen ? 'bg-indigo-200 dark:bg-indigo-500/30' : 'bg-indigo-100 dark:bg-indigo-500/15'}`}><Icon name={emailDrawerOpen ? 'ChevronUp' : 'ChevronDown'} size={14} className="text-indigo-600 dark:text-indigo-400" /></div>
